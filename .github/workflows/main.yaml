@@ -35,6 +35,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
 
+      # Avant setup-node : c'est `cache: pnpm` qui a besoin de pnpm, il appelle
+      # `pnpm store path` pour savoir quoi mettre en cache. Sans cette étape,
+      # setup-node échoue avant même l'installation des dépendances.
+      # La version vient du champ `packageManager` de package.json.
+      - name: setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: setup node
         uses: actions/setup-node@v6
         with:
@@ -50,8 +57,10 @@ jobs:
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          # This matches tauri's default project layout. Change this if you have a different layout.
-          workspaces: './src-tauri -> target'
+          # Workspace Cargo à la racine du dépôt (cf. Cargo.toml : members =
+          # src-tauri + crates/sa303-core), donc target/ est à la racine —
+          # pas la disposition Tauri par défaut.
+          workspaces: '. -> target'
 
       - name: install frontend dependencies
         # If you don't have `beforeBuildCommand` configured you may want to build your frontend here too.
