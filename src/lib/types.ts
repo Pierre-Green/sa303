@@ -279,15 +279,20 @@ export interface ClusterResult {
 
 export interface BumperView {
   outlineGlobal: [Vec2, Vec2, Vec2, Vec2];
-  /** Vol uniquement : point d'accroche effectif (centre du bumper, ou bout de
-   * la barre de déport si `deportMm != 0`). Toujours renseigné en vol. */
+  /** Vol uniquement : point d'accroche effectif (sur le bumper, ou sur la
+   * barre de déport si `barDeportMm != 0`). Toujours renseigné en vol. */
   pickupGlobal: Vec2 | null;
   /** Départ de la barre de déport sur le bord de la zone de fixation directe.
    * Absent si aucune barre n'est nécessaire. */
   bumperBarStartGlobal: Vec2 | null;
-  /** Dépassement signé au-delà de `maxDirectDeportMm` (mm, axe x de
-   * l'enceinte) : 0 si l'accroche tombe dans la zone de fixation directe. */
-  deportMm: number | null;
+  /** Position de l'accroche par rapport au **centre du bumper** (mm signés,
+   * positif vers l'arrière) : la cote que le rigger reporte. Non nulle dès que
+   * l'accroche n'est pas centrée, y compris quand elle reste sur le bumper. */
+  pickupOffsetMm: number | null;
+  /** Ce que la **barre** porte : dépassement signé au-delà de
+   * `maxDirectDeportMm`, donc 0 tant que l'accroche tombe sur le bumper. Ne
+   * décrit pas où est l'accroche, mais s'il faut une barre et de combien. */
+  barDeportMm: number | null;
   /** Au-delà de la portée de la barre (`BumperBarModel.maxDeportMm`), elle ne suffit plus : une tirette est
    * automatiquement mise en place (voir `tieTensionN`/`tiePointGlobal` sur
    * ClusterResult). */

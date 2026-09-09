@@ -526,7 +526,7 @@ fn bumper_reports_deport_bar_only_when_pickup_exceeds_bumper_depth() {
     let free_result = compute_cluster(std::slice::from_ref(&sm), &free, &settings, &bumper, &[])
         .expect("configuration possible");
     let free_view = free_result.bumper_view;
-    assert_eq!(free_view.deport_mm, Some(0.0));
+    assert_eq!(free_view.bar_deport_mm, Some(0.0));
     assert!(free_view.bumper_bar_start_global.is_none());
 
     // Assiette imposée modérée, loin de l'assiette libre naturelle : le point
@@ -543,7 +543,7 @@ fn bumper_reports_deport_bar_only_when_pickup_exceeds_bumper_depth() {
     )
     .expect("configuration possible");
     let imposed_view = imposed_result.bumper_view;
-    let deport = imposed_view.deport_mm.expect("déport calculé en vol");
+    let deport = imposed_view.bar_deport_mm.expect("déport calculé en vol");
     assert!(deport.abs() > 0.0, "un déport était attendu, obtenu 0");
     assert!(imposed_view.bumper_bar_start_global.is_some());
 }
@@ -562,7 +562,8 @@ fn bumper_view_on_stack_has_no_pickup_fields() {
     let view = result.bumper_view;
     assert!(view.pickup_global.is_none());
     assert!(view.bumper_bar_start_global.is_none());
-    assert!(view.deport_mm.is_none());
+    assert!(view.bar_deport_mm.is_none());
+    assert!(view.pickup_offset_mm.is_none());
 }
 
 #[test]
@@ -1362,4 +1363,71 @@ fn each_speaker_reports_the_height_a_rigger_would_measure() {
     let lowest = bottoms[bottoms.len() - 1];
     assert!((lowest - result.elevation.lowest_point_mm).abs() < 1e-9);
     assert!(bottoms[0] < result.elevation.bumper_bottom_mm);
+}
+
+/// Le bug corrigé : tant que l'accroche glissait le long du bumper, l'écran
+/// affichait « 0 mm (centré) » parce qu'il lisait le déport de **barre**, nul
+/// par définition dans cette zone. La position de l'accroche par rapport au
+/// centre du bumper est une autre grandeur, et elle doit bouger dès que
+/// l'accroche n'est plus centrée.
+#[test]
+fn a_pickup_that_slides_along_the_bumper_is_reported_as_off_centre() {
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let bumper_bar = default_bumper_bar();
+    let settings = default_settings();
+    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 12.0];
+
+    let view_at = |tilt: Option<f64>| {
+        let cluster = flown_cluster("accroche", &splays, tilt, &bumper.id);
+        compute_cluster(
+            std::slice::from_ref(&sm),
+            &cluster,
+            &settings,
+            &bumper,
+            std::slice::from_ref(&bumper_bar),
+        )
+        .expect("configuration possible")
+        .bumper_view
+    };
+
+    // Pendaison libre : l'accroche est bien centrée, les deux cotes sont nulles.
+    let free = view_at(None);
+    assert_eq!(free.pickup_offset_mm, Some(0.0));
+    assert_eq!(free.bar_deport_mm, Some(0.0));
+
+    // Assiette imposée proche de la pendaison libre : l'accroche se décale de
+    // quelques dizaines de millimètres et reste dans l'aplomb du bumper. Aucune
+    // barre n'est nécessaire — et pourtant la cote ne doit pas être nulle.
+    // C'est exactement le cas que l'écran donnait pour « centré ».
+    let nudged = view_at(Some(-10.0));
+    let offset = nudged.pickup_offset_mm.expect("accroche calculée en vol");
+    assert!(
+        offset.abs() > 1.0,
+        "accroche donnée pour centrée alors qu'elle est décalée : {offset} mm"
+    );
+    assert!(
+        offset.abs() <= bumper.max_direct_deport_mm,
+        "ce cas doit rester dans l'aplomb du bumper, obtenu {offset} mm"
+    );
+    assert_eq!(
+        nudged.bar_deport_mm,
+        Some(0.0),
+        "aucune barre n'est engagée tant que l'accroche est sur le bumper"
+    );
+    assert!(nudged.bumper_bar_start_global.is_none());
+
+    // Hors du bumper : les deux cotes deviennent non nulles, et l'accroche est
+    // toujours plus loin du centre que ce que porte la barre.
+    let far = view_at(Some(-20.0));
+    let far_offset = far.pickup_offset_mm.expect("accroche calculée en vol");
+    let far_bar = far.bar_deport_mm.expect("déport de barre calculé en vol");
+    assert!(far_bar.abs() > 0.0);
+    assert!(
+        far_offset.abs() > far_bar.abs(),
+        "l'accroche ({far_offset}) doit être plus excentrée que le déport de barre ({far_bar})"
+    );
+    // Et l'écart entre les deux vaut exactement la demi-longueur du bumper.
+    let bumper_share = far_offset.abs() - far_bar.abs();
+    assert!((bumper_share - bumper.max_direct_deport_mm).abs() < 1e-9);
 }

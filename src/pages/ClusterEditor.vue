@@ -500,16 +500,24 @@ watch(form, recomputeViewer, { deep: true, immediate: true });
               text="Toujours calculée, jamais saisie : centrée sur le bumper par défaut, décalée le long de la barre si l'assiette imposée l'exige. Si même la barre ne suffit plus, le solveur active lui-même une tirette (accrochée au point 0° arrière-bas de l'enceinte du bas) — choisis sa direction dans la plage indiquée, selon où se trouve un point d'ancrage réel : ce n'est pas à l'algorithme de le deviner."
             />
           </div>
+          <!-- Deux cotes distinctes : où se trouve l'accroche sur le bumper, et
+               ce que la barre porte au-delà. La seconde est nulle tant que
+               l'accroche reste dans l'aplomb du bumper — l'afficher seule
+               donnait « centré » pour une accroche pourtant décalée. -->
           <div>
-            Déport : {{ Math.abs(effectiveBumperView.deportMm ?? 0).toFixed(0) }} mm
+            Position : {{ Math.abs(effectiveBumperView.pickupOffsetMm ?? 0).toFixed(0) }} mm
             ({{
-              (effectiveBumperView.deportMm ?? 0) === 0
-                ? "centré"
-                : effectiveBumperView.deportMm! > 0
+              (effectiveBumperView.pickupOffsetMm ?? 0) === 0
+                ? "centrée sur le bumper"
+                : effectiveBumperView.pickupOffsetMm! > 0
                   ? "vers l'arrière"
                   : "vers l'avant"
             }})
           </div>
+          <div v-if="(effectiveBumperView.barDeportMm ?? 0) !== 0">
+            Dont barre de déport : {{ Math.abs(effectiveBumperView.barDeportMm!).toFixed(0) }} mm
+          </div>
+          <div v-else class="text-muted-foreground">Dans l'aplomb du bumper : pas de barre.</div>
           <div v-if="effectiveBumperView.bumperBarExceeded" class="flex flex-col gap-1.5 text-status-alarm">
             <div v-if="clusterResult">Tirette automatique : {{ (clusterResult.tieTensionN / 1000).toFixed(2) }} kN</div>
             <div class="flex items-center gap-2">

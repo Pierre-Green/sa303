@@ -91,17 +91,25 @@ pub struct Elevation {
 #[serde(rename_all = "camelCase")]
 pub struct BumperView {
     pub outline_global: [Vec2; 4],
-    /// Vol uniquement : point d'accroche effectif (centre du bumper, ou bout
-    /// de la barre de déport si `deport_mm != 0`). Toujours renseigné en vol.
+    /// Vol uniquement : point d'accroche effectif (sur le bumper, ou sur la
+    /// barre de déport si `bar_deport_mm != 0`). Toujours renseigné en vol.
     pub pickup_global: Option<Vec2>,
     /// Départ de la barre de déport sur le bord de la zone de fixation
     /// directe (`max_direct_deport_mm`), repère global. Présent seulement si
     /// une barre est nécessaire.
     pub bumper_bar_start_global: Option<Vec2>,
-    /// Dépassement signé au-delà de `max_direct_deport_mm` (mm, axe x de
-    /// l'enceinte) : 0 si le point d'accroche tombe dans la zone de fixation
-    /// directe, toujours renseigné (vol) même quand nul.
-    pub deport_mm: Option<f64>,
+    /// Position de l'accroche **par rapport au centre du bumper** (mm signés,
+    /// axe x de l'enceinte : positif vers l'arrière). C'est la cote que le
+    /// rigger reporte pour percer ou repérer sa manille, donc elle est non
+    /// nulle dès que l'accroche n'est pas centrée — y compris quand elle reste
+    /// sur le bumper. Toujours renseignée en vol.
+    pub pickup_offset_mm: Option<f64>,
+    /// Ce que la **barre** porte : dépassement signé au-delà de
+    /// `max_direct_deport_mm`, donc 0 tant que l'accroche tombe sur le bumper.
+    /// À ne pas confondre avec `pickup_offset_mm` : celui-ci décrit où est
+    /// l'accroche, celui-là si une barre est nécessaire et de combien.
+    /// Toujours renseigné en vol, même quand nul.
+    pub bar_deport_mm: Option<f64>,
     /// Au-delà de la portée de la barre (`BumperBarModel::max_deport_mm`), elle ne suffit plus : une
     /// tirette est automatiquement mise en place (voir `tie_tension_n`,
     /// `tie_point_global`).
@@ -602,7 +610,8 @@ pub fn compute_cluster(
                 outline_global,
                 pickup_global: Some(attach.o + pickup.rotate(attach.phi)),
                 bumper_bar_start_global,
-                deport_mm: Some(deport),
+                pickup_offset_mm: Some(pickup.x),
+                bar_deport_mm: Some(deport),
                 bumper_bar_exceeded,
                 tie_angle_range_deg: tie_angle_range_deg.map(|(lo, hi)| [lo, hi]),
                 orientation_force_n: Some(of_n),
@@ -634,7 +643,8 @@ pub fn compute_cluster(
                 outline_global,
                 pickup_global: None,
                 bumper_bar_start_global: None,
-                deport_mm: None,
+                pickup_offset_mm: None,
+                bar_deport_mm: None,
                 bumper_bar_exceeded: false,
                 tie_angle_range_deg: None,
                 orientation_force_n: None,

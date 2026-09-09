@@ -340,7 +340,8 @@ const speakerPopupData = computed(() => {
     return {
       kind: "bumper" as const,
       pinned: pinnedIdx.value === BUMPER_ANCHOR_IDX,
-      deportMm: bv.deportMm,
+      pickupOffsetMm: bv.pickupOffsetMm,
+      barDeportMm: bv.barDeportMm,
       bumperBarExceeded: bv.bumperBarExceeded,
       orientationForceN: bv.orientationForceN,
       orientationAngleDeg: bv.orientationAngleDeg,
@@ -725,8 +726,14 @@ function handleWheel(e: { evt: WheelEvent }) {
           <dd>{{ speakerPopupData.pickupElevationMm.toFixed(0) }} mm</dd>
         </div>
         <div class="flex justify-between">
-          <dt class="text-muted-foreground">Déport</dt>
-          <dd>{{ speakerPopupData.deportMm !== null ? `${Math.abs(speakerPopupData.deportMm).toFixed(0)} mm` : "—" }}</dd>
+          <dt class="text-muted-foreground">Accroche</dt>
+          <dd>
+            {{ speakerPopupData.pickupOffsetMm !== null ? `${Math.abs(speakerPopupData.pickupOffsetMm).toFixed(0)} mm` : "—" }}
+          </dd>
+        </div>
+        <div v-if="(speakerPopupData.barDeportMm ?? 0) !== 0" class="flex justify-between">
+          <dt class="text-muted-foreground">Dont barre</dt>
+          <dd>{{ Math.abs(speakerPopupData.barDeportMm!).toFixed(0) }} mm</dd>
         </div>
         <div v-if="speakerPopupData.bumperBarExceeded" class="text-status-alarm">Portée barre dépassée : tirette active.</div>
         <div v-if="speakerPopupData.orientationForceN !== null" class="mt-1 flex justify-between text-zone-orientation">
