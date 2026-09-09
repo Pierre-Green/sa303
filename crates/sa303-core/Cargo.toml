@@ -1,0 +1,13 @@
+[package]
+name = "sa303-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+glam = { version = "0.33.7", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+# Uniquement pour les tests de compatibilité de schéma : vérifier qu'un fichier
+# déjà enregistré se relit à l'identique (brief §8).
+serde_json = "1"
