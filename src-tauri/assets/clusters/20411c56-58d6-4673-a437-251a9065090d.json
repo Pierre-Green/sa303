@@ -1,0 +1,59 @@
+{
+  "id": "20411c56-58d6-4673-a437-251a9065090d",
+  "name": "Grappe - 12u - 10m - 40d-88d",
+  "schemaVersion": 2,
+  "speakerModelIds": [
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-cca",
+    "sa303-cca"
+  ],
+  "compartment": "flown",
+  "joints": [
+    {
+      "splay": 0.0
+    },
+    {
+      "splay": 0.0
+    },
+    {
+      "splay": 0.0
+    },
+    {
+      "splay": 0.0
+    },
+    {
+      "splay": 0.0
+    },
+    {
+      "splay": 0.0
+    },
+    {
+      "splay": 1.0
+    },
+    {
+      "splay": 1.0
+    },
+    {
+      "splay": 2.0
+    },
+    {
+      "splay": 10.0
+    },
+    {
+      "splay": 20.0
+    }
+  ],
+  "imposedTilt": 40.0,
+  "tieAngle": 180.0,
+  "bumperModelId": "sa303-bumper",
+  "bumperHeight": 10000.0
+}

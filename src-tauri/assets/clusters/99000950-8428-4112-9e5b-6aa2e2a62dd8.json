@@ -1,0 +1,19 @@
+{
+  "id": "99000950-8428-4112-9e5b-6aa2e2a62dd8",
+  "name": "Stack cca20 - 2u - 3m",
+  "schemaVersion": 2,
+  "speakerModelIds": [
+    "sa303-cca",
+    "sa303-cca"
+  ],
+  "compartment": "stacked",
+  "joints": [
+    {
+      "splay": 20.0
+    }
+  ],
+  "imposedTilt": 40.0,
+  "tieAngle": null,
+  "bumperModelId": "sa303-bumper",
+  "bumperHeight": 3000.0
+}

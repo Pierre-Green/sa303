@@ -1,0 +1,23 @@
+{
+  "id": "d624aea0-868b-420a-8695-b1cca6a50d18",
+  "name": "Stack cca20 - 3u - 3m",
+  "schemaVersion": 2,
+  "speakerModelIds": [
+    "sa303-isophase",
+    "sa303-cca",
+    "sa303-cca"
+  ],
+  "compartment": "stacked",
+  "joints": [
+    {
+      "splay": 10.0
+    },
+    {
+      "splay": 20.0
+    }
+  ],
+  "imposedTilt": 40.0,
+  "tieAngle": null,
+  "bumperModelId": "sa303-bumper",
+  "bumperHeight": 3000.0
+}

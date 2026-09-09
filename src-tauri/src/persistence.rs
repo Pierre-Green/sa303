@@ -415,7 +415,7 @@ pub fn list_bumper_bar_models(app: &AppHandle) -> Result<Vec<BumperBarModel>, St
 /// le désérialiser : l'ancien id est répété autant de fois qu'il y a
 /// d'enceintes. Un fichier déjà sur disque ne doit jamais devenir illisible
 /// (brief §8).
-fn migrate_legacy_cluster_json(mut value: serde_json::Value) -> serde_json::Value {
+pub(crate) fn migrate_legacy_cluster_json(mut value: serde_json::Value) -> serde_json::Value {
     let Some(object) = value.as_object_mut() else {
         return value;
     };
@@ -632,6 +632,47 @@ mod tests {
         assert!(crate::seed::SA303_LONG_ARC_SPLAYS
             .iter()
             .all(|&s| !is_odd_splay(s)));
+    }
+
+    /// Les grappes d'exemple sont des fichiers déposés à la main : rien ne les
+    /// relit avant le premier lancement chez un utilisateur. Ce test est ce
+    /// relecteur — il échoue en CI plutôt que de livrer un asset cassé.
+    #[test]
+    fn every_seeded_cluster_asset_describes_a_buildable_cluster() {
+        use sa303_core::compute_cluster;
+
+        let clusters = crate::seed::seed_clusters();
+        assert!(!clusters.is_empty(), "aucune grappe d'exemple embarquée");
+
+        let speakers = crate::seed::default_speaker_models();
+        let bumper = crate::seed::default_bumper_model();
+        let bumper_bars = [crate::seed::default_bumper_bar_model()];
+        let settings = crate::seed::default_settings();
+
+        let mut ids = std::collections::HashSet::new();
+        for cluster in &clusters {
+            assert!(
+                ids.insert(cluster.id.clone()),
+                "deux exemples partagent l'id \"{}\" : le second écraserait le premier au seed",
+                cluster.id
+            );
+            assert_eq!(
+                cluster.speaker_model_ids.len(),
+                cluster.joints.len() + 1,
+                "\"{}\" : autant d'enceintes que de jonctions + 1",
+                cluster.name
+            );
+            // Le vrai contrôle : chaque exemple doit passer le solveur. Un angle
+            // non percé ou une jonction non déclarée s'y verrait tout de suite.
+            compute_cluster(&speakers, cluster, &settings, &bumper, &bumper_bars).unwrap_or_else(
+                |e| {
+                    panic!(
+                        "grappe d'exemple \"{}\" non calculable : {}",
+                        cluster.name, e.reason
+                    )
+                },
+            );
+        }
     }
 
     #[test]

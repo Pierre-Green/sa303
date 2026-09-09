@@ -330,18 +330,6 @@ function elevationOf(y: number): number {
   return y + props.result.elevation.offsetMm;
 }
 
-/** Altitude du dessous d'une enceinte : le plus bas de ses quatre coins, une
- * fois la silhouette tournée — c'est ce que le rigger lit sur un mètre. */
-function speakerBottomElevation(idx: number): number {
-  const speaker = props.result.speakers[idx];
-  const ys = speaker.outline.map((corner) => {
-    const cos = Math.cos(speaker.phi);
-    const sin = Math.sin(speaker.phi);
-    return speaker.o.y + corner.x * sin + corner.y * cos;
-  });
-  return elevationOf(Math.min(...ys));
-}
-
 const speakerPopupData = computed(() => {
   if (!anchor.value) return null;
   const idx = anchor.value.idx;
@@ -371,7 +359,7 @@ const speakerPopupData = computed(() => {
     angleDeg: (speaker.phi * 180) / Math.PI,
     splay: speakerSplayDeg(idx),
     joint: speakerLoadedJoint(idx),
-    bottomElevationMm: speakerBottomElevation(idx),
+    bottomElevationMm: props.result.elevation.speakerBottomMm[idx],
     pinned: pinnedIdx.value === idx,
   };
 });

@@ -63,7 +63,7 @@ pub struct ClusterResult {
 
 /// Altitudes au-dessus du sol, mm. Purement descriptif : aucun effort n'en
 /// dépend.
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Elevation {
     /// À ajouter à un `y` du repère global pour obtenir une altitude. C'est le
@@ -78,6 +78,11 @@ pub struct Elevation {
     pub highest_point_mm: f64,
     /// Vol uniquement : altitude du point de levage.
     pub pickup_mm: Option<f64>,
+    /// Altitude du dessous de chaque enceinte, même ordre que
+    /// `ClusterResult::speakers` — c'est la cote qu'un rigger lit au mètre.
+    /// Calculée ici plutôt qu'à l'écran : c'est le coin le plus bas de la
+    /// silhouette une fois tournée, donc de la trigonométrie (brief §1).
+    pub speaker_bottom_mm: Vec<f64>,
 }
 
 /// Rendu du bumper : silhouette toujours en repère global (comme les autres
@@ -640,8 +645,12 @@ pub fn compute_cluster(
         }
     };
 
-    let elevation =
-        compute_elevation(cluster.bumper_height, &speakers, &bumper_view, pickup_global);
+    let elevation = compute_elevation(
+        cluster.bumper_height,
+        &speakers,
+        &bumper_view,
+        pickup_global,
+    );
 
     Ok(ClusterResult {
         speakers,
@@ -683,11 +692,18 @@ fn compute_elevation(
     // tournées, plus ceux du bumper. C'est l'encombrement vu à l'écran.
     let mut lowest = f64::INFINITY;
     let mut highest = f64::NEG_INFINITY;
-    let corners = speakers
-        .iter()
-        .flat_map(|s| s.outline.iter().map(move |c| s.o + c.rotate(s.phi)))
-        .chain(bumper_view.outline_global.iter().copied());
-    for corner in corners {
+    let mut speaker_bottom_mm = Vec::with_capacity(speakers.len());
+    for speaker in speakers {
+        let mut bottom = f64::INFINITY;
+        for corner in speaker.outline {
+            let y = (speaker.o + corner.rotate(speaker.phi)).y;
+            bottom = bottom.min(y);
+            highest = highest.max(y);
+        }
+        lowest = lowest.min(bottom);
+        speaker_bottom_mm.push(bottom + offset_mm);
+    }
+    for corner in bumper_view.outline_global {
         lowest = lowest.min(corner.y);
         highest = highest.max(corner.y);
     }
@@ -698,5 +714,6 @@ fn compute_elevation(
         lowest_point_mm: lowest + offset_mm,
         highest_point_mm: highest + offset_mm,
         pickup_mm: pickup_global.map(|p| p.y + offset_mm),
+        speaker_bottom_mm,
     }
 }

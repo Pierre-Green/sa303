@@ -5,7 +5,7 @@ use crate::persistence::SPEAKER_SCHEMA_VERSION;
 use sa303_core::bumper::{
     BumperBarCompatibility, BumperBarModel, BumperCompatibility, BumperModel,
 };
-use sa303_core::cluster::{Cluster, Compartment, JointSetting};
+use sa303_core::cluster::Cluster;
 use sa303_core::settings::{AxisMapping, PinSpec, PlateSpec, Settings};
 use sa303_core::speaker::{
     BelowCompatibility, Crown, Hinge, SpeakerAcousticsModel, SpeakerMechanicalModel, SpeakerModel,
@@ -16,10 +16,6 @@ pub const SPEAKER_ISOPHASE_ID: &str = "sa303-isophase";
 pub const SPEAKER_CCA_ID: &str = "sa303-cca";
 pub const DEFAULT_BUMPER_ID: &str = "sa303-bumper";
 pub const DEFAULT_BUMPER_BAR_ID: &str = "sa303-bumper-bar";
-/// Hauteur d'accroche des grappes d'exemple, mm : une valeur de plein air
-/// courante, pour que la mise en situation soit visible dès le premier
-/// lancement plutôt que d'avoir tout au ras du sol.
-const DEFAULT_TRIM_HEIGHT_MM: f64 = 8000.0;
 
 /// Mécanique commune aux deux SA303 : même châssis, donc même quincaillerie
 /// de rigging. C'est ce qui les rend assemblables l'un sous l'autre — mais ce
@@ -218,104 +214,38 @@ pub fn default_settings() -> Settings {
     }
 }
 
-fn joints(splays: &[f64]) -> Vec<JointSetting> {
-    splays.iter().map(|&splay| JointSetting { splay }).collect()
-}
+// Table des JSON embarqués, produite par `build.rs` à partir du contenu réel
+// du dossier d'assets.
+include!(concat!(env!("OUT_DIR"), "/cluster_seeds.rs"));
 
-/// Démontre le mélange d'enceintes dans une même grappe (brief) :
-/// SA303-ISOPHASE en haut, bascule en SA303-CCA à partir du premier splay de
-/// +10° (inclus) et jusqu'au bas — exactement la jonction pour laquelle
-/// `speaker_isophase` recommande 10°. `splays` va du haut vers le bas, comme
-/// `Cluster::joints`.
-fn speaker_model_ids_for(splays: &[f64]) -> Vec<String> {
-    let speaker_count = splays.len() + 1;
-    let switch_at = splays
+/// Grappes d'exemple embarquées au premier lancement (brief §8).
+///
+/// Elles ne sont plus construites en Rust mais lues depuis
+/// `src-tauri/assets/clusters/`, un fichier JSON par grappe, au format exact
+/// de celles que l'application enregistre. Deux raisons : une grappe d'exemple
+/// se conçoit dans l'éditeur puis se dépose ici, sans passer par du code ; et
+/// le format des fichiers de seed est par construction celui des fichiers
+/// réels, donc il ne peut pas dériver en silence.
+///
+/// Les fichiers passent par la même migration que ceux du disque : un exemple
+/// déposé avant un changement de schéma reste lisible.
+pub fn seed_clusters() -> Vec<Cluster> {
+    CLUSTER_SEED_JSON
         .iter()
-        .position(|&s| s == 10.0)
-        .map(|joint_idx| joint_idx + 1);
-    (0..speaker_count)
-        .map(|index| match switch_at {
-            Some(from) if index >= from => SPEAKER_CCA_ID.into(),
-            _ => SPEAKER_ISOPHASE_ID.into(),
+        .map(|raw| {
+            parse_seed_cluster(raw).unwrap_or_else(|e| {
+                // Un asset illisible est une erreur de développement, pas une
+                // situation d'exécution : le fichier est embarqué dans le
+                // binaire, donc s'il est cassé il l'est pour tout le monde et
+                // il vaut mieux le savoir au premier lancement.
+                panic!("grappe d'exemple illisible dans assets/clusters/: {e}")
+            })
         })
         .collect()
 }
 
-fn flown(id: &str, name: &str, splays: &[f64]) -> Cluster {
-    Cluster {
-        id: id.into(),
-        name: name.into(),
-        schema_version: 1,
-        speaker_model_ids: speaker_model_ids_for(splays),
-        compartment: Compartment::Flown,
-        joints: joints(splays),
-        imposed_tilt: None,
-        tie_angle: None,
-        bumper_model_id: DEFAULT_BUMPER_ID.into(),
-        bumper_height: DEFAULT_TRIM_HEIGHT_MM,
-    }
-}
-
-fn stack(id: &str, name: &str, splays: &[f64], bottom_angle_deg: f64) -> Cluster {
-    Cluster {
-        id: id.into(),
-        name: name.into(),
-        schema_version: 1,
-        speaker_model_ids: speaker_model_ids_for(splays),
-        compartment: Compartment::Stacked,
-        joints: joints(splays),
-        imposed_tilt: Some(bottom_angle_deg),
-        tie_angle: None,
-        bumper_model_id: DEFAULT_BUMPER_ID.into(),
-        // Un stack est posé : le dessous du bumper est le sol.
-        bumper_height: 0.0,
-    }
-}
-
-/// Grappes à embarquer en seed (brief §8).
-pub fn seed_clusters() -> Vec<Cluster> {
-    vec![
-        flown("droite-12", "Droite 12", &[0.0; 11]),
-        flown(
-            "banane-douce-12",
-            "Banane douce 12",
-            &[0.0, 0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 4.0, 5.0, 7.0],
-        ),
-        flown(
-            "grosse-banane-12",
-            "Grosse banane 12",
-            &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 12.0],
-        ),
-        flown(
-            "j-array-14",
-            "J-array 14",
-            &[
-                0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 2.0, 3.0, 5.0, 8.0, 10.0, 15.0,
-            ],
-        ),
-        flown(
-            "long-splay-8",
-            "Long splay 8",
-            &[5.0, 6.0, 8.0, 10.0, 12.0, 15.0, 20.0],
-        ),
-        {
-            let splays = [0.0, 0.0, 0.0, 1.0, 1.0, 2.0, 3.0, 5.0, 8.0, 10.0, 12.0];
-            Cluster {
-                id: "assiette-moins-6".into(),
-                name: "Assiette -6".into(),
-                schema_version: 1,
-                speaker_model_ids: speaker_model_ids_for(&splays),
-                compartment: Compartment::Flown,
-                joints: joints(&splays),
-                imposed_tilt: Some(-6.0),
-                tie_angle: None,
-                bumper_model_id: DEFAULT_BUMPER_ID.into(),
-                bumper_height: DEFAULT_TRIM_HEIGHT_MM,
-            }
-        },
-        stack("stack-classique-3", "Stack classique 3", &[0.0, 20.0], 40.0),
-        stack("stack-4-boites", "Stack 4 boites", &[0.0, 0.0, 20.0], 40.0),
-        stack("stack-peu-incline", "Stack peu incliné", &[0.0, 10.0], 20.0),
-        stack("stack-droit-3", "Stack droit 3", &[0.0, 0.0], 0.0),
-    ]
+fn parse_seed_cluster(raw: &str) -> Result<Cluster, String> {
+    let value: serde_json::Value = serde_json::from_str(raw).map_err(|e| e.to_string())?;
+    serde_json::from_value(crate::persistence::migrate_legacy_cluster_json(value))
+        .map_err(|e| e.to_string())
 }

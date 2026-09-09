@@ -1301,7 +1301,10 @@ fn a_grounded_stack_sits_exactly_on_the_floor() {
         result.elevation.lowest_point_mm
     );
     assert!(result.elevation.highest_point_mm > result.elevation.lowest_point_mm);
-    assert!(result.elevation.pickup_mm.is_none(), "pas de levage en stack");
+    assert!(
+        result.elevation.pickup_mm.is_none(),
+        "pas de levage en stack"
+    );
 }
 
 /// En vol, le point de levage est au-dessus du bumper : c'est par lui que
@@ -1327,4 +1330,36 @@ fn the_pickup_sits_above_the_bumper_in_the_air() {
     let pickup = result.elevation.pickup_mm.expect("levage en vol");
     assert!(pickup > 9_000.0, "levage à {pickup} mm, sous le bumper");
     assert!(result.elevation.lowest_point_mm < 9_000.0, "la grappe pend");
+}
+
+/// La cote du dessous de chaque enceinte est calculée côté Rust : c'est de la
+/// trigonométrie sur une silhouette tournée, l'écran n'a pas à la refaire
+/// (brief §1). Dans une grappe qui pend, elle décroît du haut vers le bas.
+#[test]
+fn each_speaker_reports_the_height_a_rigger_would_measure() {
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let bumper_bar = default_bumper_bar();
+    let settings = default_settings();
+
+    let mut cluster = flown_cluster("cotes", &[0.0, 0.0, 0.0], None, &bumper.id);
+    cluster.bumper_height = 10_000.0;
+    let result = compute_cluster(
+        std::slice::from_ref(&sm),
+        &cluster,
+        &settings,
+        &bumper,
+        std::slice::from_ref(&bumper_bar),
+    )
+    .unwrap();
+
+    let bottoms = &result.elevation.speaker_bottom_mm;
+    assert_eq!(bottoms.len(), result.speakers.len());
+    for pair in bottoms.windows(2) {
+        assert!(pair[0] > pair[1], "cotes non décroissantes : {bottoms:?}");
+    }
+    // La plus basse est le bas de l'ensemble, et tout est sous le bumper.
+    let lowest = bottoms[bottoms.len() - 1];
+    assert!((lowest - result.elevation.lowest_point_mm).abs() < 1e-9);
+    assert!(bottoms[0] < result.elevation.bumper_bottom_mm);
 }

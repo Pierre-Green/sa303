@@ -1,0 +1,59 @@
+{
+  "id": "cc2a3a08-dfe9-4ead-b444-cc69aa35ea31",
+  "name": "Grappe banane - 12u - 10m - -20d-46d",
+  "schemaVersion": 2,
+  "speakerModelIds": [
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-cca",
+    "sa303-cca"
+  ],
+  "compartment": "flown",
+  "joints": [
+    {
+      "splay": 4.0
+    },
+    {
+      "splay": 4.0
+    },
+    {
+      "splay": 4.0
+    },
+    {
+      "splay": 4.0
+    },
+    {
+      "splay": 4.0
+    },
+    {
+      "splay": 4.0
+    },
+    {
+      "splay": 4.0
+    },
+    {
+      "splay": 4.0
+    },
+    {
+      "splay": 4.0
+    },
+    {
+      "splay": 10.0
+    },
+    {
+      "splay": 20.0
+    }
+  ],
+  "imposedTilt": -20.0,
+  "tieAngle": null,
+  "bumperModelId": "sa303-bumper",
+  "bumperHeight": 10000.0
+}

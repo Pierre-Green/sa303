@@ -236,6 +236,10 @@ export interface Elevation {
   highestPointMm: number;
   /** Vol uniquement : altitude du point de levage. */
   pickupMm: number | null;
+  /** Altitude du dessous de chaque enceinte, même ordre que `speakers` : la
+   * cote qu'un rigger lit au mètre. Calculée côté Rust — c'est le coin le plus
+   * bas de la silhouette une fois tournée. */
+  speakerBottomMm: number[];
 }
 
 export interface ClusterResult {
