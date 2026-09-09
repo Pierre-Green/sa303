@@ -35,10 +35,26 @@ fn embed_cluster_seeds() {
 
     // Chemins absolus : le fichier généré est inclus depuis `OUT_DIR`, donc un
     // chemin relatif s'y résoudrait, pas depuis la racine du crate.
-    let root = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR fourni par cargo");
+    //
+    // Séparateurs forcés en `/` : ces chemins finissent dans un littéral Rust,
+    // où les antislashes de Windows seraient lus comme des échappements
+    // (`D:\a\...` donnerait une erreur sur `\a`). `include_str!` accepte les
+    // barres obliques sur toutes les plateformes, donc c'est aussi le seul
+    // moyen d'obtenir le même fichier généré partout.
+    let root = env::var("CARGO_MANIFEST_DIR")
+        .expect("CARGO_MANIFEST_DIR fourni par cargo")
+        .replace('\\', "/");
     let entries: String = files
         .iter()
-        .map(|name| format!("    include_str!(\"{root}/assets/clusters/{name}\"),\n"))
+        .map(|name| {
+            // La racine n'a plus d'antislash, mais un nom de fichier peut en
+            // contenir un (légal sous Unix), tout comme un guillemet : on
+            // échappe le chemin assemblé plutôt que de parier là-dessus.
+            let path = format!("{root}/assets/clusters/{name}")
+                .replace('\\', "\\\\")
+                .replace('"', "\\\"");
+            format!("    include_str!(\"{path}\"),\n")
+        })
         .collect();
     let generated = format!(
         "// Généré par build.rs — ne pas éditer. Source : src-tauri/assets/clusters/\nconst CLUSTER_SEED_JSON: [&str; {}] = [\n{entries}];\n",
