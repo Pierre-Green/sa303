@@ -1,0 +1,72 @@
+{
+  "id": "sa303-cca",
+  "name": "SA303-CCA",
+  "schemaVersion": 3,
+  "depth": 700.0,
+  "height": 550.0,
+  "totalVerticalAngle": 20.0,
+  "massKg": 83.695,
+  "cg": [
+    10.84,
+    11.91
+  ],
+  "hinge": {
+    "x": -338.43,
+    "y": 257.13,
+    "jointSeparation": 552.384
+  },
+  "crown": {
+    "radius": 680.0,
+    "delta": 20.0,
+    "anchorAngle": 2.5,
+    "splay0Angle": 5.0
+  },
+  "splayGrid": [
+    0.0,
+    1.0,
+    2.0,
+    3.0,
+    4.0,
+    5.0,
+    8.0,
+    9.0,
+    10.0,
+    11.0,
+    12.0,
+    15.0,
+    16.0,
+    17.0,
+    18.0,
+    19.0,
+    20.0
+  ],
+  "frameHoleSplay": 0.0,
+  "acoustics": {
+    "fs": 60.0,
+    "directivityHorizontal": 90.0,
+    "directivityVertical": 20.0,
+    "wgFront": "constantCurvature",
+    "wgOutputHeight": 464.0,
+    "wgLevelAtHalfCoverageDb": -6.0
+  },
+  "compatibleBelow": [
+    {
+      "speakerModelId": "sa303-cca",
+      "flown": true,
+      "stacked": true,
+      "recommendedSplay": {
+        "minDeg": 20.0,
+        "maxDeg": 20.0
+      }
+    },
+    {
+      "speakerModelId": "sa303-isophase",
+      "flown": true,
+      "stacked": true,
+      "recommendedSplay": {
+        "minDeg": 10.0,
+        "maxDeg": 10.0
+      }
+    }
+  ]
+}

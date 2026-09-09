@@ -10,6 +10,15 @@ use sa303_core::wst::{wst_report, WstInputs, WstReport};
 use sa303_core::{compute_aggregate, compute_cluster, AggregateReport, ClusterResult};
 use tauri::AppHandle;
 
+/// Identifiants du catalogue livré avec le logiciel. L'interface s'en sert pour
+/// interdire la modification et la suppression de ces éléments : la persistance
+/// refuse déjà l'opération, mais mieux vaut ne pas proposer un bouton qui ne
+/// peut qu'échouer.
+#[tauri::command]
+pub fn get_builtin_ids() -> persistence::BuiltinIds {
+    persistence::builtin_ids()
+}
+
 #[tauri::command]
 pub fn list_speaker_models(app: AppHandle) -> Result<Vec<SpeakerModel>, String> {
     persistence::list_speaker_models(&app)

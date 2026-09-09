@@ -4,6 +4,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AggregateReport,
+  BuiltinIds,
   BumperBarModel,
   BumperModel,
   Cluster,
@@ -16,6 +17,10 @@ import type {
 } from "./types";
 
 export const api = {
+  // Catalogue livré avec le logiciel : ces éléments ne sont ni modifiables ni
+  // supprimables depuis l'application, seule une mise à jour les fait bouger.
+  getBuiltinIds: () => invoke<BuiltinIds>("get_builtin_ids"),
+
   listSpeakerModels: () => invoke<SpeakerModel[]>("list_speaker_models"),
   saveSpeakerModel: (speakerModel: SpeakerModel) =>
     invoke<void>("save_speaker_model", { speakerModel }),

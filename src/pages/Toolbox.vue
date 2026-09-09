@@ -225,9 +225,6 @@ const ratio = (value: number | null | undefined) =>
       <button class="rounded-md bg-accent px-3 py-2 text-left text-sm font-medium text-accent-foreground">
         Critères WST
       </button>
-      <p class="mt-2 px-3 text-xs text-muted-foreground">
-        D'autres outils viendront ici.
-      </p>
     </aside>
 
     <div class="flex-1 overflow-y-auto p-4">

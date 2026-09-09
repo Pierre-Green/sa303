@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useSpeakerModelsStore } from "@/stores/speakerModels";
 import { useBumperModelsStore } from "@/stores/bumperModels";
 import { useClustersStore } from "@/stores/clusters";
+import { useBuiltinsStore } from "@/stores/builtins";
 import { api } from "@/lib/api";
 import { speakerDisplayNumber } from "@/lib/display";
 import type { BumperView, Cluster, ClusterResult, Compartment } from "@/lib/types";
@@ -25,6 +26,7 @@ import {
 const speakerModelsStore = useSpeakerModelsStore();
 const bumperModelsStore = useBumperModelsStore();
 const clustersStore = useClustersStore();
+const builtinsStore = useBuiltinsStore();
 
 const selectedClusterId = ref<string | null>(null);
 const clusterResult = ref<ClusterResult | null>(null);
@@ -104,7 +106,12 @@ function loadIntoForm(c: Cluster) {
 }
 
 onMounted(async () => {
-  await Promise.all([speakerModelsStore.fetchAll(), bumperModelsStore.fetchAll(), clustersStore.fetchAll()]);
+  await Promise.all([
+    speakerModelsStore.fetchAll(),
+    bumperModelsStore.fetchAll(),
+    clustersStore.fetchAll(),
+    builtinsStore.fetchOnce(),
+  ]);
   if (clustersStore.items.length > 0) {
     selectedClusterId.value = clustersStore.items[0].id;
   } else {
@@ -177,6 +184,9 @@ watch(
 const isEditingExisting = computed(() =>
   clustersStore.items.some((c) => c.id === form.id),
 );
+/** Grappe livrée avec le logiciel : elle suit les mises à jour, donc elle ne
+ * s'enregistre ni ne se supprime ici. `duplicate` est la porte de sortie. */
+const isBuiltin = computed(() => builtinsStore.isCluster(form.id));
 
 // Bumpers compatibles avec l'enceinte et le compartiment choisis.
 const compatibleBumpers = computed(() =>
@@ -225,6 +235,17 @@ function jointAcousticWarning(jointIndex: number): string | null {
   if (!range) return null;
   const target = range[0] === range[1] ? `${range[0]}°` : `${range[0]}° à ${range[1]}°`;
   return `Jonction non optimale acoustiquement : ${target} recommandé(s) entre ces deux enceintes.`;
+}
+
+/** Repart de la configuration affichée sous une nouvelle identité. C'est ce qui
+ * rend les grappes livrées utilisables sans les rendre modifiables : on les lit,
+ * on en dérive la sienne. Rien n'est enregistré tant que l'utilisateur ne le
+ * demande pas. */
+function duplicate() {
+  const source = form.name;
+  selectedClusterId.value = null;
+  form.id = crypto.randomUUID();
+  form.name = `${source} (copie)`;
 }
 
 function newCluster() {
@@ -617,8 +638,20 @@ watch(form, recomputeViewer, { deep: true, immediate: true });
         </div>
 
         <div class="flex gap-2">
-          <Button class="flex-1" :disabled="saving" @click="save">Enregistrer</Button>
-          <Button v-if="isEditingExisting" variant="destructive" @click="remove">Supprimer</Button>
+          <p
+            v-if="isBuiltin"
+            class="w-full rounded-md border border-border bg-muted/40 p-2 text-xs text-muted-foreground"
+          >
+            Grappe livrée avec le logiciel : en lecture seule, elle suit les mises
+            à jour. Duplique-la pour en dériver la tienne.
+          </p>
+          <template v-if="isBuiltin">
+            <Button class="flex-1" @click="duplicate">Dupliquer pour modifier</Button>
+          </template>
+          <template v-else>
+            <Button class="flex-1" :disabled="saving" @click="save">Enregistrer</Button>
+            <Button v-if="isEditingExisting" variant="destructive" @click="remove">Supprimer</Button>
+          </template>
         </div>
 
         <div v-if="error" class="rounded-md border border-destructive/50 bg-destructive/10 p-2 text-xs text-destructive">

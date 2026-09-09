@@ -1,0 +1,11 @@
+{
+  "id": "sa303-bumper-bar",
+  "name": "SA303-BUMPER-BAR",
+  "schemaVersion": 1,
+  "maxDeportMm": 650.0,
+  "compatibleBumpers": [
+    {
+      "bumperModelId": "sa303-bumper"
+    }
+  ]
+}

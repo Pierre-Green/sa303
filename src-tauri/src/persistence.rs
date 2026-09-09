@@ -143,6 +143,22 @@ fn write_index(app: &AppHandle, entries: &[IndexEntry]) -> Result<(), String> {
     fs::write(path, raw).map_err(|e| e.to_string())
 }
 
+/// Retire un élément du disque et de l'index, sans se demander à qui il
+/// appartient : les appelants publics ont déjà tranché.
+fn remove_entity(app: &AppHandle, kind: EntityKind, id: &str) -> Result<(), String> {
+    let dir = match kind {
+        EntityKind::Speaker => speakers_dir(app)?,
+        EntityKind::Bumper => bumpers_dir(app)?,
+        EntityKind::BumperBar => bumper_bars_dir(app)?,
+        EntityKind::Cluster => clusters_dir(app)?,
+    };
+    let path = dir.join(format!("{id}.json"));
+    if path.exists() {
+        fs::remove_file(path).map_err(|e| e.to_string())?;
+    }
+    remove_from_index(app, id, kind)
+}
+
 fn upsert_index(app: &AppHandle, entry: IndexEntry) -> Result<(), String> {
     let mut entries = read_index(app)?;
     match entries
@@ -259,8 +275,11 @@ pub fn load_speaker_model(app: &AppHandle, id: &str) -> Result<SpeakerModel, Str
     }
 }
 
-pub fn save_speaker_model(app: &AppHandle, s: &SpeakerModel) -> Result<(), String> {
-    let path = speakers_dir(app)?.join(format!("{}.json", s.id));
+/// Écrit sans poser de question : sert aussi bien à l'enregistrement demandé
+/// par l'utilisateur qu'à l'installation du catalogue de base, qui doit
+/// pouvoir écraser un fichier existant.
+fn write_speaker_model(app: &AppHandle, id: &str, s: &SpeakerModel) -> Result<(), String> {
+    let path = speakers_dir(app)?.join(format!("{id}.json"));
     let raw = serde_json::to_string_pretty(s).map_err(|e| e.to_string())?;
     fs::write(path, raw).map_err(|e| e.to_string())?;
     upsert_index(
@@ -274,12 +293,14 @@ pub fn save_speaker_model(app: &AppHandle, s: &SpeakerModel) -> Result<(), Strin
     )
 }
 
+pub fn save_speaker_model(app: &AppHandle, s: &SpeakerModel) -> Result<(), String> {
+    refuse_if_builtin(EntityKind::Speaker, &s.id)?;
+    write_speaker_model(app, &s.id.clone(), s)
+}
+
 pub fn delete_speaker_model(app: &AppHandle, id: &str) -> Result<(), String> {
-    let path = speakers_dir(app)?.join(format!("{id}.json"));
-    if path.exists() {
-        fs::remove_file(path).map_err(|e| e.to_string())?;
-    }
-    remove_from_index(app, id, EntityKind::Speaker)
+    refuse_if_builtin(EntityKind::Speaker, id)?;
+    remove_entity(app, EntityKind::Speaker, id)
 }
 
 pub fn list_speaker_models(app: &AppHandle) -> Result<Vec<SpeakerModel>, String> {
@@ -313,8 +334,11 @@ pub fn load_bumper_model(app: &AppHandle, id: &str) -> Result<BumperModel, Strin
     }
 }
 
-pub fn save_bumper_model(app: &AppHandle, b: &BumperModel) -> Result<(), String> {
-    let path = bumpers_dir(app)?.join(format!("{}.json", b.id));
+/// Écrit sans poser de question : sert aussi bien à l'enregistrement demandé
+/// par l'utilisateur qu'à l'installation du catalogue de base, qui doit
+/// pouvoir écraser un fichier existant.
+fn write_bumper_model(app: &AppHandle, id: &str, b: &BumperModel) -> Result<(), String> {
+    let path = bumpers_dir(app)?.join(format!("{id}.json"));
     let raw = serde_json::to_string_pretty(b).map_err(|e| e.to_string())?;
     fs::write(path, raw).map_err(|e| e.to_string())?;
     upsert_index(
@@ -328,12 +352,14 @@ pub fn save_bumper_model(app: &AppHandle, b: &BumperModel) -> Result<(), String>
     )
 }
 
+pub fn save_bumper_model(app: &AppHandle, b: &BumperModel) -> Result<(), String> {
+    refuse_if_builtin(EntityKind::Bumper, &b.id)?;
+    write_bumper_model(app, &b.id.clone(), b)
+}
+
 pub fn delete_bumper_model(app: &AppHandle, id: &str) -> Result<(), String> {
-    let path = bumpers_dir(app)?.join(format!("{id}.json"));
-    if path.exists() {
-        fs::remove_file(path).map_err(|e| e.to_string())?;
-    }
-    remove_from_index(app, id, EntityKind::Bumper)
+    refuse_if_builtin(EntityKind::Bumper, id)?;
+    remove_entity(app, EntityKind::Bumper, id)
 }
 
 pub fn list_bumper_models(app: &AppHandle) -> Result<Vec<BumperModel>, String> {
@@ -367,8 +393,11 @@ pub fn load_bumper_bar_model(app: &AppHandle, id: &str) -> Result<BumperBarModel
     }
 }
 
-pub fn save_bumper_bar_model(app: &AppHandle, b: &BumperBarModel) -> Result<(), String> {
-    let path = bumper_bars_dir(app)?.join(format!("{}.json", b.id));
+/// Écrit sans poser de question : sert aussi bien à l'enregistrement demandé
+/// par l'utilisateur qu'à l'installation du catalogue de base, qui doit
+/// pouvoir écraser un fichier existant.
+fn write_bumper_bar_model(app: &AppHandle, id: &str, b: &BumperBarModel) -> Result<(), String> {
+    let path = bumper_bars_dir(app)?.join(format!("{id}.json"));
     let raw = serde_json::to_string_pretty(b).map_err(|e| e.to_string())?;
     fs::write(path, raw).map_err(|e| e.to_string())?;
     upsert_index(
@@ -382,12 +411,14 @@ pub fn save_bumper_bar_model(app: &AppHandle, b: &BumperBarModel) -> Result<(), 
     )
 }
 
+pub fn save_bumper_bar_model(app: &AppHandle, b: &BumperBarModel) -> Result<(), String> {
+    refuse_if_builtin(EntityKind::BumperBar, &b.id)?;
+    write_bumper_bar_model(app, &b.id.clone(), b)
+}
+
 pub fn delete_bumper_bar_model(app: &AppHandle, id: &str) -> Result<(), String> {
-    let path = bumper_bars_dir(app)?.join(format!("{id}.json"));
-    if path.exists() {
-        fs::remove_file(path).map_err(|e| e.to_string())?;
-    }
-    remove_from_index(app, id, EntityKind::BumperBar)
+    refuse_if_builtin(EntityKind::BumperBar, id)?;
+    remove_entity(app, EntityKind::BumperBar, id)
 }
 
 pub fn list_bumper_bar_models(app: &AppHandle) -> Result<Vec<BumperBarModel>, String> {
@@ -452,8 +483,11 @@ pub fn load_cluster(app: &AppHandle, id: &str) -> Result<Cluster, String> {
     }
 }
 
-pub fn save_cluster(app: &AppHandle, c: &Cluster) -> Result<(), String> {
-    let path = clusters_dir(app)?.join(format!("{}.json", c.id));
+/// Écrit sans poser de question : sert aussi bien à l'enregistrement demandé
+/// par l'utilisateur qu'à l'installation du catalogue de base, qui doit
+/// pouvoir écraser un fichier existant.
+fn write_cluster(app: &AppHandle, id: &str, c: &Cluster) -> Result<(), String> {
+    let path = clusters_dir(app)?.join(format!("{id}.json"));
     let raw = serde_json::to_string_pretty(c).map_err(|e| e.to_string())?;
     fs::write(path, raw).map_err(|e| e.to_string())?;
     upsert_index(
@@ -467,12 +501,14 @@ pub fn save_cluster(app: &AppHandle, c: &Cluster) -> Result<(), String> {
     )
 }
 
+pub fn save_cluster(app: &AppHandle, c: &Cluster) -> Result<(), String> {
+    refuse_if_builtin(EntityKind::Cluster, &c.id)?;
+    write_cluster(app, &c.id.clone(), c)
+}
+
 pub fn delete_cluster(app: &AppHandle, id: &str) -> Result<(), String> {
-    let path = clusters_dir(app)?.join(format!("{id}.json"));
-    if path.exists() {
-        fs::remove_file(path).map_err(|e| e.to_string())?;
-    }
-    remove_from_index(app, id, EntityKind::Cluster)
+    refuse_if_builtin(EntityKind::Cluster, id)?;
+    remove_entity(app, EntityKind::Cluster, id)
 }
 
 pub fn list_clusters(app: &AppHandle) -> Result<Vec<Cluster>, String> {
@@ -508,28 +544,153 @@ pub fn save_settings(app: &AppHandle, s: &Settings) -> Result<(), String> {
     fs::write(path, raw).map_err(|e| e.to_string())
 }
 
-/// Peuple le répertoire de données au premier lancement (brief §8 : grappes seed).
-pub fn ensure_seeded(app: &AppHandle) -> Result<(), String> {
-    if list_speaker_models(app)?.is_empty() {
-        for speaker in crate::seed::default_speaker_models() {
-            save_speaker_model(app, &speaker)?;
-        }
+/// Ce qu'une version du logiciel a installé dans le dossier de données. Écrit
+/// à côté des catalogues, relu au lancement suivant : c'est lui qui permet de
+/// distinguer « composant de base retiré par une mise à jour » de « créé par
+/// l'utilisateur », donc de nettoyer sans jamais toucher aux fichiers de
+/// l'utilisateur.
+#[derive(Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct BuiltinIds {
+    pub speakers: Vec<String>,
+    pub bumpers: Vec<String>,
+    pub bumper_bars: Vec<String>,
+    pub clusters: Vec<String>,
+}
+
+impl BuiltinIds {
+    fn contains(&self, kind: EntityKind, id: &str) -> bool {
+        let ids = match kind {
+            EntityKind::Speaker => &self.speakers,
+            EntityKind::Bumper => &self.bumpers,
+            EntityKind::BumperBar => &self.bumper_bars,
+            EntityKind::Cluster => &self.clusters,
+        };
+        ids.iter().any(|known| known == id)
     }
+}
+
+fn builtins_manifest_path(app: &AppHandle) -> Result<PathBuf, String> {
+    // Crée le dossier plutôt que de compter sur l'écriture d'un asset pour
+    // l'avoir fait : sur une installation vierge, un catalogue vide suffirait
+    // sinon à faire échouer l'écriture du manifeste.
+    let dir = data_dir(app)?;
+    ensure_dir(&dir)?;
+    Ok(dir.join("builtins.json"))
+}
+
+/// Identifiants livrés par la version en cours d'exécution.
+pub fn builtin_ids() -> BuiltinIds {
+    BuiltinIds {
+        speakers: crate::seed::builtin_speakers()
+            .into_iter()
+            .map(|b| b.id)
+            .collect(),
+        bumpers: crate::seed::builtin_bumpers()
+            .into_iter()
+            .map(|b| b.id)
+            .collect(),
+        bumper_bars: crate::seed::builtin_bumper_bars()
+            .into_iter()
+            .map(|b| b.id)
+            .collect(),
+        clusters: crate::seed::builtin_clusters()
+            .into_iter()
+            .map(|b| b.id)
+            .collect(),
+    }
+}
+
+/// Un composant de base ne s'enregistre ni ne se supprime depuis
+/// l'application : il appartient au logiciel, seule une mise à jour le fait
+/// bouger. Refuser explicitement plutôt que d'écrire un fichier qui serait
+/// écrasé au prochain lancement — un enregistrement silencieusement annulé
+/// serait pire que pas d'enregistrement du tout (brief §11.6).
+fn refuse_if_builtin(kind: EntityKind, id: &str) -> Result<(), String> {
+    if builtin_ids().contains(kind, id) {
+        let what = match kind {
+            EntityKind::Speaker => "Cette enceinte",
+            EntityKind::Bumper => "Ce bumper",
+            EntityKind::BumperBar => "Cette barre",
+            EntityKind::Cluster => "Cette grappe",
+        };
+        return Err(format!(
+            "{what} fait partie du catalogue livré avec le logiciel : elle ne peut être ni modifiée ni supprimée ici. Duplique-la pour partir de sa configuration."
+        ));
+    }
+    Ok(())
+}
+
+/// Ce qu'une version précédente avait installé et que celle-ci ne livre plus.
+///
+/// C'est la seule liste que la synchronisation a le droit de supprimer. Elle se
+/// calcule par différence contre le manifeste, jamais contre le contenu du
+/// dossier : un élément absent du manifeste a été créé par l'utilisateur, et il
+/// n'appartient pas au logiciel de l'effacer (brief §8).
+fn stale_builtins(previous: &BuiltinIds, current: &BuiltinIds) -> Vec<(EntityKind, String)> {
+    [
+        (EntityKind::Speaker, &previous.speakers),
+        (EntityKind::Bumper, &previous.bumpers),
+        (EntityKind::BumperBar, &previous.bumper_bars),
+        (EntityKind::Cluster, &previous.clusters),
+    ]
+    .into_iter()
+    .flat_map(|(kind, ids)| {
+        ids.iter()
+            .filter(move |id| !current.contains(kind, id))
+            .map(move |id| (kind, id.clone()))
+    })
+    .collect()
+}
+
+/// Installe le catalogue de base et le tient à jour.
+///
+/// Appelée à **chaque** lancement, pas seulement sur une installation vierge :
+/// c'est ce qui fait qu'une mise à jour du logiciel propage ses corrections
+/// dans un dossier de données existant, sans qu'il faille l'effacer. Les
+/// éléments livrés sont réécrits tels quels ; ceux qu'une version précédente
+/// avait installés et qui ne sont plus livrés sont retirés — et uniquement
+/// ceux-là, d'où le manifeste. Tout ce que l'utilisateur a créé est laissé
+/// intact.
+pub fn sync_builtins(app: &AppHandle) -> Result<(), String> {
+    let previous: BuiltinIds = match fs::read_to_string(builtins_manifest_path(app)?) {
+        Ok(raw) => serde_json::from_str(&raw).unwrap_or_default(),
+        // Première installation, ou manifeste illisible : on réinstalle tout et
+        // on ne supprime rien. Ne jamais deviner une suppression.
+        Err(_) => BuiltinIds::default(),
+    };
+    let current = builtin_ids();
+
+    for builtin in crate::seed::builtin_speakers() {
+        write_speaker_model(app, &builtin.id, &builtin.model)?;
+    }
+    for builtin in crate::seed::builtin_bumpers() {
+        write_bumper_model(app, &builtin.id, &builtin.model)?;
+    }
+    for builtin in crate::seed::builtin_bumper_bars() {
+        write_bumper_bar_model(app, &builtin.id, &builtin.model)?;
+    }
+    for builtin in crate::seed::builtin_clusters() {
+        write_cluster(app, &builtin.id, &builtin.model)?;
+    }
+
+    for (kind, id) in stale_builtins(&previous, &current) {
+        remove_entity(app, kind, &id)?;
+    }
+
+    let raw = serde_json::to_string_pretty(&current).map_err(|e| e.to_string())?;
+    fs::write(builtins_manifest_path(app)?, raw).map_err(|e| e.to_string())
+}
+
+/// Peuple le répertoire de données au premier lancement, puis installe et met à
+/// jour le catalogue de base (brief §8).
+pub fn ensure_seeded(app: &AppHandle) -> Result<(), String> {
+    // Les réglages ne font pas partie du catalogue : l'utilisateur les ajuste,
+    // donc on ne les écrase jamais — on les crée seulement s'ils manquent.
     if !settings_path(app)?.exists() {
         save_settings(app, &crate::seed::default_settings())?;
     }
-    if list_bumper_models(app)?.is_empty() {
-        save_bumper_model(app, &crate::seed::default_bumper_model())?;
-    }
-    if list_bumper_bar_models(app)?.is_empty() {
-        save_bumper_bar_model(app, &crate::seed::default_bumper_bar_model())?;
-    }
-    if list_clusters(app)?.is_empty() {
-        for cluster in crate::seed::seed_clusters() {
-            save_cluster(app, &cluster)?;
-        }
-    }
-    Ok(())
+    sync_builtins(app)
 }
 
 #[cfg(test)]
@@ -641,12 +802,25 @@ mod tests {
     fn every_seeded_cluster_asset_describes_a_buildable_cluster() {
         use sa303_core::compute_cluster;
 
-        let clusters = crate::seed::seed_clusters();
+        let clusters: Vec<_> = crate::seed::builtin_clusters()
+            .into_iter()
+            .map(|b| b.model)
+            .collect();
         assert!(!clusters.is_empty(), "aucune grappe d'exemple embarquée");
 
-        let speakers = crate::seed::default_speaker_models();
-        let bumper = crate::seed::default_bumper_model();
-        let bumper_bars = [crate::seed::default_bumper_bar_model()];
+        let speakers: Vec<_> = crate::seed::builtin_speakers()
+            .into_iter()
+            .map(|b| b.model)
+            .collect();
+        let bumper = crate::seed::builtin_bumpers()
+            .into_iter()
+            .map(|b| b.model)
+            .next()
+            .expect("un bumper livré");
+        let bumper_bars: Vec<_> = crate::seed::builtin_bumper_bars()
+            .into_iter()
+            .map(|b| b.model)
+            .collect();
         let settings = crate::seed::default_settings();
 
         let mut ids = std::collections::HashSet::new();
@@ -672,6 +846,88 @@ mod tests {
                     )
                 },
             );
+        }
+    }
+
+    fn ids(speakers: &[&str], clusters: &[&str]) -> BuiltinIds {
+        BuiltinIds {
+            speakers: speakers.iter().map(|s| s.to_string()).collect(),
+            clusters: clusters.iter().map(|s| s.to_string()).collect(),
+            ..BuiltinIds::default()
+        }
+    }
+
+    #[test]
+    fn an_update_that_drops_a_component_removes_it_and_nothing_else() {
+        // Version précédente : deux enceintes et deux grappes livrées.
+        let previous = ids(&["sa303-isophase", "sa303-retire"], &["demo-a", "demo-b"]);
+        // Cette version ne livre plus « sa303-retire » ni « demo-b ».
+        let current = ids(&["sa303-isophase"], &["demo-a"]);
+
+        let stale = stale_builtins(&previous, &current);
+        assert_eq!(stale.len(), 2, "obtenu {stale:?}");
+        assert!(stale.contains(&(EntityKind::Speaker, "sa303-retire".into())));
+        assert!(stale.contains(&(EntityKind::Cluster, "demo-b".into())));
+    }
+
+    #[test]
+    fn what_the_user_created_is_never_a_candidate_for_removal() {
+        // Le manifeste ne connaît que ce que le logiciel a installé. Une grappe
+        // créée par l'utilisateur n'y figure pas, donc elle ne peut pas
+        // apparaître dans la liste des retraits, même si le logiciel n'en livre
+        // aucune : c'est ce qui garantit qu'une mise à jour ne touche pas au
+        // travail de l'utilisateur (brief §8).
+        let previous = ids(&[], &["demo-a"]);
+        let current = BuiltinIds::default();
+        let stale = stale_builtins(&previous, &current);
+        assert_eq!(stale, vec![(EntityKind::Cluster, "demo-a".into())]);
+    }
+
+    #[test]
+    fn a_first_install_removes_nothing() {
+        // Pas de manifeste : on installe et on ne devine aucune suppression.
+        let stale = stale_builtins(&BuiltinIds::default(), &builtin_ids());
+        assert!(stale.is_empty(), "obtenu {stale:?}");
+    }
+
+    #[test]
+    fn relaunching_the_same_version_removes_nothing() {
+        let current = builtin_ids();
+        assert!(stale_builtins(&current, &current).is_empty());
+    }
+
+    #[test]
+    fn a_shipped_component_cannot_be_saved_or_deleted_from_the_app() {
+        // Sans ce refus, l'enregistrement réussirait puis serait écrasé au
+        // lancement suivant : une modification perdue en silence, exactement ce
+        // que le brief interdit (§11.6).
+        let shipped = builtin_ids();
+        let speaker = shipped.speakers.first().expect("une enceinte livrée");
+        let err = refuse_if_builtin(EntityKind::Speaker, speaker)
+            .expect_err("un composant livré doit être refusé");
+        assert!(err.contains("catalogue"), "message obtenu : {err}");
+
+        // Un identifiant inconnu du catalogue reste libre.
+        refuse_if_builtin(EntityKind::Speaker, "une-enceinte-a-moi").expect("id utilisateur");
+    }
+
+    #[test]
+    fn every_asset_is_named_after_the_id_it_declares() {
+        // Le fichier écrit dans le dossier de données est nommé d'après le nom
+        // de l'asset, alors que l'index et les références de grappe utilisent le
+        // champ `id` du JSON. S'ils divergeaient, l'élément serait introuvable
+        // par son propre identifiant.
+        for b in crate::seed::builtin_speakers() {
+            assert_eq!(b.id, b.model.id, "speakers/{}.json", b.id);
+        }
+        for b in crate::seed::builtin_bumpers() {
+            assert_eq!(b.id, b.model.id, "bumpers/{}.json", b.id);
+        }
+        for b in crate::seed::builtin_bumper_bars() {
+            assert_eq!(b.id, b.model.id, "bumper-bars/{}.json", b.id);
+        }
+        for b in crate::seed::builtin_clusters() {
+            assert_eq!(b.id, b.model.id, "clusters/{}.json", b.id);
         }
     }
 

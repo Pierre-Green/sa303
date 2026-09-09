@@ -86,6 +86,15 @@ export interface JointSetting {
   splay: number;
 }
 
+/** Identifiants des composants livrés avec le logiciel. Immuables dans
+ * l'application : seule une mise à jour les modifie. */
+export interface BuiltinIds {
+  speakers: string[];
+  bumpers: string[];
+  bumperBars: string[];
+  clusters: string[];
+}
+
 export interface Cluster {
   id: string;
   name: string;

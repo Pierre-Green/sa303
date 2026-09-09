@@ -11,6 +11,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::get_builtin_ids,
             commands::list_speaker_models,
             commands::save_speaker_model,
             commands::delete_speaker_model,

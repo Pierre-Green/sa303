@@ -12,6 +12,7 @@ import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useSpeakerModelsStore } from "@/stores/speakerModels";
 import { useBumperModelsStore } from "@/stores/bumperModels";
 import { useBumperBarModelsStore } from "@/stores/bumperBarModels";
+import { useBuiltinsStore } from "@/stores/builtins";
 import { api } from "@/lib/api";
 import type { BumperBarModel, BumperModel, SpeakerGeometryReport } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,12 +37,14 @@ const category = ref<Category>("enceintes");
 const speakerModelsStore = useSpeakerModelsStore();
 const bumperModelsStore = useBumperModelsStore();
 const bumperBarModelsStore = useBumperBarModelsStore();
+const builtinsStore = useBuiltinsStore();
 
 onMounted(async () => {
   await Promise.all([
     speakerModelsStore.fetchAll(),
     bumperModelsStore.fetchAll(),
     bumperBarModelsStore.fetchAll(),
+    builtinsStore.fetchOnce(),
   ]);
   if (speakerModelsStore.items.length > 0) selectedSpeakerId.value = speakerModelsStore.items[0].id;
 });
@@ -130,6 +133,9 @@ watch(selectedBumperId, (id) => {
 const isEditingExistingBumper = computed(() =>
   bumperModelsStore.items.some((b) => b.id === bumperForm.id),
 );
+/** Livré avec le logiciel : ni modifiable ni supprimable ici. La persistance
+ * refuse déjà l'opération — on n'affiche pas un bouton qui ne peut qu'échouer. */
+const bumperIsBuiltin = computed(() => builtinsStore.isBumper(bumperForm.id));
 
 function newBumper() {
   selectedBumperId.value = null;
@@ -230,6 +236,7 @@ watch(selectedBumperBarId, (id) => {
 const isEditingExistingBumperBar = computed(() =>
   bumperBarModelsStore.items.some((b) => b.id === bumperBarForm.id),
 );
+const bumperBarIsBuiltin = computed(() => builtinsStore.isBumperBar(bumperBarForm.id));
 
 function newBumperBar() {
   selectedBumperBarId.value = null;
@@ -492,7 +499,11 @@ async function removeBumperBar() {
                   </Table>
                 </div>
 
-                <div class="flex gap-2">
+                <p v-if="bumperIsBuiltin" class="rounded-md border border-border bg-muted/40 p-2 text-xs text-muted-foreground">
+                  Bumper livré avec le logiciel : sa fiche est en lecture seule et
+                  suit les mises à jour. Duplique-le pour partir de sa configuration.
+                </p>
+                <div v-else class="flex gap-2">
                   <Button :disabled="savingBumper" @click="saveBumper">Enregistrer</Button>
                   <Button v-if="isEditingExistingBumper" variant="destructive" @click="removeBumper">Supprimer</Button>
                 </div>
@@ -567,7 +578,11 @@ async function removeBumperBar() {
                   </Table>
                 </div>
 
-                <div class="flex gap-2">
+                <p v-if="bumperBarIsBuiltin" class="rounded-md border border-border bg-muted/40 p-2 text-xs text-muted-foreground">
+                  Barre livrée avec le logiciel : sa fiche est en lecture seule et
+                  suit les mises à jour. Duplique-la pour partir de sa configuration.
+                </p>
+                <div v-else class="flex gap-2">
                   <Button :disabled="savingBumperBar" @click="saveBumperBar">Enregistrer</Button>
                   <Button v-if="isEditingExistingBumperBar" variant="destructive" @click="removeBumperBar">Supprimer</Button>
                 </div>
