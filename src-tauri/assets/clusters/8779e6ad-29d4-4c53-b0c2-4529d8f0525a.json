@@ -1,0 +1,67 @@
+{
+  "id": "8779e6ad-29d4-4c53-b0c2-4529d8f0525a",
+  "name": "Grappe 14u - 10m- 0-60m",
+  "schemaVersion": 2,
+  "speakerModelIds": [
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-cca"
+  ],
+  "compartment": "flown",
+  "joints": [
+    {
+      "splay": 2.0
+    },
+    {
+      "splay": 2.0
+    },
+    {
+      "splay": 2.0
+    },
+    {
+      "splay": 3.0
+    },
+    {
+      "splay": 3.0
+    },
+    {
+      "splay": 3.0
+    },
+    {
+      "splay": 3.0
+    },
+    {
+      "splay": 4.0
+    },
+    {
+      "splay": 4.0
+    },
+    {
+      "splay": 4.0
+    },
+    {
+      "splay": 4.0
+    },
+    {
+      "splay": 4.0
+    },
+    {
+      "splay": 10.0
+    }
+  ],
+  "imposedTilt": 25.0,
+  "tieAngle": 180.0,
+  "bumperModelId": "sa303-bumper",
+  "bumperHeight": 10000.0
+}

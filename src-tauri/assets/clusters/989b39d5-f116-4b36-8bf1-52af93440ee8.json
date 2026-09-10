@@ -1,0 +1,43 @@
+{
+  "id": "989b39d5-f116-4b36-8bf1-52af93440ee8",
+  "name": "Grappe 8u - 8m - 0-100m",
+  "schemaVersion": 2,
+  "speakerModelIds": [
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-cca",
+    "sa303-cca",
+    "sa303-cca"
+  ],
+  "compartment": "flown",
+  "joints": [
+    {
+      "splay": 1.0
+    },
+    {
+      "splay": 1.0
+    },
+    {
+      "splay": 2.0
+    },
+    {
+      "splay": 3.0
+    },
+    {
+      "splay": 10.0
+    },
+    {
+      "splay": 20.0
+    },
+    {
+      "splay": 20.0
+    }
+  ],
+  "imposedTilt": 3.5,
+  "tieAngle": null,
+  "bumperModelId": "sa303-bumper",
+  "bumperHeight": 8000.0
+}

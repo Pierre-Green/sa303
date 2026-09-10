@@ -33,6 +33,11 @@ pub struct LoadCaseReport {
 pub struct CompartmentReport {
     pub block_a: Vec<LoadCaseReport>,
     pub block_b: Vec<LoadCaseReport>,
+    /// Trous percés qu'aucune grappe de ce compartiment n'exploite, donc sans
+    /// pire cas dans le bloc B. Ce n'est pas une erreur, mais l'enveloppe est
+    /// muette sur ces angles : elle ne dimensionne rien pour eux. Les signaler
+    /// plutôt que de livrer un tableau qui a l'air complet (brief §11.6).
+    pub uncovered_splays_deg: Vec<f64>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -69,7 +74,30 @@ fn load_case_report(
     }
 }
 
-fn compartment_report(cases: &[LoadCase], spec: &SandwichSpec) -> CompartmentReport {
+/// Tous les angles percés du parc, tous modèles confondus : c'est eux que
+/// l'enveloppe doit couvrir, pas seulement ceux qui se trouvent utilisés
+/// aujourd'hui. Le perçage évolue avec l'accastillage, donc il est lu sur les
+/// modèles plutôt que figé ici.
+/// Les splays sont des trous percés, pas des réels libres : un dixième de degré
+/// d'écart de représentation ne doit jamais faire passer un angle pour un autre.
+const SPLAY_TOLERANCE_DEG: f64 = 1e-9;
+
+fn drilled_splays(speakers: &[SpeakerModel]) -> Vec<f64> {
+    let mut keys: Vec<i64> = speakers
+        .iter()
+        .flat_map(|s| s.mechanical.splay_grid.iter())
+        .map(|s| (s * 10.0).round() as i64)
+        .collect();
+    keys.sort_unstable();
+    keys.dedup();
+    keys.into_iter().map(|k| k as f64 / 10.0).collect()
+}
+
+fn compartment_report(
+    cases: &[LoadCase],
+    spec: &SandwichSpec,
+    drilled: &[f64],
+) -> CompartmentReport {
     let block_a = select_block_a(cases);
     let block_b = select_block_b(cases, &block_a);
     CompartmentReport {
@@ -80,6 +108,15 @@ fn compartment_report(cases: &[LoadCase], spec: &SandwichSpec) -> CompartmentRep
         block_b: block_b
             .iter()
             .map(|b| load_case_report(&cases[b.case_index], Vec::new(), b.duplicate, spec))
+            .collect(),
+        uncovered_splays_deg: drilled
+            .iter()
+            .copied()
+            .filter(|hole| {
+                !block_b
+                    .iter()
+                    .any(|b| (b.splay_deg - hole).abs() < SPLAY_TOLERANCE_DEG)
+            })
             .collect(),
     }
 }
@@ -100,6 +137,7 @@ pub fn compute_aggregate(
     bumper_bars: &[BumperBarModel],
 ) -> AggregateReport {
     let spec = SandwichSpec::from_settings(settings);
+    let drilled = drilled_splays(speakers);
     let mut flown_cases: Vec<LoadCase> = Vec::new();
     let mut stacked_cases: Vec<LoadCase> = Vec::new();
     let mut impossible_clusters: Vec<ImpossibleClusterReport> = Vec::new();
@@ -145,7 +183,7 @@ pub fn compute_aggregate(
 
     AggregateReport {
         impossible_clusters,
-        flown: compartment_report(&flown_cases, &spec),
-        stacked: compartment_report(&stacked_cases, &spec),
+        flown: compartment_report(&flown_cases, &spec, &drilled),
+        stacked: compartment_report(&stacked_cases, &spec, &drilled),
     }
 }

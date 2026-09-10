@@ -9,6 +9,7 @@ use sa303_core::speaker::{geometry_report, SpeakerGeometryReport, SpeakerModel};
 use sa303_core::wst::{wst_report, WstInputs, WstReport};
 use sa303_core::{compute_aggregate, compute_cluster, AggregateReport, ClusterResult};
 use tauri::AppHandle;
+use tauri_plugin_dialog::DialogExt;
 
 /// Identifiants du catalogue livré avec le logiciel. L'interface s'en sert pour
 /// interdire la modification et la suppression de ces éléments : la persistance
@@ -160,4 +161,21 @@ pub fn compute_aggregate_report(app: AppHandle) -> Result<AggregateReport, Strin
         &bumpers,
         &bumper_bars,
     ))
+}
+
+#[tauri::command]
+pub async fn export_aggregate_report_for_shape_optimization_fem(
+    app: AppHandle,
+) -> Result<(), String> {
+    let report = compute_aggregate_report(app.clone())?;
+    // Implementation for exporting the report
+
+    let file_path = app
+        .dialog()
+        .file()
+        .set_title("Sauvegarder le json pour le systeme de shape optimization")
+        .add_filter("JSON", &["json"])
+        .blocking_save_file();
+
+    Ok(())
 }

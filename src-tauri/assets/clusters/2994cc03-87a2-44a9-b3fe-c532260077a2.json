@@ -1,0 +1,43 @@
+{
+  "id": "2994cc03-87a2-44a9-b3fe-c532260077a2",
+  "name": "Grappe Théatre  8u- 8m - 50m",
+  "schemaVersion": 2,
+  "speakerModelIds": [
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-cca",
+    "sa303-cca",
+    "sa303-cca",
+    "sa303-cca"
+  ],
+  "compartment": "flown",
+  "joints": [
+    {
+      "splay": 4.0
+    },
+    {
+      "splay": 4.0
+    },
+    {
+      "splay": 4.0
+    },
+    {
+      "splay": 10.0
+    },
+    {
+      "splay": 20.0
+    },
+    {
+      "splay": 20.0
+    },
+    {
+      "splay": 20.0
+    }
+  ],
+  "imposedTilt": null,
+  "tieAngle": null,
+  "bumperModelId": "sa303-bumper",
+  "bumperHeight": 8000.0
+}

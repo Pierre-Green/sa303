@@ -1431,3 +1431,86 @@ fn a_pickup_that_slides_along_the_bumper_is_reported_as_off_centre() {
     let bumper_share = far_offset.abs() - far_bar.abs();
     assert!((bumper_share - bumper.max_direct_deport_mm).abs() < 1e-9);
 }
+
+/// L'enveloppe par splay ne dimensionne que les angles réellement montés. Les
+/// trous percés qu'aucune grappe n'exploite doivent être nommés : sans ça, un
+/// tableau de sept lignes pour dix-sept trous a l'air complet et laisse croire
+/// que tous les angles sont couverts (brief §11.6).
+#[test]
+fn the_envelope_names_the_drilled_holes_it_says_nothing_about() {
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let settings = default_settings();
+    let speakers = vec![sm.clone()];
+    let bumpers = vec![bumper.clone()];
+    let clusters = representative_clusters(&bumper.id);
+    let report = compute_aggregate(&speakers, &clusters, &settings, &bumpers, &[]);
+
+    for compartment in [&report.flown, &report.stacked] {
+        // Couverts et non couverts partitionnent exactement le perçage : ni
+        // trou oublié des deux côtés, ni angle compté deux fois.
+        let mut seen: Vec<f64> = compartment
+            .block_b
+            .iter()
+            .map(|c| c.result.splay_deg)
+            .chain(compartment.uncovered_splays_deg.iter().copied())
+            .collect();
+        seen.sort_by(f64::total_cmp);
+        seen.dedup();
+        assert_eq!(
+            seen, sm.mechanical.splay_grid,
+            "la partition ne recouvre pas le perçage de l'enceinte"
+        );
+
+        // Un angle signalé comme non couvert ne doit surtout pas figurer dans
+        // le tableau : ce serait se contredire.
+        for hole in &compartment.uncovered_splays_deg {
+            assert!(
+                !compartment
+                    .block_b
+                    .iter()
+                    .any(|c| (c.result.splay_deg - hole).abs() < 1e-9),
+                "{hole}° est à la fois couvert et signalé comme non couvert"
+            );
+        }
+    }
+}
+
+/// Un perçage qui s'élargit sans nouvelle grappe fait grandir la liste des
+/// angles non couverts : c'est exactement ce qui arrive après une modification
+/// d'accastillage, et ça doit se voir.
+#[test]
+fn widening_the_drilling_widens_the_uncovered_list() {
+    let mut sm = default_speaker();
+    let bumper = default_bumper();
+    let settings = default_settings();
+    let bumpers = vec![bumper.clone()];
+    let clusters = representative_clusters(&bumper.id);
+
+    let before = compute_aggregate(
+        std::slice::from_ref(&sm),
+        &clusters,
+        &settings,
+        &bumpers,
+        &[],
+    );
+
+    // On perce un angle de plus, sans toucher aux grappes.
+    sm.mechanical.splay_grid.push(19.0);
+    sm.mechanical.splay_grid.sort_by(f64::total_cmp);
+    let after = compute_aggregate(
+        std::slice::from_ref(&sm),
+        &clusters,
+        &settings,
+        &bumpers,
+        &[],
+    );
+
+    assert_eq!(
+        after.flown.uncovered_splays_deg.len(),
+        before.flown.uncovered_splays_deg.len() + 1
+    );
+    assert!(after.flown.uncovered_splays_deg.contains(&19.0));
+    // Le tableau lui-même n'a pas bougé : aucune grappe ne monte 19°.
+    assert_eq!(after.flown.block_b.len(), before.flown.block_b.len());
+}

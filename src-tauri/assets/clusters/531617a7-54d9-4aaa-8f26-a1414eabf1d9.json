@@ -1,0 +1,23 @@
+{
+  "id": "531617a7-54d9-4aaa-8f26-a1414eabf1d9",
+  "name": "Grappe - 3u - 6m - 0-50m",
+  "schemaVersion": 2,
+  "speakerModelIds": [
+    "sa303-isophase",
+    "sa303-cca",
+    "sa303-cca"
+  ],
+  "compartment": "flown",
+  "joints": [
+    {
+      "splay": 10.0
+    },
+    {
+      "splay": 20.0
+    }
+  ],
+  "imposedTilt": 6.8,
+  "tieAngle": null,
+  "bumperModelId": "sa303-bumper",
+  "bumperHeight": 6000.0
+}

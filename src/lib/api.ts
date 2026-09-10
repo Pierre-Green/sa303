@@ -52,6 +52,9 @@ export const api = {
 
   computeAggregateReport: () => invoke<AggregateReport>("compute_aggregate_report"),
 
+  exportAggregateReportForShapeOptimizationFem: () =>
+    invoke<string>("export_aggregate_report_for_shape_optimization_fem"),
+
   // Critères WST : `speakerModelId` renseigné → le pas entre centres
   // acoustiques est dérivé de la géométrie réelle, angle par angle.
   computeWstReport: (inputs: WstInputs, speakerModelId: string | null) =>

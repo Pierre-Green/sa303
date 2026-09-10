@@ -1,0 +1,35 @@
+{
+  "id": "9b72f3dc-fc10-4714-ba5d-a72c776a97f7",
+  "name": "Grappe 6 u - 8m - 0-80m",
+  "schemaVersion": 2,
+  "speakerModelIds": [
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-cca",
+    "sa303-cca",
+    "sa303-cca"
+  ],
+  "compartment": "flown",
+  "joints": [
+    {
+      "splay": 2.0
+    },
+    {
+      "splay": 4.0
+    },
+    {
+      "splay": 10.0
+    },
+    {
+      "splay": 20.0
+    },
+    {
+      "splay": 20.0
+    }
+  ],
+  "imposedTilt": 5.5,
+  "tieAngle": null,
+  "bumperModelId": "sa303-bumper",
+  "bumperHeight": 8000.0
+}

@@ -1,4 +1,5 @@
 import { createApp } from "vue";
+import { devtools } from '@vue/devtools'
 import { createPinia } from "pinia";
 import VueKonva from "vue-konva";
 import App from "./App.vue";
@@ -8,6 +9,10 @@ import "./style.css";
 
 // Appliqué avant le mount pour éviter un flash du mauvais thème au démarrage.
 syncThemeWithSystem();
+
+if (process.env.NODE_ENV === 'development') {
+  devtools.connect(/* host (the default is "http://localhost"), port (the default is 8090) */)
+}
 
 const app = createApp(App);
 

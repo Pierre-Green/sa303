@@ -1,0 +1,51 @@
+{
+  "id": "7a25e8b1-04e2-42a0-9c35-edc18504c6a4",
+  "name": "Grappe Balcon 10u - 12m - 100m",
+  "schemaVersion": 2,
+  "speakerModelIds": [
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-cca",
+    "sa303-cca"
+  ],
+  "compartment": "flown",
+  "joints": [
+    {
+      "splay": 1.0
+    },
+    {
+      "splay": 1.0
+    },
+    {
+      "splay": 10.0
+    },
+    {
+      "splay": 1.0
+    },
+    {
+      "splay": 2.0
+    },
+    {
+      "splay": 2.0
+    },
+    {
+      "splay": 3.0
+    },
+    {
+      "splay": 10.0
+    },
+    {
+      "splay": 20.0
+    }
+  ],
+  "imposedTilt": -2.0,
+  "tieAngle": null,
+  "bumperModelId": "sa303-bumper",
+  "bumperHeight": 12000.0
+}

@@ -354,6 +354,9 @@ export interface LoadCaseReport {
 export interface CompartmentReport {
   blockA: LoadCaseReport[];
   blockB: LoadCaseReport[];
+  /** Trous percés qu'aucune grappe de ce compartiment n'exploite : l'enveloppe
+   * ne dimensionne rien pour ces angles. Signalés plutôt que tus. */
+  uncoveredSplaysDeg: number[];
 }
 
 export interface ImpossibleClusterReport {
