@@ -73,6 +73,12 @@ pub struct JointResult {
     pub offset: JointOffset,
 
     /// Positions des trous, repère du flanc chargé.
+    ///
+    /// **Le trou, pas le chargement.** En vol c'est la goupille de couronne, et
+    /// `f_orientation` est bien ce qu'elle voit. En stack c'est l'ancrage, mais
+    /// le flanc chargé y porte la **paire** : l'effort réel sur ce trou est
+    /// `f_anchor`, pas `f_orientation`, et le verrou en prend autant à côté.
+    /// Vérifier ce flanc sur `f_orientation` seul le sous-estime d'un facteur 3.
     pub loaded_orientation_hole: Vec2,
     pub loaded_pivot_hole: Vec2,
     pub constrained_hinge_hole: Vec2,

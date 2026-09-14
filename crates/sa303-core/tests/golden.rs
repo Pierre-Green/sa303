@@ -1596,3 +1596,62 @@ fn the_pin_pair_reproduces_both_the_force_and_the_moment_of_the_bar() {
     }
     assert!(checked >= 5, "seulement {checked} jonctions vérifiées");
 }
+
+/// §5 — les deux goupilles de la paire doivent être vérifiées, et pas avec la
+/// seule résultante de couronne. Le couple qui reprend le moment de barre est
+/// plus grand que la part directe, donc chaque goupille voit nettement plus que
+/// ce que l'ancien contrôle lui attribuait.
+#[test]
+fn the_pair_is_checked_and_sees_far_more_than_the_crown_resultant() {
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let settings = default_settings();
+    let clusters = representative_clusters(&bumper.id);
+    let report = compute_aggregate(
+        std::slice::from_ref(&sm),
+        &clusters,
+        &settings,
+        std::slice::from_ref(&bumper),
+        &[],
+    );
+
+    let mut seen = 0;
+    // Nombre de cas où une goupille de la paire dépasse la résultante de
+    // couronne : c'est là que l'ancien contrôle sous-estimait franchement.
+    let mut pair_governs = 0;
+    for compartment in [&report.flown, &report.stacked] {
+        for case in compartment.block_a.iter().chain(&compartment.block_b) {
+            // Les deux goupilles sont vérifiées, aucune n'est laissée à zéro.
+            assert!(case.utilization_anchor > 0.0, "ancrage non vérifié");
+            assert!(case.utilization_latch > 0.0, "verrou non vérifié");
+            // Chaque goupille prend au moins la moitié de la résultante : la
+            // part directe. Le couple s'y ajoute ou s'en retranche selon la
+            // goupille, donc l'une des deux dépasse toujours cette moitié.
+            let half = case.utilization_orientation / 2.0;
+            assert!(
+                case.utilization_anchor.max(case.utilization_latch) >= half - 1e-9,
+                "{} J{} : paire sous la part directe",
+                case.cluster_name,
+                case.joint_number
+            );
+            if case.utilization_anchor.max(case.utilization_latch)
+                > case.utilization_orientation
+            {
+                pair_governs += 1;
+            }
+            // Le pire des cinq chemins couvre bien tous les chemins.
+            assert!(case.utilization_worst >= case.utilization_anchor);
+            assert!(case.utilization_worst >= case.utilization_bar);
+            assert!(case.utilization_worst >= case.utilization_pivot);
+            seen += 1;
+        }
+    }
+    assert!(seen > 0);
+    // Le couple domine la part directe sur une bonne part des jonctions : si ce
+    // n'était jamais le cas, la paire n'aurait pas besoin d'être vérifiée à
+    // part et ce test ne servirait à rien.
+    assert!(
+        pair_governs * 3 >= seen,
+        "seulement {pair_governs} cas sur {seen} où la paire dépasse la couronne"
+    );
+}

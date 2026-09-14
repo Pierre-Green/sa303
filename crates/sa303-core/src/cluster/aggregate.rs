@@ -24,8 +24,21 @@ pub struct LoadCaseReport {
     /// Bloc B seulement : même grappe, même joint qu'un cas déjà retenu au bloc A.
     pub duplicate: bool,
     pub result: JointResult,
+    /// Taux de travail du sandwich à la goupille de couronne (vol) ou, en
+    /// stack, au trou du flanc chargé côté couronne.
     pub utilization_orientation: f64,
     pub utilization_pivot: f64,
+    /// Sandwich aux deux goupilles de la paire. Le verrou n'était pas vérifié
+    /// du tout avant, et l'ancrage l'était avec la seule résultante de
+    /// couronne, donc environ un tiers de sa charge réelle : le couple qui
+    /// reprend le moment de barre est plus grand que la part directe.
+    pub utilization_anchor: f64,
+    pub utilization_latch: f64,
+    /// Le pire des cinq chemins — couronne, bielle, ancrage, verrou, flexion de
+    /// barre. C'est lui qui dit si la jonction passe : regarder
+    /// `utilization_orientation` seul sous-estimait la paire d'un facteur 3 et
+    /// ignorait complètement la flexion.
+    pub utilization_worst: f64,
     /// Barre arrière en flexion composée. Ce mode n'existait pas tant que la
     /// barre était traitée en élément à deux forces ; il gouverne sur une part
     /// des jonctions.
@@ -75,16 +88,28 @@ fn load_case_report(
         case.result.bar_axial_n,
         spec.safety_factor,
     );
+    let utilization_bar = bar_check.utilization();
+    let utilization_anchor = utilization(case.result.f_anchor_n, spec);
+    let utilization_latch = utilization(case.result.f_latch_n, spec);
+    let utilization_orientation = utilization(case.result.mag_orientation(), spec);
+    let utilization_pivot = utilization(case.result.mag_pivot(), spec);
     LoadCaseReport {
-        utilization_bar: bar_check.utilization(),
+        utilization_bar,
         bar_check,
+        utilization_anchor,
+        utilization_latch,
         cluster_name: case.cluster_name.clone(),
         joint_number: case.joint_number,
         labels,
         duplicate,
         result: case.result,
-        utilization_orientation: utilization(case.result.mag_orientation(), spec),
-        utilization_pivot: utilization(case.result.mag_pivot(), spec),
+        utilization_orientation,
+        utilization_pivot,
+        utilization_worst: utilization_orientation
+            .max(utilization_pivot)
+            .max(utilization_anchor)
+            .max(utilization_latch)
+            .max(utilization_bar),
     }
 }
 
