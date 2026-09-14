@@ -4,7 +4,7 @@
 //! trous de couronne ne sont plus sur un arc centré sur un point unique.
 
 use sa303_core::speaker::{
-    BelowCompatibility, Crown, Hinge, SpeakerGeometry, SpeakerMechanicalModel, SpeakerModel,
+    BelowCompatibility, Crown, Hinge, RearBar, SpeakerGeometry, SpeakerMechanicalModel, SpeakerModel,
 };
 
 /// Perçage de référence SA303 (brief §1) : les distances au bord viennent de
@@ -35,6 +35,20 @@ fn sa303() -> SpeakerModel {
             },
             splay_grid: vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 20.0],
             frame_hole_splay: 0.0,
+            rear_bar: RearBar {
+                thickness: 10.0,
+                length: 360.739,
+                wide_width: 64.0,
+                wide_length: 150.739,
+                narrow_width: 40.0,
+                hole_diameter: 12.08,
+                crown_hole_outer_at: 15.863,
+                crown_hole_inner_at: 20.121,
+                latch_hole_at: 321.93,
+                anchor_hole_at: 344.877,
+                yield_strength: 355.0,
+                ultimate_strength: 510.0,
+            },
         },
         acoustics: Default::default(),
         compatible_below: vec![BelowCompatibility {
@@ -166,3 +180,48 @@ fn the_bar_length_does_not_depend_on_the_splay() {
     }
 }
 
+
+/// §1 — la barre déclarée doit tomber sur les trous que la jonction lui impose.
+/// Les avertissements restants sont ceux qu'on accepte de vivre : ils doivent
+/// être nommés ici, sinon une dérive de cotation passerait pour normale.
+#[test]
+fn the_declared_rear_bar_fits_the_joint_it_serves() {
+    let warnings = sa303_core::speaker::check_rear_bar(&sa303())
+        .expect("la barre déclarée doit desservir les deux couronnes");
+    for w in &warnings {
+        println!(
+            "{} : attendu {:.3}, déclaré {:.3}, écart {:+.3} mm",
+            w.what, w.expected_mm, w.declared_mm, w.delta_mm
+        );
+        // Tout ce qui subsiste reste sous le demi-millimètre : au-delà ce ne
+        // serait plus une question de cotation.
+        assert!(w.delta_mm.abs() < 0.5, "{} : {:+.3} mm", w.what, w.delta_mm);
+    }
+}
+
+/// Une barre qui ne tombe franchement pas sur ses trous n'est pas un
+/// avertissement : il n'existe pas de barre droite qui monte.
+#[test]
+fn a_bar_that_misses_its_holes_is_an_error_not_a_warning() {
+    let mut sm = sa303();
+    sm.mechanical.rear_bar.anchor_hole_at += 5.0;
+    assert!(sa303_core::speaker::check_rear_bar(&sm).is_err());
+}
+
+/// Les distances au bord sous le minimum EN 1993-1-8 ressortent, sans bloquer.
+#[test]
+fn an_edge_distance_below_the_minimum_is_reported() {
+    let mut sm = sa303();
+    // Toute la barre glisse vers le bout couronne : les entraxes ne bougent
+    // pas, seule la distance au bord se referme.
+    let shift = sm.mechanical.rear_bar.crown_hole_outer_at - 5.0;
+    sm.mechanical.rear_bar.crown_hole_outer_at -= shift;
+    sm.mechanical.rear_bar.crown_hole_inner_at -= shift;
+    sm.mechanical.rear_bar.latch_hole_at -= shift;
+    sm.mechanical.rear_bar.anchor_hole_at -= shift;
+    let warnings = sa303_core::speaker::check_rear_bar(&sm).expect("pas bloquant");
+    assert!(
+        warnings.iter().any(|w| w.what.starts_with("e1 bout couronne")),
+        "{warnings:?}"
+    );
+}

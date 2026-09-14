@@ -601,7 +601,7 @@ fn guide_delay_profile(radius_m: Option<f64>, radiating_height_m: f64) -> Vec<Gu
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::speaker::{Crown, Hinge, SpeakerAcousticsModel, SpeakerMechanicalModel};
+    use crate::speaker::{Crown, Hinge, RearBar, SpeakerAcousticsModel, SpeakerMechanicalModel};
 
     /// Le critère 5 n'est renseigné qu'en front plan ; ces tests-là sont tous
     /// en front plan, donc l'absence est un échec de test, pas un cas métier.
@@ -638,6 +638,20 @@ mod tests {
                 },
                 splay_grid: vec![0.0, 5.0, 10.0],
                 frame_hole_splay: 0.0,
+                rear_bar: RearBar {
+                    thickness: 10.0,
+                    length: 360.739,
+                    wide_width: 64.0,
+                    wide_length: 150.739,
+                    narrow_width: 40.0,
+                    hole_diameter: 12.08,
+                    crown_hole_outer_at: 15.863,
+                    crown_hole_inner_at: 20.121,
+                    latch_hole_at: 321.93,
+                    anchor_hole_at: 344.877,
+                    yield_strength: 355.0,
+                    ultimate_strength: 510.0,
+                },
             },
             acoustics: Default::default(),
             compatible_below: Vec::new(),

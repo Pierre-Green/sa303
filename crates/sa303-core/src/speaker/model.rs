@@ -167,6 +167,89 @@ pub struct BelowCompatibility {
     pub recommended_splay: Option<SplayRange>,
 }
 
+/// Barre arrière, la pièce qui relie la couronne du caisson du haut à la paire
+/// ancrage/verrou du caisson du bas. Goupillée en un point en haut
+/// (articulation, moment nul) et en **deux** points en bas (encastrement) :
+/// elle travaille donc en flexion, ce qu'aucun élément à deux forces ne fait.
+///
+/// **Orientation.** Toutes les abscisses sont mesurées depuis l'**extrémité
+/// couronne**, et c'est ce bout-là qui est **large** (`wide_width`), sur
+/// `wide_length`. Le reste de la barre est étroit (`narrow_width`) et c'est lui
+/// qui porte la paire ancrage/verrou — donc la section la plus sollicitée est
+/// la plus petite. Inverser les deux diviserait la contrainte calculée par
+/// environ 2,6 et rendrait la vérification non conservative.
+///
+/// **Deux trous de couronne.** L'entraxe couronne-ancrage ne vaut pas la même
+/// chose sur les deux couronnes (329,01 mm sur l'extérieure, 324,76 sur
+/// l'intérieure) : une barre à un seul trou de couronne ne pourrait pas
+/// desservir les deux. D'où `crown_hole_outer_at` (splays pairs) et
+/// `crown_hole_inner_at` (impairs).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RearBar {
+    pub thickness: f64,
+    /// Longueur totale, bout couronne -> bout paire.
+    pub length: f64,
+    /// Largeur de la section large, côté couronne.
+    pub wide_width: f64,
+    /// Longueur de la section large, depuis l'extrémité couronne.
+    pub wide_length: f64,
+    /// Largeur de la section étroite, celle qui porte la paire.
+    pub narrow_width: f64,
+    /// Diamètre de perçage `d0` (goupille + jeu), pas le diamètre de goupille :
+    /// c'est lui qui retire de la matière au calcul de section nette.
+    pub hole_diameter: f64,
+    /// Trou de couronne utilisé sur la couronne extérieure (splays pairs).
+    pub crown_hole_outer_at: f64,
+    /// Trou de couronne utilisé sur la couronne intérieure (splays impairs).
+    pub crown_hole_inner_at: f64,
+    /// Verrou, la goupille de la paire la plus proche de la couronne : c'est
+    /// donc **elle** qui voit le moment de flexion maximal.
+    pub latch_hole_at: f64,
+    pub anchor_hole_at: f64,
+    /// Limite d'élasticité, MPa.
+    pub yield_strength: f64,
+    /// Résistance à la rupture, MPa.
+    pub ultimate_strength: f64,
+}
+
+impl RearBar {
+    /// Largeur de la barre à l'abscisse donnée. La transition est franche dans
+    /// le modèle : c'est la section juste après qui est vérifiée.
+    pub fn width_at(&self, x: f64) -> f64 {
+        if x < self.wide_length {
+            self.wide_width
+        } else {
+            self.narrow_width
+        }
+    }
+
+    /// Trou de couronne utilisé pour ce splay, selon la parité.
+    pub fn crown_hole_at(&self, splay_deg: f64) -> f64 {
+        if super::geometry::is_odd_splay(splay_deg) {
+            self.crown_hole_inner_at
+        } else {
+            self.crown_hole_outer_at
+        }
+    }
+
+    /// Aire nette : la largeur locale moins le perçage.
+    pub fn net_area_at(&self, x: f64, drilled: bool) -> f64 {
+        let w = self.width_at(x);
+        self.thickness * if drilled { w - self.hole_diameter } else { w }
+    }
+
+    /// Module de flexion net. Le trou est sur la fibre neutre, donc il se
+    /// retranche en cube : `t(w³ − d0³)/(6w)`, et **pas** `t(w − d0)²/6` qui
+    /// vaudrait pour un trou en fibre extrême et surestimerait la contrainte
+    /// d'un facteur 2.
+    pub fn section_modulus_at(&self, x: f64, drilled: bool) -> f64 {
+        let w = self.width_at(x);
+        let d = if drilled { self.hole_diameter } else { 0.0 };
+        self.thickness * (w.powi(3) - d.powi(3)) / (6.0 * w)
+    }
+}
+
 /// Tout ce qui entre dans le calcul de rigging (brief §3) : c'est à partir de
 /// ces seuls champs que `super::geometry::SpeakerGeometry` dérive tous les
 /// trous et bras de levier.
@@ -182,6 +265,7 @@ pub struct SpeakerMechanicalModel {
     pub crown: Crown,
     pub splay_grid: Vec<f64>,
     pub frame_hole_splay: f64,
+    pub rear_bar: RearBar,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

@@ -200,6 +200,151 @@ impl SpeakerGeometry {
     }
 }
 
+/// Écart relevé entre la barre déclarée et la géométrie de jonction qu'elle est
+/// censée desservir, ou entre une distance au bord et son minimum réglementaire.
+/// Signalé plutôt que tu : une barre qui ne tombe pas sur ses trous se monte à
+/// la masse, elle ne se signale pas toute seule au montage.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BarWarning {
+    pub what: String,
+    /// Valeur attendue par la géométrie de jonction (ou le minimum requis).
+    pub expected_mm: f64,
+    /// Valeur déclarée sur la barre.
+    pub declared_mm: f64,
+    pub delta_mm: f64,
+}
+
+/// Incohérence rédhibitoire : la barre déclarée ne dessert aucune des deux
+/// couronnes, ou la géométrie de jonction n'est pas constante sur une couronne.
+/// Ce n'est pas un avertissement — il n'existe pas de barre droite qui monte.
+#[derive(Clone, Debug)]
+pub struct BarInconsistency {
+    pub reason: String,
+}
+
+/// Tolérance de concordance barre/jonction. Au-delà, la goupille n'entre pas :
+/// le jeu de perçage (`d0` − diamètre goupille) ne vaut que quelques centièmes.
+pub const BAR_FIT_TOLERANCE_MM: f64 = 0.05;
+
+/// Au-delà de cet écart, ce n'est plus un défaut de cotation mais une barre qui
+/// n'a rien à faire sur cette jonction.
+const BAR_FIT_HARD_LIMIT_MM: f64 = 2.0;
+
+/// Minimum EN 1993-1-8 pour les distances au bord, exprimé en diamètres de perçage.
+const MIN_EDGE_DISTANCE_IN_D0: f64 = 1.2;
+
+/// Contrôle de la barre arrière contre la géométrie de jonction qu'elle dessert
+/// (brief §1). Deux choses différentes y sont vérifiées :
+///
+/// - que les entraxes couronne-ancrage et couronne-verrou sont **constants** sur
+///   tous les splays d'une même couronne. S'ils ne l'étaient pas, aucune barre
+///   rigide ne pourrait desservir cette couronne, quelle que soit sa cotation ;
+/// - que les trous **déclarés** sur la barre tombent bien sur ces entraxes.
+///
+/// Le premier point est rédhibitoire, le second aussi au-delà de 2 mm ; en
+/// dessous il ressort en avertissement, parce qu'un écart de quelques dixièmes
+/// est une question de cotation à trancher, pas une barre à jeter.
+pub fn check_rear_bar(speaker: &SpeakerModel) -> Result<Vec<BarWarning>, BarInconsistency> {
+    let m = &speaker.mechanical;
+    let bar = &m.rear_bar;
+    let geo = SpeakerGeometry::compute(speaker);
+    let mut warnings = Vec::new();
+
+    for (label, odd) in [("extérieure", false), ("intérieure", true)] {
+        let splays: Vec<f64> = m
+            .splay_grid
+            .iter()
+            .copied()
+            .filter(|&s| is_odd_splay(s) == odd)
+            .collect();
+        let Some(&first) = splays.first() else {
+            continue;
+        };
+
+        // Constance sur la couronne : c'est la condition d'existence d'une barre
+        // rigide, avant toute question de cotation.
+        let spacing = |s: f64| {
+            (
+                (geo.crown(s) - geo.anchor_at(s)).norm(),
+                (geo.crown(s) - geo.latch_at(s)).norm(),
+            )
+        };
+        let (ref_anchor, ref_latch) = spacing(first);
+        for &s in &splays {
+            let (a, l) = spacing(s);
+            for (what, got, want) in [("ancrage", a, ref_anchor), ("verrou", l, ref_latch)] {
+                if (got - want).abs() > BAR_FIT_TOLERANCE_MM {
+                    return Err(BarInconsistency {
+                        reason: format!(
+                            "couronne {label} : entraxe couronne-{what} {got:.3} mm à {s}° \
+                             contre {want:.3} mm à {first}° — aucune barre rigide ne \
+                             dessert cette couronne"
+                        ),
+                    });
+                }
+            }
+        }
+
+        // Concordance avec la cotation déclarée. Le verrou est comparé sur son
+        // abscisse le long de l'axe couronne-ancrage, pas sur sa distance à la
+        // couronne : les trois trous ne sont pas alignés (le verrou est déporté
+        // latéralement), donc les deux ne sont pas la même grandeur.
+        let crown_at = bar.crown_hole_at(first);
+        let latch_abscissa = (ref_latch * ref_latch - (bar.anchor_hole_at - bar.latch_hole_at)
+            * (bar.anchor_hole_at - bar.latch_hole_at)
+            + ref_anchor * ref_anchor)
+            / (2.0 * ref_anchor);
+        for (what, expected, declared) in [
+            ("entraxe couronne-ancrage", ref_anchor, bar.anchor_hole_at - crown_at),
+            ("abscisse du verrou", latch_abscissa, bar.latch_hole_at - crown_at),
+        ] {
+            let delta = declared - expected;
+            if delta.abs() > BAR_FIT_HARD_LIMIT_MM {
+                return Err(BarInconsistency {
+                    reason: format!(
+                        "couronne {label} : {what} déclaré {declared:.3} mm contre \
+                         {expected:.3} mm sur la jonction, écart {delta:.3} mm"
+                    ),
+                });
+            }
+            if delta.abs() > BAR_FIT_TOLERANCE_MM {
+                warnings.push(BarWarning {
+                    what: format!("couronne {label} : {what}"),
+                    expected_mm: expected,
+                    declared_mm: declared,
+                    delta_mm: delta,
+                });
+            }
+        }
+    }
+
+    // Distances au bord (EN 1993-1-8) : e1 le long de l'axe depuis chaque bout,
+    // e2 perpendiculairement depuis le flanc de la barre.
+    let min_edge = MIN_EDGE_DISTANCE_IN_D0 * bar.hole_diameter;
+    let mut edge = |what: &str, value: f64| {
+        if value < min_edge {
+            warnings.push(BarWarning {
+                what: what.to_string(),
+                expected_mm: min_edge,
+                declared_mm: value,
+                delta_mm: value - min_edge,
+            });
+        }
+    };
+    edge("e1 bout couronne (extérieure)", bar.crown_hole_outer_at);
+    edge("e1 bout couronne (intérieure)", bar.crown_hole_inner_at);
+    edge("e1 bout paire", bar.length - bar.anchor_hole_at);
+    edge(
+        "e2 trou de couronne",
+        bar.width_at(bar.crown_hole_outer_at) / 2.0,
+    );
+    edge("e2 verrou", bar.width_at(bar.latch_hole_at) / 2.0);
+    edge("e2 ancrage", bar.width_at(bar.anchor_hole_at) / 2.0);
+
+    Ok(warnings)
+}
+
 /// Silhouette de l'enceinte (trapèze), repère enceinte. Ne dépend que de ses
 /// dimensions, jamais de la jonction ou de la grappe.
 pub fn speaker_outline(speaker: &SpeakerModel) -> [Vec2; 4] {

@@ -8,10 +8,13 @@ mod geometry;
 mod model;
 mod report;
 
-pub use geometry::{is_odd_splay, speaker_outline, CrownRow, JointOffset, SpeakerGeometry};
+pub use geometry::{
+    check_rear_bar, is_odd_splay, speaker_outline, BarInconsistency, BarWarning, CrownRow,
+    JointOffset, SpeakerGeometry, BAR_FIT_TOLERANCE_MM,
+};
 pub use model::{
     BelowCompatibility, Crown, Hinge, SpeakerAcousticsModel, SpeakerMechanicalModel, SpeakerModel,
-    SplayRange, WaveguideFront,
+    RearBar, SplayRange, WaveguideFront,
 };
 pub use report::{
     geometry_report, CrownHoleReport, GeometryInconsistency, SpeakerGeometryReport,

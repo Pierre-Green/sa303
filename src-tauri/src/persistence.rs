@@ -11,7 +11,7 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
-pub const SPEAKER_SCHEMA_VERSION: u32 = 4;
+pub const SPEAKER_SCHEMA_VERSION: u32 = 5;
 pub const CLUSTER_SCHEMA_VERSION: u32 = 2;
 pub const BUMPER_SCHEMA_VERSION: u32 = 1;
 pub const BUMPER_BAR_SCHEMA_VERSION: u32 = 1;
@@ -201,6 +201,24 @@ const SA303_EDGE_PERP_MM: f64 = 12.569;
 const SA303_ANCHOR_ANGLE_DEG: f64 = 3.0;
 const SA303_LATCH_ANGLE_DEG: f64 = 1.0;
 
+/// Barre arrière SA303 de référence, pour les fiches enregistrées avant que la
+/// barre soit modélisée. Deux trous de couronne : l'entraxe couronne-ancrage
+/// n'est pas le même sur les deux couronnes.
+const SA303_REAR_BAR: &str = r#"{
+    "thickness": 10.0,
+    "length": 360.739,
+    "wideWidth": 64.0,
+    "wideLength": 150.739,
+    "narrowWidth": 40.0,
+    "holeDiameter": 12.08,
+    "crownHoleOuterAt": 15.863,
+    "crownHoleInnerAt": 20.121,
+    "latchHoleAt": 321.93,
+    "anchorHoleAt": 344.877,
+    "yieldStrength": 355.0,
+    "ultimateStrength": 510.0
+}"#;
+
 fn same_grid(grid: &[f64], reference: &[f64]) -> bool {
     grid.len() == reference.len()
         && grid
@@ -259,6 +277,16 @@ fn migrate_legacy_speaker_json(mut value: serde_json::Value) -> serde_json::Valu
         if !crown.contains_key("latchAngle") {
             crown.insert("latchAngle".into(), SA303_LATCH_ANGLE_DEG.into());
             crown.insert("anchorAngle".into(), SA303_ANCHOR_ANGLE_DEG.into());
+        }
+    }
+    // v4 → v5 : la barre arrière n'était pas modélisée. Elle est requise à la
+    // désérialisation, donc elle se remplit ici comme les champs de la v4.
+    if let Some(obj) = value.as_object_mut() {
+        if !obj.contains_key("rearBar") {
+            obj.insert(
+                "rearBar".into(),
+                serde_json::from_str(SA303_REAR_BAR).expect("barre de référence valide"),
+            );
         }
     }
     let Some(acoustics) = value.get_mut("acoustics").and_then(|a| a.as_object_mut()) else {

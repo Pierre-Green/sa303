@@ -5,7 +5,9 @@
 //! avertissement. Sert la page "Équipement et enceinte", en lecture seule
 //! côté front.
 
-use super::geometry::{speaker_outline, CrownRow, JointOffset, SpeakerGeometry};
+use super::geometry::{
+    check_rear_bar, speaker_outline, BarWarning, CrownRow, JointOffset, SpeakerGeometry,
+};
 use super::model::SpeakerModel;
 use crate::vector::Vec2;
 use serde::Serialize;
@@ -45,6 +47,12 @@ pub struct SpeakerGeometryReport {
     pub latch_local: Vec2,
     pub front_edge: Vec2,
     pub bielle_entraxe: f64,
+    /// Écarts relevés entre la barre arrière déclarée et la géométrie de
+    /// jonction qu'elle dessert, plus les distances au bord en dessous du
+    /// minimum. Vide = rien à signaler. Ce n'est jamais bloquant : une barre
+    /// franchement incompatible remonte une `GeometryInconsistency`, pas un
+    /// avertissement.
+    pub bar_warnings: Vec<BarWarning>,
     /// Un par trou percé de `splay_grid`.
     pub holes: Vec<CrownHoleReport>,
     /// Silhouette de l'enceinte (trapèze), repère enceinte — pour
@@ -55,12 +63,15 @@ pub struct SpeakerGeometryReport {
 
 /// Incohérence de recoupement sur un trou donné (brief §3) : ce n'est pas un
 /// avertissement, la géométrie fournie est physiquement invalide.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct GeometryInconsistency {
     pub splay_deg: f64,
     pub lever_mm: f64,
     pub lever_check_mm: f64,
     pub discrepancy_mm: f64,
+    /// Renseigné quand l'incohérence vient de la barre arrière et non d'un trou
+    /// de couronne : les quatre champs ci-dessus n'ont alors pas de sens.
+    pub bar_reason: Option<String>,
 }
 
 /// Valeurs dérivées d'une `SpeakerModel`, affichées en lecture seule sur la
@@ -70,6 +81,13 @@ pub fn geometry_report(
     speaker: &SpeakerModel,
 ) -> Result<SpeakerGeometryReport, GeometryInconsistency> {
     let geo = SpeakerGeometry::compute(speaker);
+    let bar_warnings = check_rear_bar(speaker).map_err(|e| GeometryInconsistency {
+        splay_deg: f64::NAN,
+        lever_mm: f64::NAN,
+        lever_check_mm: f64::NAN,
+        discrepancy_mm: f64::NAN,
+        bar_reason: Some(e.reason),
+    })?;
     let mut holes = Vec::with_capacity(speaker.mechanical.splay_grid.len());
     for &s in &speaker.mechanical.splay_grid {
         let lever_mm = geo.lever(s);
@@ -81,6 +99,7 @@ pub fn geometry_report(
                 lever_mm,
                 lever_check_mm,
                 discrepancy_mm,
+                bar_reason: None,
             });
         }
         holes.push(CrownHoleReport {
@@ -104,6 +123,7 @@ pub fn geometry_report(
         latch_local: geo.latch_local,
         front_edge: geo.front_edge,
         bielle_entraxe: geo.bielle_entraxe,
+        bar_warnings,
         holes,
         outline: speaker_outline(speaker),
     })

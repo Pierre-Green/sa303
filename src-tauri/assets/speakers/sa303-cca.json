@@ -1,7 +1,7 @@
 {
   "id": "sa303-cca",
   "name": "SA303-CCA",
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "depth": 700.0,
   "height": 550.0,
   "totalVerticalAngle": 20.0,
@@ -61,5 +61,19 @@
         "maxDeg": 10.0
       }
     }
-  ]
+  ],
+  "rearBar": {
+    "thickness": 10.0,
+    "length": 360.739,
+    "wideWidth": 64.0,
+    "wideLength": 150.739,
+    "narrowWidth": 40.0,
+    "holeDiameter": 12.08,
+    "crownHoleOuterAt": 15.863,
+    "crownHoleInnerAt": 20.121,
+    "latchHoleAt": 321.93,
+    "anchorHoleAt": 344.877,
+    "yieldStrength": 355.0,
+    "ultimateStrength": 510.0
+  }
 }
