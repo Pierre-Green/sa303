@@ -104,9 +104,29 @@ pub struct JointResult {
     pub traction: bool,
     pub hinge_reversed: bool,
     pub bumper_moment_nm: f64,
-    /// Moment déversé par la barre arrière dans le caisson du bas, réduit à
-    /// l'ancrage (N·m). Nul dans l'ancien modèle à deux forces.
-    pub bar_moment_nm: f64,
+
+    /// Effort de couronne décomposé dans le repère de la **barre** : axe
+    /// `e = (an − bo).normalize()`, dirigé de la couronne vers l'ancrage.
+    /// Par flanc, comme tout le reste.
+    ///
+    /// `bar_axial_n` positif = la barre est comprimée le long de son axe
+    /// (l'effort pousse vers l'ancrage) ; négatif = tendue.
+    pub bar_axial_n: f64,
+    /// Composante transverse, celle qui fait fléchir la barre. C'est elle qui
+    /// dimensionne, pas l'axiale.
+    pub bar_shear_n: f64,
+    /// Moment réduit au barycentre de la paire ancrage/verrou (N·m, par flanc) :
+    /// c'est lui que la paire doit reprendre en couple.
+    pub bar_moment_at_pair_nm: f64,
+    /// Moment de flexion maximal dans la barre (N·m, par flanc). Il vaut zéro à
+    /// la couronne — articulation simple — et croît linéairement jusqu'à la
+    /// **première** goupille de la paire rencontrée depuis la couronne, le
+    /// verrou : au-delà, la réaction de la paire le fait redescendre. C'est donc
+    /// là qu'il culmine, pas à l'ancrage.
+    pub bar_moment_max_nm: f64,
+    /// Abscisse le long de la barre où `bar_moment_max_nm` est atteint, mesurée
+    /// depuis l'extrémité couronne.
+    pub bar_moment_max_at_mm: f64,
     pub residual_n: f64,
 
     /// Splay recommandé entre ces deux modèles, s'il y en a un déclaré
@@ -242,22 +262,47 @@ pub fn compute_joint(input: &JointInput) -> JointResult {
     // Entraxe de bielle de l'enceinte du haut : c'est elle qui porte le bras
     // entre `hb` et la goupille basse de la jonction.
     let bumper_moment_nm = f_pivot.norm() * geo.bielle_entraxe / 1000.0;
-    // Moment que la barre arrière, encastrée sur le caisson du bas, y déverse
-    // en plus de sa force — réduit à l'ancrage. C'est exactement ce que le
-    // modèle à deux forces ignorait : il le supposait nul.
+    // --- La barre arrière, dans son propre repère ---------------------------
     //
-    // Sa répartition entre l'ancrage et le verrou reste indéterminée : deux
-    // goupilles dans un même caisson, ce sont six inconnues pour trois
-    // équations. Il faut une hypothèse de groupe de goupilles, que le brief ne
-    // fixe pas — d'où la seule résultante ici, à l'ancrage.
-    let bar_moment_nm = ((bo - an).cross(f_ori) * input.share_per_flank).abs() / 1000.0;
-    // Traction de la barre : composante de l'effort de couronne le long de son
-    // axe. Le scalaire `lambda` ne renseigne plus là-dessus — il porte
-    // désormais la bielle, pas la barre.
-    let bar_axial = f_ori.dot((bo - an).normalize());
+    // `f_ori` est l'effort que le caisson du haut applique à la barre par la
+    // goupille de couronne. La barre n'ayant que deux liaisons — cette goupille
+    // et la paire — c'est le seul chargement qu'elle voit entre son extrémité
+    // couronne et le premier trou de la paire. D'où un diagramme de moment
+    // simple : nul à la couronne, linéaire, maximal au verrou.
+    //
+    // Axe de la barre orienté couronne -> ancrage. `V` est pris en produit
+    // vectoriel plutôt qu'en projection sur une normale construite à la main :
+    // un signe de moins s'y glisserait sans se voir.
+    let bar = &input.chain[i].rear_bar;
+    let e = (an - bo).normalize();
+    let axial = f_ori.dot(e);
+    let shear = f_ori.cross(e);
+
+    let crown_at = bar.crown_hole_at(s);
+    let latch_arm = (bar.latch_hole_at - crown_at).abs();
+    let anchor_arm = (bar.anchor_hole_at - crown_at).abs();
+    // La goupille de la paire la plus proche de la couronne : c'est là que le
+    // moment culmine. Le verrou par construction, mais lu sur la cotation
+    // plutôt que supposé — une barre cotée autrement inverserait les deux.
+    let (first_arm, first_at) = if latch_arm <= anchor_arm {
+        (latch_arm, bar.latch_hole_at)
+    } else {
+        (anchor_arm, bar.anchor_hole_at)
+    };
+    let pair_centroid_arm = (latch_arm + anchor_arm) / 2.0;
+
+    let sf = input.share_per_flank;
+    let bar_axial_n = axial * sf;
+    let bar_shear_n = shear * sf;
+    let bar_moment_at_pair_nm = (shear * sf).abs() * pair_centroid_arm / 1000.0;
+    let bar_moment_max_nm = (shear * sf).abs() * first_arm / 1000.0;
+    let bar_moment_max_at_mm = first_at;
+
+    // Traction de la barre : signe de sa composante axiale. Le scalaire
+    // `lambda` ne renseigne plus là-dessus — il porte désormais la bielle.
     let traction = match input.compartment {
-        Compartment::Stacked => bar_axial <= 0.0,
-        Compartment::Flown => bar_axial >= 0.0,
+        Compartment::Stacked => axial <= 0.0,
+        Compartment::Flown => axial >= 0.0,
     };
     let free_body_count = match input.compartment {
         Compartment::Flown => n - i - 1,
@@ -299,7 +344,11 @@ pub fn compute_joint(input: &JointInput) -> JointResult {
         traction,
         hinge_reversed,
         bumper_moment_nm,
-        bar_moment_nm,
+        bar_axial_n,
+        bar_shear_n,
+        bar_moment_at_pair_nm,
+        bar_moment_max_nm,
+        bar_moment_max_at_mm,
         residual_n: residual,
         recommended_splay_range_deg: input.recommended_splay.map(|r| [r.min_deg, r.max_deg]),
         acoustically_optimal: input.recommended_splay.is_none_or(|r| r.contains(s)),

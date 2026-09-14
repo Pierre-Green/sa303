@@ -184,7 +184,7 @@ pub struct BelowCompatibility {
 /// l'intérieure) : une barre à un seul trou de couronne ne pourrait pas
 /// desservir les deux. D'où `crown_hole_outer_at` (splays pairs) et
 /// `crown_hole_inner_at` (impairs).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RearBar {
     pub thickness: f64,

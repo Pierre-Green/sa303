@@ -11,7 +11,7 @@
 //! lieu d'une géométrie unique partagée : c'est ce qui évite de trimballer des
 //! tableaux parallèles (masses, CG, silhouettes) dans chaque signature.
 
-use crate::speaker::{SpeakerGeometry, SpeakerModel};
+use crate::speaker::{RearBar, SpeakerGeometry, SpeakerModel};
 use crate::vector::Vec2;
 use serde::Serialize;
 
@@ -21,6 +21,10 @@ use serde::Serialize;
 #[derive(Clone, Copy, Debug)]
 pub struct ChainSpeaker {
     pub geo: SpeakerGeometry,
+    /// Cotation de la barre arrière portée par cette position. `Copy` oblige à
+    /// la recopier plutôt qu'à l'emprunter, mais elle reste petite et c'est ce
+    /// qui permet à toute la physique de travailler sur un bundle unique.
+    pub rear_bar: RearBar,
     pub cg_local: Vec2,
     pub mass_kg: f64,
     pub frame_hole_splay: f64,
@@ -34,6 +38,7 @@ impl ChainSpeaker {
         let m = &model.mechanical;
         Self {
             geo: SpeakerGeometry::compute(model),
+            rear_bar: m.rear_bar,
             cg_local: Vec2::new(m.cg[0], m.cg[1]),
             mass_kg: m.mass_kg,
             frame_hole_splay: m.frame_hole_splay,
