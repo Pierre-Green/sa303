@@ -242,6 +242,12 @@ pub fn compute_joint(input: &JointInput) -> Result<JointResult, JointInconsisten
     let mut rext = Vec2::new(0.0, -w_total);
     let mut mext = (cm - bo).cross(rext);
 
+    // La tirette s'ajoute **sans** `k_dyn`, contrairement aux poids juste
+    // au-dessus. Ce n'est pas un oubli : sa tension est calculée en amont
+    // (`solver::compute_cluster`) pour tenir une grappe dont le poids est déjà
+    // dynamisé — `total_weight_n = masse × g × k_dyn` — donc le facteur y est
+    // déjà. Le réappliquer ici le compterait deux fois.
+    // Vérifié par `the_tie_tension_already_carries_the_dynamic_factor`.
     if let (Compartment::Flown, Some(tie)) = (input.compartment, input.tie) {
         let last = input.speakers[n - 1];
         let q = last.o + tie.point_local.rotate(last.phi);

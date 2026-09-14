@@ -1697,3 +1697,48 @@ fn the_pair_is_checked_and_sees_far_more_than_the_crown_resultant() {
         "seulement {pair_governs} cas sur {seen} où la paire dépasse la couronne"
     );
 }
+
+/// §8 — la tirette entre dans l'équilibre sans être multipliée par `k_dyn`,
+/// contrairement aux poids. Ce n'est pas un oubli : sa tension est calculée
+/// pour tenir une grappe dont le poids est **déjà** dynamisé
+/// (`total_weight_n = masse × g × k_dyn`), donc le facteur y est déjà. Le
+/// réappliquer dans `compute_joint` le compterait deux fois.
+#[test]
+fn the_tie_tension_already_carries_the_dynamic_factor() {
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    // Portée minuscule : force le solveur à mettre une tirette en place.
+    let bumper_bar = BumperBarModel {
+        max_deport_mm: 50.0,
+        ..default_bumper_bar()
+    };
+    let settings = default_settings();
+    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.0, 10.0, 10.0, 10.0];
+    let mut cluster = flown_cluster("tirette", &splays, Some(-20.0), &bumper.id);
+    cluster.tie_angle = Some(0.0);
+
+    let run = |k_dyn: f64| {
+        let mut s = settings.clone();
+        s.dynamic_factor = k_dyn;
+        compute_cluster(
+            std::slice::from_ref(&sm),
+            &cluster,
+            &s,
+            &bumper,
+            std::slice::from_ref(&bumper_bar),
+        )
+        .expect("configuration possible")
+    };
+
+    let base = run(1.3);
+    assert!(base.tie_tension_n > 0.0, "la tirette doit être active");
+    let doubled = run(2.6);
+
+    // Le facteur double, la tension double : il est déjà dedans.
+    assert!(
+        (doubled.tie_tension_n - 2.0 * base.tie_tension_n).abs() < 1e-6 * base.tie_tension_n,
+        "{} contre {}",
+        doubled.tie_tension_n,
+        2.0 * base.tie_tension_n
+    );
+}
