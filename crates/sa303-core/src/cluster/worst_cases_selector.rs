@@ -146,7 +146,7 @@ pub fn select_block_b(cases: &[LoadCase], block_a: &[BlockACase]) -> Vec<BlockBC
 mod tests {
     use super::*;
     use crate::cluster::model::Compartment;
-    use crate::speaker::{CrownRow, JointOffset};
+    use crate::speaker::{CrownRow, JointOffset, RearBar};
     use crate::vector::Vec2;
 
     /// Un `JointResult` synthétique : seuls les champs pertinents pour la sélection
@@ -202,6 +202,20 @@ mod tests {
             bar_moment_at_pair_nm: 0.0,
             bar_moment_max_nm: 0.0,
             bar_moment_max_at_mm: 0.0,
+            rear_bar: RearBar {
+                thickness: 10.0,
+                length: 360.739,
+                wide_width: 64.0,
+                wide_length: 150.739,
+                narrow_width: 40.0,
+                hole_diameter: 12.08,
+                crown_hole_outer_at: 15.863,
+                crown_hole_inner_at: 20.121,
+                latch_hole_at: 321.93,
+                anchor_hole_at: 344.877,
+                yield_strength: 355.0,
+                ultimate_strength: 510.0,
+            },
             f_anchor: Vec2::ZERO,
             f_latch: Vec2::ZERO,
             f_anchor_n: 0.0,

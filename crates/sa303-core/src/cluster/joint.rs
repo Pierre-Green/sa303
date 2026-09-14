@@ -25,7 +25,7 @@
 
 use super::kinematics::{ChainSpeaker, SpeakerInstance};
 use super::model::Compartment;
-use crate::speaker::{CrownRow, JointOffset, SpeakerGeometry, SplayRange};
+use crate::speaker::{CrownRow, JointOffset, RearBar, SpeakerGeometry, SplayRange};
 use crate::tie::TieForce;
 use crate::vector::{angle_of, Vec2};
 use serde::Serialize;
@@ -127,6 +127,10 @@ pub struct JointResult {
     /// Abscisse le long de la barre où `bar_moment_max_nm` est atteint, mesurée
     /// depuis l'extrémité couronne.
     pub bar_moment_max_at_mm: f64,
+    /// Cotation de la barre de cette jonction. Portée ici pour que la
+    /// vérification de section n'ait pas à remonter au modèle d'enceinte : dans
+    /// une grappe hétérogène, deux jonctions n'ont pas forcément la même barre.
+    pub rear_bar: RearBar,
 
     /// Efforts sur les deux goupilles de la paire, repère du flanc chargé, par
     /// flanc. Répartition élastique à raideurs égales : chaque goupille prend la
@@ -418,6 +422,7 @@ pub fn compute_joint(input: &JointInput) -> JointResult {
         bar_moment_at_pair_nm,
         bar_moment_max_nm,
         bar_moment_max_at_mm,
+        rear_bar: *bar,
         f_anchor,
         f_latch,
         f_anchor_n: f_anchor.norm(),

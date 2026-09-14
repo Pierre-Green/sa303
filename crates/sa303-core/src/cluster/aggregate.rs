@@ -9,7 +9,7 @@ use super::model::{Cluster, Compartment};
 use super::solver::compute_cluster;
 use super::worst_cases_selector::{select_block_a, select_block_b, LoadCase};
 use crate::bumper::{BumperBarModel, BumperModel};
-use crate::checks::{utilization, SandwichSpec};
+use crate::checks::{check_bar, utilization, BarCheck, SandwichSpec};
 use crate::settings::Settings;
 use crate::speaker::SpeakerModel;
 use serde::Serialize;
@@ -26,6 +26,11 @@ pub struct LoadCaseReport {
     pub result: JointResult,
     pub utilization_orientation: f64,
     pub utilization_pivot: f64,
+    /// Barre arrière en flexion composée. Ce mode n'existait pas tant que la
+    /// barre était traitée en élément à deux forces ; il gouverne sur une part
+    /// des jonctions.
+    pub bar_check: BarCheck,
+    pub utilization_bar: f64,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -63,7 +68,16 @@ fn load_case_report(
     duplicate: bool,
     spec: &SandwichSpec,
 ) -> LoadCaseReport {
+    let bar_check = check_bar(
+        &case.result.rear_bar,
+        case.result.splay_deg,
+        case.result.bar_shear_n,
+        case.result.bar_axial_n,
+        spec.safety_factor,
+    );
     LoadCaseReport {
+        utilization_bar: bar_check.utilization(),
+        bar_check,
         cluster_name: case.cluster_name.clone(),
         joint_number: case.joint_number,
         labels,
