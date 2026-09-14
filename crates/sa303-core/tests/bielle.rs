@@ -225,3 +225,4 @@ fn an_edge_distance_below_the_minimum_is_reported() {
         "{warnings:?}"
     );
 }
+

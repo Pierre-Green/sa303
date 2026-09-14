@@ -1536,3 +1536,63 @@ fn widening_the_drilling_widens_the_uncovered_list() {
 }
 
 
+
+/// §3 — la paire ancrage/verrou doit rendre exactement ce que la barre lui
+/// déverse : la résultante, et le moment. Le moment est recoupé autour d'un
+/// point **quelconque** — si les deux goupilles ne rendaient que la résultante,
+/// l'équilibre en force passerait quand même et seul le moment le verrait.
+#[test]
+fn the_pin_pair_reproduces_both_the_force_and_the_moment_of_the_bar() {
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let settings = default_settings();
+
+    // Cinq jonctions représentatives : les deux couronnes, les deux
+    // compartiments, et les deux extrémités de la grille.
+    let clusters = [
+        flown_cluster("vol pair", &[0.0, 2.0, 20.0], None, &bumper.id),
+        flown_cluster("vol impair", &[1.0, 3.0, 5.0], Some(-10.0), &bumper.id),
+        stack_cluster("stack", &[0.0, 10.0, 20.0], 40.0, &bumper.id),
+    ];
+
+    let mut checked = 0;
+    for cluster in &clusters {
+        let result = compute_cluster(std::slice::from_ref(&sm), cluster, &settings, &bumper, &[])
+            .expect("configuration possible");
+        for j in &result.joints {
+            let sum = j.f_anchor + j.f_latch;
+
+            // 1) Résultante. La barre délivre à la paire exactement ce qu'elle
+            //    a reçu à la couronne. Le signe dépend du compartiment : en vol
+            //    le flanc chargé porte la couronne, en stack il porte la paire,
+            //    donc `f_orientation` ne désigne pas la même liaison.
+            let expected = match j.compartment {
+                Compartment::Flown => -j.f_orientation,
+                Compartment::Stacked => j.f_orientation,
+            };
+            assert!(
+                (sum - expected).norm() < 1e-6 * expected.norm().max(1.0),
+                "{} J{} : Σ goupilles {:?} contre {:?}",
+                cluster.name,
+                j.joint_index + 1,
+                sum,
+                expected
+            );
+
+            // 2) Moment, autour d'un point pris exprès loin des deux goupilles.
+            let o = sa303_core::vector::Vec2::new(-1234.5, 678.9);
+            let m_pins = (j.anchor_hole_local - o).cross(j.f_anchor)
+                + (j.latch_hole_local - o).cross(j.f_latch);
+            let m_bar = (j.crown_hole_local - o).cross(expected);
+            let scale = m_bar.abs().max(1e3);
+            assert!(
+                (m_pins - m_bar).abs() < 1e-6 * scale,
+                "{} J{} : ΣM goupilles {m_pins:.3} contre {m_bar:.3} N·mm",
+                cluster.name,
+                j.joint_index + 1
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked >= 5, "seulement {checked} jonctions vérifiées");
+}

@@ -127,6 +127,33 @@ pub struct JointResult {
     /// Abscisse le long de la barre où `bar_moment_max_nm` est atteint, mesurée
     /// depuis l'extrémité couronne.
     pub bar_moment_max_at_mm: f64,
+
+    /// Efforts sur les deux goupilles de la paire, repère du flanc chargé, par
+    /// flanc. Répartition élastique à raideurs égales : chaque goupille prend la
+    /// moitié de la résultante, plus un couple `±P` perpendiculaire à la ligne
+    /// ancrage-verrou tel que la somme des moments rende le moment réduit.
+    ///
+    /// Ce n'est pas une hypothèse à valider mais la solution du problème
+    /// élastique quand les deux goupilles ont la même raideur, ce qui est le cas
+    /// ici : même diamètre, même épaisseur de barre, même flanc.
+    pub f_anchor: Vec2,
+    pub f_latch: Vec2,
+    pub f_anchor_n: f64,
+    pub f_anchor_angle_deg: f64,
+    pub f_latch_n: f64,
+    pub f_latch_angle_deg: f64,
+    /// Positions des trois trous de la barre dans le repère du flanc chargé,
+    /// cohérentes entre elles et avec `f_anchor`/`f_latch`/`f_orientation` —
+    /// c'est ce qu'il faut pour recouper un moment. À ne pas confondre avec
+    /// `loaded_orientation_hole`, qui désigne le trou du flanc chargé et change
+    /// donc de nature entre vol et stack.
+    pub crown_hole_local: Vec2,
+    pub anchor_hole_local: Vec2,
+    pub latch_hole_local: Vec2,
+    /// Les mêmes en repère global, pour l'`ArrayViewer` : jamais de rotation
+    /// côté TypeScript.
+    pub anchor_hole_global: Vec2,
+    pub latch_hole_global: Vec2,
     pub residual_n: f64,
 
     /// Splay recommandé entre ces deux modèles, s'il y en a un déclaré
@@ -164,6 +191,7 @@ pub fn compute_joint(input: &JointInput) -> JointResult {
     let pb = si.o + geo.pv_at(s).rotate(si.phi);
     let bo = si.o + geo.crown(s).rotate(si.phi);
     let an = si.o + geo.anchor_at(s).rotate(si.phi);
+    let lt = si.o + geo.latch_at(s).rotate(si.phi);
 
     let (lo, hi) = match input.compartment {
         Compartment::Flown => (i + 1, n - 1),
@@ -203,6 +231,40 @@ pub fn compute_joint(input: &JointInput) -> JointResult {
     // barre arrière, encastrée sur le caisson du bas, passe son effort.
     let f_ori = -rext - f_piv;
 
+    // --- Répartition sur la paire ancrage/verrou -----------------------------
+    //
+    // La barre déverse dans le caisson du bas la résultante `f_pair` et le
+    // moment qui l'accompagne, repris par les deux goupilles. À raideurs égales
+    // — même diamètre, même épaisseur, même flanc — la solution élastique est
+    // la part directe partagée en deux, plus un couple perpendiculaire à la
+    // ligne ancrage-verrou.
+    //
+    // Signe : `P` est construit à partir du moment lui-même par `perp(ab)`,
+    // donc `Σ M = M_G` est vrai par construction plutôt que par une convention
+    // qu'il faudrait retenir. Le test `pin_pair_reproduces_force_and_moment` le
+    // vérifie sur un point quelconque.
+    let ab = an - lt;
+    let d = ab.norm();
+    let g_point = (an + lt) * 0.5;
+    // Effort que la barre applique au caisson du bas. En vol la barre fait
+    // partie du corps libre et reçoit `f_ori` à la couronne ; en stack elle est
+    // hors du corps libre et reçoit `−f_ori`. Dans les deux cas elle transmet
+    // l'opposé à la paire.
+    let f_on_bar = match input.compartment {
+        Compartment::Flown => f_ori,
+        Compartment::Stacked => -f_ori,
+    };
+    // Ce que les goupilles **subissent**, donc l'opposé de la réaction qu'elles
+    // opposent à la barre : la barre leur délivre exactement ce qu'elle a reçu
+    // à la couronne, moment compris.
+    let f_pair = f_on_bar;
+    let m_g = (bo - g_point).cross(f_on_bar);
+    // perp(ab) tourné d'un quart de tour : (x, y) -> (−y, x).
+    let perp = Vec2::new(-ab.y, ab.x) * (1.0 / d);
+    let p = perp * (m_g / d);
+    let f_anchor_g = f_pair * 0.5 + p;
+    let f_latch_g = f_pair * 0.5 - p;
+
     let ti = match input.compartment {
         Compartment::Flown => i,
         Compartment::Stacked => i + 1,
@@ -215,6 +277,12 @@ pub fn compute_joint(input: &JointInput) -> JointResult {
 
     let f_orientation = (f_ori * sg).rotate_transpose(rt_phi);
     let f_pivot = (f_piv * sg).rotate_transpose(rt_phi);
+    // Les goupilles de la paire subissent déjà l'action de la barre : c'est
+    // `+share` et non `sg = −share`, sans quoi elles sortiraient à l'envers des
+    // deux autres.
+    let to_local = |p: Vec2| (p - input.speakers[ti].o).rotate_transpose(rt_phi);
+    let f_anchor = (f_anchor_g * input.share_per_flank).rotate_transpose(rt_phi);
+    let f_latch = (f_latch_g * input.share_per_flank).rotate_transpose(rt_phi);
     let gravity_local = Vec2::new(0.0, -1.0).rotate_transpose(rt_phi);
     let ext_local = (rext * input.share_per_flank).rotate_transpose(rt_phi);
     let residual = (f_orientation + f_pivot - ext_local).norm();
@@ -304,6 +372,7 @@ pub fn compute_joint(input: &JointInput) -> JointResult {
         Compartment::Stacked => axial <= 0.0,
         Compartment::Flown => axial >= 0.0,
     };
+
     let free_body_count = match input.compartment {
         Compartment::Flown => n - i - 1,
         Compartment::Stacked => i + 1,
@@ -349,6 +418,17 @@ pub fn compute_joint(input: &JointInput) -> JointResult {
         bar_moment_at_pair_nm,
         bar_moment_max_nm,
         bar_moment_max_at_mm,
+        f_anchor,
+        f_latch,
+        f_anchor_n: f_anchor.norm(),
+        f_anchor_angle_deg: angle_of(f_anchor),
+        f_latch_n: f_latch.norm(),
+        f_latch_angle_deg: angle_of(f_latch),
+        crown_hole_local: to_local(bo),
+        anchor_hole_local: to_local(an),
+        latch_hole_local: to_local(lt),
+        anchor_hole_global: an,
+        latch_hole_global: lt,
         residual_n: residual,
         recommended_splay_range_deg: input.recommended_splay.map(|r| [r.min_deg, r.max_deg]),
         acoustically_optimal: input.recommended_splay.is_none_or(|r| r.contains(s)),
