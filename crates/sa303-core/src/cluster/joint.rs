@@ -192,6 +192,21 @@ pub struct JointResult {
     /// mécaniquement valable, elle est seulement signalée comme non optimale
     /// acoustiquement. Sans recommandation déclarée : toujours `true`.
     pub acoustically_optimal: bool,
+
+    /// Vrai sur la jonction 0 d'une grappe suspendue, et là seulement.
+    ///
+    /// La liaison bumper ↔ premier caisson n'a **pas** été remodélisée : elle
+    /// suit encore le schéma antérieur — bras à deux forces entre le trou de
+    /// splay 0 et le point d'accroche, plus un pivot fixe au `ht`. Ce n'est pas
+    /// la liaison décrite par le modèle en vigueur (bielle bi-goupillée + barre
+    /// encastrée sur deux goupilles), et les grandeurs de barre de ce
+    /// `JointResult` ne la décrivent donc pas.
+    ///
+    /// Le drapeau existe pour que ça se voie dans le rapport plutôt que de se
+    /// déduire d'une lecture du solveur : une jonction qui ne relève pas du même
+    /// modèle que ses voisines ne doit pas se lire sur la même ligne sans
+    /// mention.
+    pub bumper_model_legacy: bool,
 }
 
 impl JointResult {
@@ -492,5 +507,6 @@ pub fn compute_joint(input: &JointInput) -> Result<JointResult, JointInconsisten
         moment_residual_nmm,
         recommended_splay_range_deg: input.recommended_splay.map(|r| [r.min_deg, r.max_deg]),
         acoustically_optimal: input.recommended_splay.is_none_or(|r| r.contains(s)),
+        bumper_model_legacy: matches!(input.compartment, Compartment::Flown) && i == 0,
     })
 }

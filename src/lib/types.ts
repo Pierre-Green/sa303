@@ -293,6 +293,11 @@ export interface JointResult {
   /** `false` uniquement si une recommandation existe et que le splay en sort.
    * Jamais une erreur : la jonction reste mécaniquement valable. */
   acousticallyOptimal: boolean;
+  /** Vrai sur la jonction 0 d'une grappe suspendue, et là seulement : la
+   * liaison bumper ↔ premier caisson suit encore le schéma antérieur (bras à
+   * deux forces + pivot fixe), pas le modèle bielle + barre encastrée. Les
+   * grandeurs de barre ne la décrivent donc pas. */
+  bumperModelLegacy: boolean;
 }
 
 /** Altitudes au-dessus du sol, mm. Purement descriptif : aucun effort n'en

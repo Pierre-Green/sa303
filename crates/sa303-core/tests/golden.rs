@@ -1742,3 +1742,38 @@ fn the_tie_tension_already_carries_the_dynamic_factor() {
         2.0 * base.tie_tension_n
     );
 }
+
+/// §9 — la liaison bumper ↔ premier caisson suit encore l'ancien schéma. Le
+/// drapeau doit le dire, et seulement là où c'est vrai.
+#[test]
+fn only_the_top_flown_joint_is_flagged_as_following_the_legacy_bumper_model() {
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let settings = default_settings();
+
+    let flown = compute_cluster(
+        std::slice::from_ref(&sm),
+        &flown_cluster("vol", &[1.0, 5.0, 10.0], None, &bumper.id),
+        &settings,
+        &bumper,
+        &[],
+    )
+    .expect("configuration possible");
+    assert!(flown.joints[0].bumper_model_legacy);
+    for j in &flown.joints[1..] {
+        assert!(!j.bumper_model_legacy, "J{} marquée à tort", j.joint_index + 1);
+    }
+
+    // En stack il n'y a pas de bumper au-dessus : aucune jonction n'est concernée.
+    let stacked = compute_cluster(
+        std::slice::from_ref(&sm),
+        &stack_cluster("stack", &[0.0, 10.0], 40.0, &bumper.id),
+        &settings,
+        &bumper,
+        &[],
+    )
+    .expect("configuration possible");
+    for j in &stacked.joints {
+        assert!(!j.bumper_model_legacy);
+    }
+}

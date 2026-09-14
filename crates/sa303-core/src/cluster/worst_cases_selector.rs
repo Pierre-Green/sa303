@@ -293,6 +293,7 @@ mod tests {
             residual_n: 0.0,
             recommended_splay_range_deg: None,
             acoustically_optimal: true,
+            bumper_model_legacy: false,
         }
     }
 
