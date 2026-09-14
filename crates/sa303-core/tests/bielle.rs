@@ -258,3 +258,118 @@ fn a_degenerate_bielle_lever_is_an_error_not_a_silent_nan() {
     .expect_err("bras nul : la jonction n'a pas de solution");
     assert!(err.reason.contains("bras de bielle"), "{}", err.reason);
 }
+
+/// §10 — valeurs de référence recoupées à la main sur une grappe de trois
+/// SA303, vol, φ₀ = 0, splays [5°, 10°], jonction 0.
+///
+/// Passe par `compute_joint` directement plutôt que par `compute_cluster` : ce
+/// dernier impose un bumper et une pendaison libre, donc un φ₀ qui n'est pas
+/// zéro. Les valeurs ci-dessous ne vaudraient plus.
+#[test]
+fn golden_bar_loads_on_the_reference_joint() {
+    use sa303_core::checks::check_bar;
+    use sa303_core::cluster::{build_cluster, compute_joint, ChainSpeaker, Compartment, JointInput};
+
+    let sm = sa303();
+    let splays = [5.0, 10.0];
+    let chain = vec![ChainSpeaker::from_model(&sm); 3];
+    let speakers = build_cluster(&chain, &splays, 0.0);
+    let j = compute_joint(&JointInput {
+        chain: &chain,
+        speakers: &speakers,
+        splays_deg: &splays,
+        joint_index: 0,
+        compartment: Compartment::Flown,
+        g: 9.80665,
+        k_dyn: 1.3,
+        share_per_flank: 0.5,
+        tie: None,
+        recommended_splay: None,
+    })
+    .expect("jonction résoluble");
+
+    // Efforts totaux sur le corps libre (l'inverse du `sg = −0,5` de sortie).
+    let total = |v: sa303_core::vector::Vec2| v * -2.0;
+    let f_bielle = total(j.f_pivot);
+    let f_couronne = total(j.f_orientation);
+    assert!((f_bielle.x - -30.966).abs() < 0.01, "{f_bielle:?}");
+    assert!((f_bielle.y - 709.247).abs() < 0.01, "{f_bielle:?}");
+    assert!((f_couronne.x - 30.966).abs() < 0.01, "{f_couronne:?}");
+    assert!((f_couronne.y - 1424.749).abs() < 0.01, "{f_couronne:?}");
+
+    // Repère de barre. L = 324.756 mm, l'entraxe couronne-ancrage de la
+    // couronne intérieure : le splay 5 est impair.
+    let l = (j.anchor_hole_local - j.crown_hole_local).norm();
+    assert!((l - 324.8).abs() < 0.1, "L = {l}");
+
+    // Décomposition, par flanc. Axial négatif = barre tendue.
+    assert!((j.bar_axial_n - -700.0).abs() < 1.0, "N = {}", j.bar_axial_n);
+    assert!((j.bar_shear_n.abs() - 132.0).abs() < 1.0, "V = {}", j.bar_shear_n);
+
+    // Moment. Le maximum est au verrou — première goupille depuis la couronne —
+    // et non à l'ancrage : au-delà du verrou la réaction de la paire le fait
+    // redescendre. Réduit à l'ancrage il vaudrait 42,85 N·m par flanc.
+    assert_eq!(j.bar_moment_max_at_mm, sm.mechanical.rear_bar.latch_hole_at);
+    assert!(
+        (j.bar_moment_max_nm - 39.82).abs() < 0.05,
+        "M_max = {}",
+        j.bar_moment_max_nm
+    );
+    assert!(
+        (j.bar_moment_at_pair_nm - 41.33).abs() < 0.05,
+        "M_paire = {}",
+        j.bar_moment_at_pair_nm
+    );
+
+    // Paire : entraxe 23,7 mm, couple issu du moment réduit au barycentre.
+    let d = (j.anchor_hole_local - j.latch_hole_local).norm();
+    assert!((d - 23.735).abs() < 0.01, "d = {d}");
+    let couple = j.bar_moment_at_pair_nm * 1000.0 / d;
+    assert!((couple - 1741.0).abs() < 5.0, "couple = {couple}");
+    assert!((j.f_anchor_n - 1910.0).abs() < 20.0, "F_a = {}", j.f_anchor_n);
+    assert!((j.f_latch_n - 1840.0).abs() < 20.0, "F_v = {}", j.f_latch_n);
+
+    // Contraintes de barre. Section étroite 40×10 percée Ø12,08 au verrou.
+    let check = check_bar(
+        &sm.mechanical.rear_bar,
+        j.splay_deg,
+        j.bar_shear_n,
+        j.bar_axial_n,
+        4.0,
+    );
+    let latch = check.sections.iter().find(|x| x.location == "verrou").unwrap();
+    assert_eq!(latch.width_mm, 40.0);
+    assert!((latch.stress_mpa - 17.9).abs() < 0.3, "σ = {}", latch.stress_mpa);
+    let transition = check
+        .sections
+        .iter()
+        .find(|x| x.location.starts_with("transition"))
+        .unwrap();
+    assert!(
+        (transition.stress_mpa - 8.21).abs() < 0.05,
+        "σ transition = {}",
+        transition.stress_mpa
+    );
+}
+
+/// Loi d'échelle, pour attraper une unité perdue : la contrainte est linéaire
+/// en effort, donc 1 kN de transverse par flanc doit rendre exactement le
+/// produit du bras par le module de section.
+#[test]
+fn golden_bar_stress_scales_with_a_kilonewton_of_shear() {
+    use sa303_core::checks::check_bar;
+    let bar = sa303().mechanical.rear_bar;
+
+    // Couronne intérieure (splay impair) : bras verrou = 301,81 mm.
+    let check = check_bar(&bar, 5.0, 1000.0, 0.0, 4.0);
+    let latch = check.sections.iter().find(|x| x.location == "verrou").unwrap();
+    let arm = bar.latch_hole_at - bar.crown_hole_inner_at;
+    assert!((arm - 301.81).abs() < 0.01, "bras = {arm}");
+    assert!((latch.moment_nmm / 1000.0 - 301.81).abs() < 0.01);
+    // 301,81 N·m sur W_net = 2593,22 mm³.
+    assert!(
+        (latch.stress_mpa - 116.4).abs() < 0.5,
+        "σ = {}",
+        latch.stress_mpa
+    );
+}
