@@ -1777,3 +1777,37 @@ fn only_the_top_flown_joint_is_flagged_as_following_the_legacy_bumper_model() {
         assert!(!j.bumper_model_legacy);
     }
 }
+
+/// Tableau de charges par jonction sur tout le jeu de grappes représentatives.
+/// Ce n'est pas un test — rien n'y est asserté — mais le moyen de régénérer le
+/// tableau du dossier d'audit sans écrire de script à côté :
+///
+/// ```text
+/// cargo test --test golden dump_joint_load_table -- --ignored --nocapture
+/// ```
+#[test]
+#[ignore]
+fn dump_joint_load_table() {
+    use sa303_core::checks::{check_bar, utilization, SandwichSpec};
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let settings = default_settings();
+    let spec = SandwichSpec::from_settings(&settings);
+    println!("grappe|J|splay|N|V|Mmax|sigma|ou|Fverrou|Fancrage|couronne|bielle|verrou|ancrage|barre|pire");
+    for cluster in representative_clusters(&bumper.id) {
+        let Ok(r) = compute_cluster(std::slice::from_ref(&sm), &cluster, &settings, &bumper, &[]) else { continue };
+        for j in &r.joints {
+            let b = check_bar(&j.rear_bar, j.splay_deg, j.bar_shear_n, j.bar_axial_n, settings.safety_factor);
+            let w = b.worst_section();
+            let uo = utilization(j.f_orientation_n, &spec);
+            let up = utilization(j.f_pivot_n, &spec);
+            let ua = utilization(j.f_anchor_n, &spec);
+            let ul = utilization(j.f_latch_n, &spec);
+            let ub = b.utilization();
+            println!("{}|{}|{}|{:.0}|{:.0}|{:.1}|{:.1}|{}|{:.0}|{:.0}|{:.3}|{:.3}|{:.3}|{:.3}|{:.3}|{:.3}",
+                cluster.name, j.joint_index+1, j.splay_deg, j.bar_axial_n, j.bar_shear_n,
+                j.bar_moment_max_nm, w.stress_mpa, w.location, j.f_latch_n, j.f_anchor_n,
+                uo, up, ul, ua, ub, uo.max(up).max(ua).max(ul).max(ub));
+        }
+    }
+}

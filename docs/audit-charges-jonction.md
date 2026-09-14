@@ -4,14 +4,15 @@ Objet : soumettre à relecture externe le calcul des efforts transmis à chaque
 jonction entre deux caissons, et la convention dans laquelle leur direction est
 rendue.
 
-Périmètre : **statique de la jonction uniquement**. Sont hors périmètre la
-vérification de la goupille et des tôles (`checks::sandwich`, résumée au §8), la
-sélection des pires cas (`worst_cases_selector`), et l'acoustique (`wst`).
+Périmètre : **statique de la jonction**, et les vérifications de section qui en
+découlent — goupilles (`checks::sandwich`) et flexion de la barre arrière
+(`checks::bar`). Sont hors périmètre la sélection des pires cas
+(`worst_cases_selector`) et l'acoustique (`wst`).
 
 | | |
 |---|---|
-| Code audité | `crates/sa303-core/src/cluster/joint.rs`, `src/cluster/kinematics.rs`, `src/speaker/geometry.rs` |
-| Fonction d'entrée | `compute_joint(&JointInput) -> JointResult` |
+| Code audité | `crates/sa303-core/src/cluster/joint.rs`, `src/cluster/kinematics.rs`, `src/speaker/geometry.rs`, `src/checks/` |
+| Fonction d'entrée | `compute_joint(&JointInput) -> Result<JointResult, JointInconsistency>` |
 | Unités | mm, N, kg, degrés en interface / radians en interne |
 | Tests | `tests/bielle.rs` (cinématique), `tests/golden.rs` (équilibre, valeurs de référence) |
 
@@ -113,9 +114,14 @@ let an = si.o + geo.anchor_at(s).rotate(si.phi);
 ```
 
 **Couronne et ancrage sont tous deux radiaux depuis `pv_at(k)`**, à écart
-angulaire constant : leur entraxe ne dépend donc pas du splay (une seule
-longueur de barre dessert tous les crans d'une même couronne). Vérifié par
+angulaire constant : leur entraxe ne dépend donc pas du splay — une seule
+longueur de barre dessert tous les crans d'une même couronne. Vérifié par
 `the_bar_length_does_not_depend_on_the_splay`.
+
+Il dépend en revanche de **quelle** couronne : 329,01 mm sur l'extérieure,
+324,76 sur l'intérieure. La barre porte donc deux trous de couronne (§9.4).
+
+Le verrou, quatrième trou, est à 680 mm et −(ha + 1°) + k.
 
 Les huit positions de couronne calculées ainsi ont été recoupées contre le
 perçage relevé en atelier : **écart < 0,003 mm** sur les huit crans
@@ -204,9 +210,11 @@ Soit, en clair :
 ```
 
 `bielle_lever` est le bras de la ligne d'action de la bielle autour de la
-goupille de couronne. Il est de l'ordre de 630 mm et ne s'annule pour aucun
-splay de la grille ; aucune garde n'est posée sur ce dénominateur. **À
-confirmer par l'audit** : une géométrie custom pourrait théoriquement l'annuler.
+goupille de couronne. Il vaut 629 mm sur la géométrie SA303 et ne s'annule pour
+aucun splay de la grille. Une garde le vérifie tout de même : sous 1 mm, la
+jonction remonte une erreur plutôt qu'un `λ` infini puis des efforts NaN — les
+comparaisons sur NaN étant fausses, un NaN traverserait ensuite tous les seuils
+de vérification sans en déclencher un seul.
 
 ---
 
@@ -215,6 +223,8 @@ confirmer par l'audit** : une géométrie custom pourrait théoriquement l'annul
 Grappe de 3 caissons SA303 identiques, suspendue, splays `[5°, 10°]`,
 `φ_initial = 0`, `g = 9,80665`, `k_dyn = 1,3`, masse 83,695 kg, CG local
 `(10,84 ; 11,91)`. Jonction n°1 (`joint_index = 0`), corps libre = caissons 2 et 3.
+
+Reproduit par `tests/bielle.rs::golden_bar_loads_on_the_reference_joint`.
 
 Cinématique :
 
@@ -231,26 +241,76 @@ pa = (−338,4310 ; −257,1220)      pb = (−336,7676 ; −295,2207)
 bo = ( 283,4296 ;  −69,4874)      an = ( 336,6147 ; −389,8584)
 ```
 
-Torseur extérieur et résolution :
+### 7.1 Résolution de la jonction
 
 ```
 W      = 2 133,9957 N          cm = (74,0276 ; −750,2904)
 M_ext/bo = 446 862,86 N·mm
-u      = (0,043619 ; −0,999048)     ← inclinaison 2,5° = splay/2 ✓
+u      = (0,043619 ; −0,98650)      ← inclinaison 2,5° = splay/2 ✓
 bras   = 629,4532 mm
 λ      = −709,9223 N
 
-F_bielle  = (−30,9664 ;   709,2466)   |709,92 N|
-F_couronne = ( 30,9664 ; 1 424,7491)   |1 425,09 N|
-M_barre/an = −85,70 N·m
+F_bielle   = (−30,9664 ;   709,2466)   |709,92 N|   (effort total)
+F_couronne = ( 30,9664 ; 1 424,7491)   |1 425,09 N| (effort total)
 ```
 
-Contrôles immédiats :
+Contrôles : `F_bielle + F_couronne = (0 ; 2 133,9957) = −R_ext`, et la direction
+de `F_bielle` fait exactement **2,5°** avec la verticale, soit `splay/2`, comme
+l'impose l'élément à deux forces.
 
-- `F_bielle + F_couronne = (0 ; 2 133,9957) = −R_ext` → équilibre en force.
-- La direction de `F_bielle` fait exactement **2,5°** avec la verticale, soit
-  `splay/2`, comme l'impose l'élément à deux forces. C'est le contrôle croisé le
-  plus rapide sur toute la chaîne.
+### 7.2 La barre arrière
+
+Splay 5, donc splay impair, donc couronne intérieure (660) : entraxe
+couronne-ancrage **L = 324,756 mm**, axe `e = (0,16377 ; −0,98650)`.
+
+Tout ce qui suit est **par flanc** (× 0,5).
+
+```
+N (axial)   = −700,2 N        négatif = barre tendue
+V (transverse) = −131,9 N     c'est lui qui fait fléchir
+
+bras couronne → verrou   = 301,81 mm      M = 39,82 N·m   ← maximum
+bras couronne → ancrage  = 324,76 mm      M = 42,85 N·m   (réduction, pas un maximum)
+bras couronne → barycentre = 313,28 mm    M = 41,33 N·m   ← ce que la paire reprend
+```
+
+Le moment culmine au **verrou**, première goupille rencontrée depuis la
+couronne : entre la couronne et lui, la barre ne voit qu'un seul effort et le
+moment croît linéairement depuis zéro ; au-delà, la réaction de la paire le fait
+redescendre, et il est nul à l'ancrage — la barre s'y termine sur 15,9 mm qui ne
+portent rien.
+
+### 7.3 La paire ancrage/verrou
+
+Entraxe `d = 23,735 mm`. Répartition élastique à raideurs égales :
+
+```
+part directe  = |F_couronne|/2 par flanc  = 356,3 N
+couple        = M_barycentre / d          = 1 741,5 N        ← domine largement
+F_ancrage = 1 909,9 N à 107,7°
+F_verrou  = 1 839,7 N à 265,9°
+```
+
+**Le couple vaut cinq fois la part directe.** C'est la raison pour laquelle
+vérifier l'ancrage sur la seule résultante de couronne le sous-estimait d'un
+facteur ~3.
+
+### 7.4 Contraintes dans la barre
+
+Section étroite 40 × 10, perçage Ø 12,08.
+
+```
+A_net = t(w − d0)          = 280,0 mm²
+W_net = t(w³ − d0³)/(6w)   = 2 593,2 mm³
+
+σ_verrou     = 39 820/2 593,2 + 700,2/280,0 = 15,4 + 2,5 = 17,9 MPa
+σ_transition = (section 40 brute, non percée)              =  8,2 MPa
+```
+
+Le module net traite le trou comme une **fente sur la fibre neutre**. La formule
+`t(w − d0)²/6`, qui vaudrait pour un trou en fibre extrême, donnerait 249 MPa au
+lieu de 125 pour 325 N·m — un facteur 2 sur le dimensionnement de la barre.
+Contrôle : 325 N·m sur cette section donnent **125,33 MPa**.
 
 ---
 
@@ -266,65 +326,124 @@ let sg = -input.share_per_flank;             // = −0,5
 
 let f_orientation = (f_ori * sg).rotate_transpose(rt_phi);
 let f_pivot       = (f_piv * sg).rotate_transpose(rt_phi);
+// La paire subit l'action de la barre : +share, pas sg.
+let f_anchor = (f_anchor_g * input.share_per_flank).rotate_transpose(rt_phi);
+let f_latch  = (f_latch_g  * input.share_per_flank).rotate_transpose(rt_phi);
 ```
 
 > **Point d'attention n°3.** Le facteur `sg = −0,5` fait deux choses à la fois.
 > Le **signe** retourne l'effort : on rend la réaction *subie par la
 > quincaillerie*, pas l'action sur le corps libre. Le **0,5** partage entre les
-> deux flancs (l'assemblage est symétrique, donc chaque flanc en prend la
-> moitié). Les valeurs rendues sont donc **par flanc**. C'est cette valeur-là
-> qui entre dans la vérification de goupille.
+> deux flancs. Les valeurs rendues sont donc **par flanc**.
+>
+> Les deux goupilles de la paire, elles, reçoivent `+share` et non `sg` : elles
+> subissent déjà l'action de la barre. Un `sg` les sortirait à l'envers des deux
+> autres liaisons.
 
-| Champ rendu | Contenu |
+### 8.1 Efforts de liaison
+
+| Champ | Contenu |
 |---|---|
 | `f_pivot`, `f_pivot_n`, `f_pivot_angle_deg` | effort de **bielle**, par flanc |
 | `f_orientation`, `f_orientation_n`, `f_orientation_angle_deg` | effort à la **goupille de couronne**, par flanc |
-| `bar_moment_nm` | moment déversé par la barre dans le caisson du bas, réduit à l'ancrage |
+| `f_anchor`, `f_anchor_n`, `f_anchor_angle_deg` | effort sur la goupille d'**ancrage**, par flanc |
+| `f_latch`, `f_latch_n`, `f_latch_angle_deg` | effort sur la goupille de **verrou**, par flanc |
+
+### 8.2 Sollicitations de la barre
+
+| Champ | Contenu |
+|---|---|
+| `bar_axial_n` | effort normal, par flanc. Positif = comprimée |
+| `bar_shear_n` | composante transverse, celle qui fait fléchir |
+| `bar_moment_max_nm` | moment de flexion **maximal**, au premier trou de la paire |
+| `bar_moment_max_at_mm` | son abscisse depuis l'extrémité couronne |
+| `bar_moment_at_pair_nm` | moment réduit au barycentre de la paire, celui qu'elle reprend en couple |
+| `rear_bar` | cotation de la barre de cette jonction |
+
+### 8.3 Géométrie et contrôles
+
+| Champ | Contenu |
+|---|---|
+| `crown_hole_local`, `anchor_hole_local`, `latch_hole_local` | les trois trous de barre, repère du flanc chargé, cohérents entre eux et avec les efforts — de quoi recouper un moment |
 | `bielle_lever_mm` | bras qui a servi à la résolution |
-| `lever_mm` | bras géométrique couronne–ancrage — **recoupement de perçage seulement**, plus utilisé par la statique |
-| `residual_n` | contrôle d'équilibre, doit être nul |
-| `traction` | signe de la composante axiale de `f_ori` sur l'axe couronne–ancrage |
-| `hinge_reversed` | `f_pivot · gravité < 0` : la charnière travaille à l'envers |
+| `lever_mm` | bras géométrique couronne–ancrage, **recoupement de perçage seulement** |
+| `residual_n` | résidu de force. **Nul par construction** : `f_ori` est posé à `−rext − f_piv`, donc il passerait même avec un `λ` faux |
+| `moment_residual_nmm` | résidu de moment, pris en `pa` et au CG — **pas** à `bo` où l'inconnue a été annulée. C'est lui qui atteste de la résolution |
+| `traction` | signe de la composante axiale de la barre |
+| `hinge_reversed` | `f_pivot · gravité < 0` |
+| `bumper_model_legacy` | voir §9.2 |
 
-Contrôle d'équilibre embarqué, rejoué sur tout le jeu de grappes représentatives
-(`invariant_equilibrium_residual_is_negligible`, seuil `1e−6` relatif) :
+`compute_joint` rend un `Result`. Un bras de bielle sous 1 mm est une erreur, pas
+un NaN : les comparaisons sur NaN étant fausses, un NaN traverserait tous les
+seuils de vérification sans en déclencher un seul.
 
-```rust
-let ext_local = (rext * input.share_per_flank).rotate_transpose(rt_phi);
-let residual = (f_orientation + f_pivot - ext_local).norm();
-```
+### 8.4 Vérifications
 
-Vérification aval, pour situer (hors périmètre d'audit) : `checks::sandwich`
-prend la norme de chaque effort et retient le pire des trois modes — cisaillement
-double de la goupille, matage de la barre, matage des flancs — avec `Rm/4` et une
-section nette de 86 %.
+`checks::sandwich` (cisaillement double, matage barre, matage flanc, pire des
+trois, `R_m/4`) est appliqué aux **quatre** liaisons : couronne, bielle, ancrage,
+verrou. `checks::bar` y ajoute la flexion composée de la barre à trois sections.
+`utilization_worst` retient le pire des cinq chemins.
 
 ---
 
 ## 9. Limites connues, à trancher par l'audit
 
-1. **Répartition ancrage / verrou non calculée.** Deux goupilles dans un même
-   corps rigide, c'est 6 inconnues pour 3 équations : hyperstatique. Le code rend
-   la **résultante** (force + `bar_moment_nm` réduit à l'ancrage) et s'arrête là.
-   Il faut une hypothèse de groupe de goupilles pour descendre à l'effort par
-   goupille — l'hypothèse usuelle (part directe égale + couple repris sur
-   l'entraxe ancrage–verrou, ≈ 23,7 mm) n'a **pas** été retenue faute de
-   validation. C'est la principale lacune vis-à-vis d'une note de calcul
-   complète.
+Le résultat est **isostatique** : trois inconnues, trois équations d'équilibre.
+Il ne dépend donc ni des jeux dans les trous, ni des raideurs relatives des
+pièces. La seule exception est la répartition sur la paire ancrage/verrou
+(§9.1), qui est hyperstatique.
 
-2. **Jonction bumper ↔ premier caisson.** `solver::compute_bumper_loads` suit
-   encore le schéma antérieur (bras à deux forces + pivot au `ht`). C'est une
-   liaison différente, non décrite par la spécification de la liaison à bielle,
-   donc laissée telle quelle. **À confirmer** qu'elle est bien hors périmètre.
+### 9.1 Répartition sur la paire — résolue, mais sous hypothèse de raideurs
 
-3. **Pas de garde sur `bielle_lever`** (§6).
+Deux goupilles dans un même corps rigide, c'est 6 inconnues pour 3 équations.
+Le code retient la **solution élastique à raideurs égales** : part directe
+partagée en deux, plus un couple perpendiculaire à la ligne ancrage-verrou.
 
-4. **Valeurs de référence de `golden.rs` recalculées, non recoupées à la main.**
-   Elles sortent du modèle lui-même. Ce qui est vérifié indépendamment, c'est la
-   cinématique (contre le perçage relevé) et l'équilibre. Un recoupement manuel
-   du §7 par l'auditeur comblerait ce trou.
+Ce n'est pas arbitraire — les deux goupilles ont le même diamètre, la même
+épaisseur de barre et le même flanc, donc la même raideur — mais ça reste la
+seule grandeur du dossier qui ne sorte pas de la seule statique. Un jeu
+différentiel entre les deux trous redistribuerait le couple.
 
-5. **Effets négligés, assumés** : élasticité (tout est rigide), jeu dans les
-   trous, frottement, effets hors plan. Le facteur dynamique `k_dyn = 1,3` et le
-   coefficient de sécurité 4:1 sont des réglages utilisateur, pas des constantes
-   du calcul.
+### 9.2 Jonction bumper ↔ premier caisson — modèle antérieur
+
+`solver::compute_bumper_loads` suit encore le schéma bras à deux forces + pivot
+fixe au `ht`. C'est une liaison différente, non décrite par la spécification de
+la liaison à bielle. Les jonctions concernées portent `bumper_model_legacy = true`
+et **leurs grandeurs de barre ne décrivent pas cette liaison**.
+
+### 9.3 La flexion de barre est un mode dimensionnant
+
+Ce n'est plus une limite mais un résultat : sur le jeu de grappes
+représentatives, le chemin couronne ne dépasse jamais **0,41** de taux de
+travail, alors que le verrou atteint **1,17** et la flexion de barre **1,03**.
+Le mode que l'ancien modèle ne pouvait pas voir est parmi ceux qui gouvernent.
+
+Voir `dump_joint_load_table` pour régénérer le tableau complet.
+
+### 9.4 Concordance barre / perçage
+
+Les trois trous de la barre ne sont **pas alignés** : le verrou est déporté de
+5,3 à 6,7 mm de l'axe couronne-ancrage selon la couronne. Il est donc comparé
+sur son abscisse le long de cet axe, et il subsiste un écart de +0,12 mm
+(couronne extérieure) / −0,24 mm (intérieure) entre la cotation déclarée et ce
+que la jonction impose — une seule position de verrou ne peut pas satisfaire les
+deux couronnes exactement. Remonté en avertissement par `check_rear_bar`.
+
+La barre porte **deux** trous de couronne, distants de 4,26 mm : l'entraxe
+couronne-ancrage vaut 329,01 mm sur la couronne extérieure et 324,76 sur
+l'intérieure. Un trou unique ne pourrait pas desservir les deux.
+
+### 9.5 Valeurs de référence de `golden.rs`
+
+Elles sortent du modèle lui-même, pas d'un recoupement indépendant. Ce qui est
+vérifié indépendamment : la cinématique (contre le perçage relevé), l'équilibre
+en moment, et les valeurs de barre du §7 (recoupées à la main).
+
+### 9.6 Effets négligés, assumés
+
+Élasticité des pièces (tout est rigide hors §9.1), jeu dans les trous,
+frottement, effets hors plan, flambement de la barre en compression. Le facteur
+dynamique `k_dyn = 1,3` et le coefficient 4:1 sont des réglages utilisateur.
+
+La tirette entre dans l'équilibre **sans** `k_dyn` : sa tension est calculée en
+amont à partir d'un poids déjà dynamisé, donc le facteur y est déjà.
