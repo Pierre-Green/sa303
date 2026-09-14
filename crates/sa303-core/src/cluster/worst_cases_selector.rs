@@ -30,6 +30,36 @@ pub struct BlockBCase {
     pub duplicate: bool,
 }
 
+/// Sévérité d'un cas, tous chemins confondus. Sert à classer le bloc B : si on
+/// ne classait que sur `max(orientation, pivot)`, une jonction qui gouverne en
+/// flexion de barre mais qui est anodine à la couronne serait écartée par une
+/// voisine du même splay — et le chemin dimensionnant disparaîtrait du tableau.
+///
+/// Les grandeurs sont hétérogènes (des newtons d'un côté, des MPa de l'autre) :
+/// on les ramène au taux de travail à coefficient 1, qui est le seul
+/// dénominateur commun sans avoir les réglages sous la main.
+fn severity(c: &LoadCase) -> f64 {
+    let r = &c.result;
+    let bar = crate::checks::check_bar(
+        &r.rear_bar,
+        r.splay_deg,
+        r.bar_shear_n,
+        r.bar_axial_n,
+        1.0,
+    );
+    let force_paths = r
+        .mag_orientation()
+        .max(r.mag_pivot())
+        .max(r.f_anchor_n)
+        .max(r.f_latch_n);
+    // Un newton sur une goupille et un MPa dans la barre ne se comparent pas
+    // directement : on rapporte chacun à sa propre résistance, ce que fait déjà
+    // `checks` par ailleurs.
+    let f_ratio = force_paths / (r.rear_bar.ultimate_strength * 100.0);
+    let s_ratio = bar.worst_section().stress_mpa / r.rear_bar.ultimate_strength;
+    f_ratio.max(s_ratio)
+}
+
 fn max_by(
     cases: &[LoadCase],
     filter: impl Fn(&LoadCase) -> bool,
@@ -46,7 +76,7 @@ fn max_by(
 /// Bloc A : un cas par chemin de charge distinct (brief §9), fusionnés si le même
 /// joint gagne plusieurs critères.
 pub fn select_block_a(cases: &[LoadCase]) -> Vec<BlockACase> {
-    let candidates: [(&'static str, Option<usize>); 6] = [
+    let candidates: [(&'static str, Option<usize>); 9] = [
         (
             "effort orientation max",
             max_by(cases, |_| true, |c| c.result.mag_orientation()),
@@ -74,6 +104,35 @@ pub fn select_block_a(cases: &[LoadCase]) -> Vec<BlockACase> {
                 |_| true,
                 |c| c.result.mag_orientation().min(c.result.mag_pivot()),
             ),
+        ),
+        // Les trois chemins de la barre arrière. Ils ne coïncident pas avec
+        // « effort orientation max » : la couronne voit la résultante, la barre
+        // voit sa composante transverse et la paire y ajoute un couple. Une
+        // jonction peut donc être anodine à la couronne et gouverner en flexion.
+        (
+            "moment de barre max",
+            max_by(cases, |_| true, |c| c.result.bar_moment_max_nm),
+        ),
+        (
+            "effort verrou max",
+            max_by(cases, |_| true, |c| c.result.f_latch_n),
+        ),
+        (
+            "flexion de barre max",
+            max_by(cases, |_| true, |c| {
+                // Le taux de travail exact demanderait le coefficient de
+                // sécurité, qui n'est pas ici. La contrainte lui est
+                // proportionnelle, donc classer sur elle donne le même gagnant.
+                let bar = &c.result.rear_bar;
+                let check = crate::checks::check_bar(
+                    bar,
+                    c.result.splay_deg,
+                    c.result.bar_shear_n,
+                    c.result.bar_axial_n,
+                    1.0,
+                );
+                check.worst_section().stress_mpa
+            }),
         ),
         (
             "inclinaison extrême",
@@ -114,14 +173,7 @@ pub fn select_block_b(cases: &[LoadCase], block_a: &[BlockACase]) -> Vec<BlockBC
         let key = (c.result.splay_deg * 10.0).round() as i64;
         let is_better = match best.get(&key) {
             None => true,
-            Some(&bi) => {
-                let cur = cases[bi]
-                    .result
-                    .mag_orientation()
-                    .max(cases[bi].result.mag_pivot());
-                let cand = c.result.mag_orientation().max(c.result.mag_pivot());
-                cand > cur
-            }
+            Some(&bi) => severity(c) > severity(&cases[bi]),
         };
         if is_better {
             best.insert(key, i);
@@ -151,6 +203,17 @@ mod tests {
 
     /// Un `JointResult` synthétique : seuls les champs pertinents pour la sélection
     /// varient, le reste est un remplissage neutre.
+    /// Charge la barre d'un cas déjà construit. Séparé de `fake_joint` pour que
+    /// les chemins « barre » soient pilotés indépendamment des efforts de
+    /// couronne et de bielle : c'est justement parce qu'ils ne coïncident pas
+    /// qu'ils méritent leurs propres critères.
+    fn with_bar(mut j: JointResult, shear_n: f64, latch_n: f64) -> JointResult {
+        j.bar_shear_n = shear_n;
+        j.bar_moment_max_nm = shear_n.abs() * 0.3;
+        j.f_latch_n = latch_n;
+        j
+    }
+
     fn fake_joint(
         mag_o: f64,
         mag_p: f64,
@@ -247,15 +310,32 @@ mod tests {
         // case 1 : plus gros effort pivot, en compression, charnière inversée,
         // et gagne aussi "deux zones chargées" et "inclinaison extrême" : cinq
         // critères sur un seul joint, une seule ligne attendue avec cinq labels.
+        // case 0 porte aussi toute la charge de barre : c'est le cœur du test.
+        // Le pire cas de flexion ne suit pas l'effort de couronne — ici c'est
+        // même le cas qui perd sur le pivot qui gouverne la barre.
         let cases = vec![
-            load_case(1, fake_joint(100.0, 10.0, false, true, 1.0, -5.0)),
-            load_case(2, fake_joint(50.0, 200.0, true, false, 2.0, 10.0)),
+            load_case(
+                1,
+                with_bar(fake_joint(100.0, 10.0, false, true, 1.0, -5.0), 900.0, 1500.0),
+            ),
+            load_case(
+                2,
+                with_bar(fake_joint(50.0, 200.0, true, false, 2.0, 10.0), 40.0, 90.0),
+            ),
         ];
         let block_a = select_block_a(&cases);
         assert_eq!(block_a.len(), 2);
 
         let case0 = block_a.iter().find(|b| b.case_index == 0).unwrap();
-        assert_eq!(case0.labels, vec!["effort orientation max"]);
+        assert_eq!(
+            case0.labels,
+            vec![
+                "effort orientation max",
+                "moment de barre max",
+                "effort verrou max",
+                "flexion de barre max",
+            ]
+        );
 
         let case1 = block_a.iter().find(|b| b.case_index == 1).unwrap();
         assert_eq!(
@@ -323,8 +403,14 @@ mod tests {
     #[test]
     fn block_b_flags_cases_already_retained_in_block_a() {
         let cases = vec![
-            load_case(1, fake_joint(100.0, 10.0, false, true, 1.0, -5.0)), // idx0 : gagne tous les critères applicables
-            load_case(2, fake_joint(10.0, 5.0, false, true, 2.0, 0.0)), // idx1 : strictement dominé, n'apparaît nulle part
+            load_case(
+                1,
+                with_bar(fake_joint(100.0, 10.0, false, true, 1.0, -5.0), 900.0, 1500.0),
+            ), // idx0 : gagne tous les critères applicables
+            load_case(
+                2,
+                with_bar(fake_joint(10.0, 5.0, false, true, 2.0, 0.0), 10.0, 20.0),
+            ), // idx1 : strictement dominé, n'apparaît nulle part
         ];
         let block_a = select_block_a(&cases);
         assert!(block_a.iter().any(|b| b.case_index == 0));
