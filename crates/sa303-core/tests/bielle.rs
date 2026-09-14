@@ -1,0 +1,168 @@
+//! Tests non négociables de la liaison par bielle (brief §8). Ils portent sur
+//! la cinématique seule — pas sur les charges — parce que c'est elle qui a
+//! changé : le pivot avant n'est plus un point fixe du caisson, et les huit
+//! trous de couronne ne sont plus sur un arc centré sur un point unique.
+
+use sa303_core::speaker::{
+    BelowCompatibility, Crown, Hinge, SpeakerGeometry, SpeakerMechanicalModel, SpeakerModel,
+};
+
+/// Perçage de référence SA303 (brief §1) : les distances au bord viennent de
+/// la table 3.9 EN 1993-1-8 appliquée à la charge réelle, pas d'un forfait.
+fn sa303() -> SpeakerModel {
+    SpeakerModel {
+        id: "sa303".into(),
+        name: "SA303".into(),
+        schema_version: 4,
+        mechanical: SpeakerMechanicalModel {
+            depth: 700.0,
+            height: 550.0,
+            total_vertical_angle: 20.0,
+            mass_kg: 83.695,
+            cg: [10.84, 11.91],
+            hinge: Hinge {
+                x: -338.431,
+                y: 257.122,
+                joint_separation: 552.379,
+                edge_perp: 12.569,
+            },
+            crown: Crown {
+                radius: 680.0,
+                delta: 20.0,
+                anchor_angle: 3.0,
+                latch_angle: 1.0,
+                splay0_angle: 5.0,
+            },
+            splay_grid: vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 20.0],
+            frame_hole_splay: 0.0,
+        },
+        acoustics: Default::default(),
+        compatible_below: vec![BelowCompatibility {
+            speaker_model_id: "sa303".into(),
+            flown: true,
+            stacked: true,
+            recommended_splay: None,
+        }],
+    }
+}
+
+/// Les huit crans relevés sur le perçage réel (brief §4), repère du caisson.
+/// C'est la référence : si le calcul direct s'en écarte, c'est le calcul qui a
+/// tort, pas la table.
+const CROWN_TABLE: [(f64, f64, f64, f64); 8] = [
+    (0.0, 680.0, 318.396, -119.260),
+    (1.0, 660.0, 296.332, -113.335),
+    (2.0, 680.0, 312.519, -96.438),
+    (3.0, 660.0, 290.262, -91.293),
+    (4.0, 680.0, 305.850, -73.847),
+    (5.0, 660.0, 283.427, -69.487),
+    (10.0, 680.0, 281.179, -7.731),
+    (20.0, 680.0, 225.211, 95.354),
+];
+
+/// §8.1 — le calcul direct du trou de couronne (§6) doit retomber sur la table
+/// relevée, à 0.01 mm près.
+#[test]
+fn every_crown_hole_matches_the_drilled_table() {
+    let geo = SpeakerGeometry::compute(&sa303());
+    for (splay, radius, x, y) in CROWN_TABLE {
+        assert_eq!(
+            geo.crown_radius_at(splay),
+            radius,
+            "splay {splay}° : mauvaise couronne (parité)"
+        );
+        let hole = geo.crown(splay);
+        let d = ((hole.x - x).powi(2) + (hole.y - y).powi(2)).sqrt();
+        assert!(
+            d < 0.01,
+            "splay {splay}° : calculé ({:.3}, {:.3}), table ({x}, {y}), écart {d:.4} mm",
+            hole.x,
+            hole.y
+        );
+    }
+}
+
+/// §8.2 — le décalage avant reste invisible sur la plage line source, et borné
+/// partout ailleurs. C'est ce qui autorise à n'afficher que la composante
+/// verticale comme espacement entre caissons.
+#[test]
+fn the_front_offset_stays_negligible_over_the_line_source_range() {
+    let geo = SpeakerGeometry::compute(&sa303());
+    for (splay, ..) in CROWN_TABLE {
+        let front = geo.joint_offset(splay).front_mm;
+        assert!(front < 0.9, "splay {splay}° : décalage avant {front:.4} mm");
+        if splay <= 5.0 {
+            assert!(
+                front < 0.06,
+                "splay {splay}° (line source) : décalage avant {front:.4} mm"
+            );
+        }
+    }
+}
+
+/// §8.3 — l'écartement vertical est ce qu'on affiche : il doit croître avec le
+/// splay, sinon deux crans voisins deviendraient indiscernables à l'écran.
+#[test]
+fn the_vertical_gap_grows_monotonically_with_the_splay() {
+    let geo = SpeakerGeometry::compute(&sa303());
+    let mut previous = f64::NEG_INFINITY;
+    for (splay, ..) in CROWN_TABLE {
+        // Négatif quand les coins s'écartent : c'est l'amplitude qui croît.
+        let gap = -geo.joint_offset(splay).vertical_mm;
+        assert!(
+            gap > previous,
+            "splay {splay}° : jour {gap:.4} mm, pas plus que le cran précédent ({previous:.4} mm)"
+        );
+        previous = gap;
+    }
+}
+
+/// §8.4 — le partage est égal et imposé par construction : la bielle prend
+/// exactement la moitié du splay, jamais une fraction calculée ni ajustée.
+#[test]
+fn the_bielle_takes_exactly_half_the_splay() {
+    let geo = SpeakerGeometry::compute(&sa303());
+    for (splay, ..) in CROWN_TABLE {
+        assert_eq!(SpeakerGeometry::bielle_rotation_deg(splay), splay / 2.0);
+        // Et la géométrie elle-même doit être d'accord : la bielle étant un
+        // élément à deux forces, sa ligne d'action passe par ses deux
+        // goupilles, donc son inclinaison se lit sur `hb -> pv_at`.
+        let axis = geo.pv_at(splay) - geo.hb;
+        let tilt = axis.x.atan2(-axis.y).to_degrees();
+        assert!(
+            (tilt - splay / 2.0).abs() < 1e-9,
+            "splay {splay}° : bielle inclinée de {tilt}°"
+        );
+        assert!(
+            (axis.norm() - geo.bielle_entraxe).abs() < 1e-9,
+            "splay {splay}° : la bielle a changé de longueur"
+        );
+    }
+}
+
+/// §8.5 — couronne et ancrage sont tous deux radiaux depuis la goupille basse
+/// de bielle : leur entraxe ne peut donc pas dépendre du splay. C'est ce qui
+/// permet à une seule longueur de barre de desservir tous les crans d'une même
+/// couronne.
+#[test]
+fn the_bar_length_does_not_depend_on_the_splay() {
+    let geo = SpeakerGeometry::compute(&sa303());
+    for row in [680.0, 660.0] {
+        let mut reference: Option<f64> = None;
+        for (splay, radius, ..) in CROWN_TABLE {
+            if radius != row {
+                continue;
+            }
+            let length = (geo.crown(splay) - geo.anchor_at(splay)).norm();
+            match reference {
+                None => reference = Some(length),
+                Some(r) => assert!(
+                    (length - r).abs() < 1e-9,
+                    "couronne {row} : barre de {length} mm à {splay}°, {r} mm ailleurs"
+                ),
+            }
+        }
+        assert!(reference.is_some(), "aucun cran sur la couronne {row}");
+    }
+}
+

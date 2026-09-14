@@ -23,7 +23,15 @@ use serde::{Deserialize, Serialize};
 pub struct Hinge {
     pub x: f64,
     pub y: f64,
+    /// Distance verticale centre à centre entre deux caissons au splay 0. Elle
+    /// vaut `2*y + entraxe de bielle` : c'est de là qu'est dérivée la longueur
+    /// de la bielle avant.
     pub joint_separation: f64,
+    /// Recul du trou de charnière depuis la face avant (`e_perp` de la table
+    /// 3.9 EN 1993-1-8, perpendiculaire à l'effort). À ne pas confondre avec la
+    /// distance au bord dans l'axe de l'effort : les intervertir décale le trou
+    /// de 4 mm et fausse toute la couronne (brief §1).
+    pub edge_perp: f64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -32,6 +40,10 @@ pub struct Crown {
     pub radius: f64,
     pub delta: f64,
     pub anchor_angle: f64,
+    /// Second point de fixation de la barre arrière dans le caisson du bas.
+    /// Avec l'ancrage, il encastre la barre sur ce caisson : elle lui transmet
+    /// donc une force **et** un moment (brief §3).
+    pub latch_angle: f64,
     pub splay0_angle: f64,
 }
 

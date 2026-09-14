@@ -147,6 +147,11 @@ pub struct NearField {
 pub struct Criterion5Row {
     pub splay_deg: f64,
     pub step_mm: f64,
+    /// Jour en façade à cet angle. Ce n'est pas une constante qu'on retrouverait
+    /// d'une ligne à l'autre : la charnière est en retrait de la face, donc
+    /// incliner fait bâiller la façade. C'est lui qui creuse le pas et fait
+    /// baisser l'ARF.
+    pub gap_mm: f64,
     pub arf: f64,
     /// Même ordre que `WstInputs::distances_m`. `None` : aucune fréquence
     /// tenable (angle nul ou négatif).
@@ -343,11 +348,14 @@ pub fn wst_report(inputs: &WstInputs, speaker: Option<&SpeakerModel>) -> WstRepo
         Some(model) => acoustic_step_mm(model, splay_deg) / 1000.0,
         None => (inputs.box_height_mm + inputs.gap_mm) / 1000.0,
     };
-    let box_height_m = match speaker {
-        Some(model) => model.mechanical.height / 1000.0,
-        None => inputs.box_height_mm / 1000.0,
+    // Jour en façade à un angle donné. Dérivé de la géométrie de l'enceinte dès
+    // qu'une est sélectionnée — et donc variable d'un angle à l'autre ; c'est
+    // seulement à défaut d'enceinte qu'il retombe sur la valeur saisie, forcément
+    // constante.
+    let gap_mm_at = |splay_deg: f64| match speaker {
+        Some(model) => front_gap_mm(model, splay_deg),
+        None => inputs.gap_mm,
     };
-
     // Référence : le premier angle de la grille — c'est lui qui décrit la ligne
     // pour les critères qui ne dépendent pas de l'angle.
     let reference_splay_deg = splays_deg[0];
@@ -357,7 +365,10 @@ pub fn wst_report(inputs: &WstInputs, speaker: Option<&SpeakerModel>) -> WstRepo
 
     let derived = WstDerived {
         step_mm: step_m * 1000.0,
-        gap_mm: (step_m - box_height_m) * 1000.0,
+        // Le jour à l'angle de référence, pris à la même source que les lignes
+        // du tableau plutôt que redéduit du pas : les deux ne peuvent donc pas
+        // se contredire à l'écran.
+        gap_mm: gap_mm_at(reference_splay_deg),
         arf: reference_arf,
         line_height_m,
         radiating_height_mm,
@@ -431,9 +442,11 @@ pub fn wst_report(inputs: &WstInputs, speaker: Option<&SpeakerModel>) -> WstRepo
             .map(|&splay_deg| {
                 let row_step_m = step_m_at(splay_deg);
                 let row_arf = arf(radiating_height_m, row_step_m);
+                let row_gap_mm = gap_mm_at(splay_deg);
                 Criterion5Row {
                     splay_deg,
                     step_mm: row_step_m * 1000.0,
+                    gap_mm: row_gap_mm,
                     arf: row_arf,
                     f_max_by_distance_hz: inputs
                         .distances_m
@@ -613,12 +626,14 @@ mod tests {
                 hinge: Hinge {
                     x: -338.43,
                     y: 257.13,
-                    joint_separation: 552.384,
+                    joint_separation: 552.379,
+                    edge_perp: 12.569,
                 },
                 crown: Crown {
                     radius: 680.0,
                     delta: 20.0,
-                    anchor_angle: 2.5,
+                    anchor_angle: 3.0,
+                    latch_angle: 1.0,
                     splay0_angle: 5.0,
                 },
                 splay_grid: vec![0.0, 5.0, 10.0],
@@ -678,7 +693,7 @@ mod tests {
 
         assert!(report.derived.step_from_speaker);
         assert!(
-            (report.derived.gap_mm - 2.384).abs() < 1e-6,
+            (report.derived.gap_mm - 2.379).abs() < 1e-6,
             "{}",
             report.derived.gap_mm
         );
@@ -691,6 +706,71 @@ mod tests {
         // Plus l'angle est grand, plus la fréquence tenable chute.
         let f = |row: usize| criterion5(&report).rows[row].f_max_by_distance_hz[0].unwrap();
         assert!(f(0) > f(1) && f(1) > f(2));
+    }
+
+    /// Le jour en façade n'est pas une constante qu'on saisit une fois : dès
+    /// qu'une enceinte est sélectionnée, chaque ligne du tableau doit porter le
+    /// jour de *son* angle. Sans ça, le tableau afficherait un pas qui s'ouvre
+    /// à côté d'un jour figé — il se contredirait à l'écran.
+    #[test]
+    fn the_front_gap_is_derived_angle_by_angle_from_the_speaker() {
+        let model = sa303();
+        let splays = vec![0.0, 5.0, 10.0];
+        let inputs = WstInputs {
+            speed_of_sound: SPEED_OF_SOUND_DEFAULT,
+            box_height_mm: 0.0,
+            gap_mm: 8.0, // saisie ignorée : l'enceinte fait foi
+            radiating_height_mm: 430.0,
+            speaker_count: 6,
+            splays_deg: splays.clone(),
+            distances_m: vec![10.0],
+            f_max_hz: 16_000.0,
+            guide: GuideKind::Isophase,
+        };
+        let report = wst_report(&inputs, Some(&model));
+        let rows = &criterion5(&report).rows;
+
+        for (row, splay) in rows.iter().zip(&splays) {
+            assert_ne!(row.gap_mm, inputs.gap_mm, "jour resté sur la saisie");
+            assert!(
+                (row.gap_mm - front_gap_mm(&model, *splay)).abs() < 1e-9,
+                "{}° : jour {} mm",
+                row.splay_deg,
+                row.gap_mm
+            );
+            // Et le pas reste bien la hauteur de caisse plus ce jour-là.
+            assert!(
+                (row.step_mm - (model.mechanical.height + row.gap_mm)).abs() < 1e-9,
+                "{}° : pas et jour ne se recoupent pas",
+                row.splay_deg
+            );
+        }
+        // Il s'ouvre avec l'angle, c'est tout l'intérêt de le dériver.
+        assert!(rows[0].gap_mm < rows[1].gap_mm && rows[1].gap_mm < rows[2].gap_mm);
+        // L'encadré de tête annonce le jour de l'angle de référence, pas un autre.
+        assert_eq!(report.derived.gap_mm, rows[0].gap_mm);
+    }
+
+    /// Sans enceinte, il n'y a pas de géométrie d'où dériver quoi que ce soit :
+    /// le jour saisi s'applique tel quel, à tous les angles.
+    #[test]
+    fn without_a_speaker_the_front_gap_stays_the_one_that_was_typed() {
+        let inputs = WstInputs {
+            speed_of_sound: SPEED_OF_SOUND_DEFAULT,
+            box_height_mm: 550.0,
+            gap_mm: 8.0,
+            radiating_height_mm: 430.0,
+            speaker_count: 6,
+            splays_deg: vec![0.0, 5.0, 10.0],
+            distances_m: vec![10.0],
+            f_max_hz: 16_000.0,
+            guide: GuideKind::Isophase,
+        };
+        let report = wst_report(&inputs, None);
+        for row in &criterion5(&report).rows {
+            assert_eq!(row.gap_mm, 8.0);
+        }
+        assert_eq!(report.derived.gap_mm, 8.0);
     }
 
     #[test]

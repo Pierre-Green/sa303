@@ -151,6 +151,15 @@ watch(selectedSpeaker, (speaker) => {
   }
 });
 
+// Jour affiché dans le formulaire. Une enceinte sélectionnée ouvre un jour
+// différent à chaque angle : la case en montre celui de l'angle de référence,
+// pris du rapport plutôt que recopié dans `form` — sinon la saisie de
+// l'utilisateur serait écrasée dès qu'il déselectionne, et le rapport
+// s'alimenterait de sa propre sortie.
+const displayedGapMm = computed(() =>
+  selectedSpeaker.value && report.value ? report.value.derived.gapMm : form.gapMm,
+);
+
 function buildInputs(): WstInputs {
   return {
     speedOfSound: form.usePaperConvention ? SPEED_OF_SOUND_PAPER : SPEED_OF_SOUND_REAL,
@@ -306,9 +315,14 @@ const ratio = (value: number | null | undefined) =>
                 <div class="flex flex-col gap-1.5">
                   <Label class="flex items-center text-xs">
                     Jour façade
-                    <InfoTip text="Jour entre deux caisses en façade, mm. Dérivé de la géométrie, et variable avec l'angle, dès qu'une enceinte est sélectionnée : le pivot avant fait bâiller la façade quand on incline." />
+                    <InfoTip text="Jour entre deux caisses en façade, mm. Dérivé de la géométrie, et variable avec l'angle, dès qu'une enceinte est sélectionnée : la charnière étant en retrait de la face, incliner fait bâiller la façade. La valeur montrée est alors celle de l'angle de référence ; le tableau du critère 5 donne le jour de chaque angle." />
                   </Label>
-                  <Input v-model.number="form.gapMm" type="number" :disabled="!!selectedSpeaker" />
+                  <Input
+                    :model-value="displayedGapMm"
+                    type="number"
+                    :disabled="!!selectedSpeaker"
+                    @update:model-value="form.gapMm = Number($event)"
+                  />
                 </div>
               </div>
 
@@ -482,6 +496,7 @@ const ratio = (value: number | null | undefined) =>
                   <TableRow>
                     <TableHead>Angle</TableHead>
                     <TableHead>Pas</TableHead>
+                    <TableHead>Jour façade</TableHead>
                     <TableHead>ARF</TableHead>
                     <TableHead v-for="d in distances" :key="d">à {{ d }} m</TableHead>
                   </TableRow>
@@ -490,6 +505,7 @@ const ratio = (value: number | null | undefined) =>
                   <TableRow v-for="row in criterion5.rows" :key="row.splayDeg">
                     <TableCell class="font-medium">{{ deg(row.splayDeg) }}</TableCell>
                     <TableCell class="text-muted-foreground">{{ mm(row.stepMm) }}</TableCell>
+                    <TableCell class="text-muted-foreground">{{ mm(row.gapMm) }}</TableCell>
                     <TableCell class="text-muted-foreground">{{ ratio(row.arf) }}</TableCell>
                     <TableCell
                       v-for="(f, i) in row.fMaxByDistanceHz"

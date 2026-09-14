@@ -345,15 +345,27 @@ async function removeBumperBar() {
 
                   <dt class="flex items-center text-muted-foreground">
                     HB (charnière av.-bas)
-                    <InfoTip text="Symétrique de HT. La bielle avant relie ce trou au pivot effectif de l'enceinte du dessous." />
+                    <InfoTip text="Symétrique de HT. C'est la goupille haute de la bielle avant ; sa goupille basse est le HT de l'enceinte du dessous." />
                   </dt>
                   <dd>{{ fmt(report.hb.x) }} ; {{ fmt(report.hb.y) }}</dd>
 
                   <dt class="flex items-center text-muted-foreground">
-                    PV (pivot effectif)
-                    <InfoTip text="Trou avant-haut de l'enceinte inférieure, exprimé dans le repère de l'enceinte supérieure : c'est le centre de rotation réel de la jonction." />
+                    PV0 (goupille basse de bielle, 0°)
+                    <InfoTip text="Trou avant-haut de l'enceinte inférieure, exprimé dans le repère de l'enceinte supérieure, au splay 0. Ce n'est pas un pivot fixe : la bielle s'inclinant de la moitié du splay, ce point décrit un arc. Le tableau des trous donne sa position à chaque cran." />
                   </dt>
-                  <dd>{{ fmt(report.pv.x) }} ; {{ fmt(report.pv.y) }}</dd>
+                  <dd>{{ fmt(report.pv0.x) }} ; {{ fmt(report.pv0.y) }}</dd>
+
+                  <dt class="flex items-center text-muted-foreground">
+                    Verrou local
+                    <InfoTip text="Second point de fixation de la barre arrière dans l'enceinte inférieure. Avec l'ancrage, il encastre la barre sur elle : la barre lui transmet donc un moment en plus d'une force." />
+                  </dt>
+                  <dd>{{ fmt(report.latchLocal.x) }} ; {{ fmt(report.latchLocal.y) }}</dd>
+
+                  <dt class="flex items-center text-muted-foreground">
+                    Coin avant de jonction
+                    <InfoTip text="Arête avant-bas de la jonction, celle qui porte sur l'enceinte du dessous au splay 0. C'est depuis elle que se mesure l'écartement entre caissons." />
+                  </dt>
+                  <dd>{{ fmt(report.frontEdge.x) }} ; {{ fmt(report.frontEdge.y) }}</dd>
 
                   <dt class="flex items-center text-muted-foreground">
                     Ancrage local
@@ -363,7 +375,7 @@ async function removeBumperBar() {
 
                   <dt class="flex items-center text-muted-foreground">
                     Entraxe bielle
-                    <InfoTip text="Distance entre la goupille de bielle et le pivot effectif. Cet écart crée le moment que la butée de forme doit reprendre." />
+                    <InfoTip text="Longueur de la bielle avant, entre ses deux goupilles. Elle est fixe : c'est son inclinaison, la moitié du splay, qui change d'un cran à l'autre." />
                   </dt>
                   <dd>{{ fmt(report.bielleEntraxe) }} mm</dd>
                 </dl>
@@ -384,6 +396,18 @@ async function removeBumperBar() {
                       <TableHead>Splay</TableHead>
                       <TableHead>Couronne</TableHead>
                       <TableHead>Rayon</TableHead>
+                      <TableHead>
+                        <span class="flex items-center">
+                          Position
+                          <InfoTip text="Trou de couronne dans le repère de l'enceinte. Les trous ne sont pas sur un arc centré sur un point fixe : leur centre est la goupille basse de bielle, qui se déplace avec le splay." />
+                        </span>
+                      </TableHead>
+                      <TableHead>
+                        <span class="flex items-center">
+                          Écartement
+                          <InfoTip text="Écartement vertical des coins avant à ce cran : c'est l'espacement entre caissons. Le décalage avant qui l'accompagne reste sous 0,05 mm sur toute la plage line source, donc invisible." />
+                        </span>
+                      </TableHead>
                       <TableHead>Bras</TableHead>
                       <TableHead>
                         <span class="flex items-center">
@@ -398,6 +422,8 @@ async function removeBumperBar() {
                       <TableCell>{{ h.splayDeg }}°</TableCell>
                       <TableCell>{{ h.row === "int" ? "intérieure" : "extérieure" }}</TableCell>
                       <TableCell>{{ fmt(h.radius, 0) }} mm</TableCell>
+                      <TableCell>{{ fmt(h.position.x, 2) }} ; {{ fmt(h.position.y, 2) }}</TableCell>
+                      <TableCell>{{ fmt(-h.offset.verticalMm, 2) }} mm</TableCell>
                       <TableCell>{{ fmt(h.leverMm, 1) }} mm</TableCell>
                       <TableCell>{{ fmt(h.discrepancyMm, 3) }} mm</TableCell>
                     </TableRow>

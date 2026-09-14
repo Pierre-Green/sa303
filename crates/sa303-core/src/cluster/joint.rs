@@ -1,12 +1,23 @@
-//! Statique d'une jonction (brief §5) : équilibre du corps libre porté par le
-//! flanc chargé, décomposé en bras à deux forces (barre orientation, entre le
-//! trou de couronne et l'ancrage) plus un pivot (goupille ronde dans trou
-//! rond, moment nul). Le résultat inclut déjà les efforts en repère global et
-//! les angles pré-calculés (convention §2) : jamais de rotation ni de
-//! `atan2` côté front.
+//! Statique d'une jonction (brief §3) : équilibre du corps libre porté par le
+//! flanc chargé, sur les deux seules liaisons entre les deux caissons.
+//!
+//! **La barre arrière n'est plus un élément à deux forces.** Elle est goupillée
+//! en *deux* points (ancrage et verrou) dans le caisson du bas, donc encastrée
+//! sur lui : elle lui transmet une force et un moment, et sa ligne d'action
+//! n'a aucune raison de passer par l'axe couronne-ancrage. C'est la **bielle
+//! avant** qui est l'élément à deux forces : goupillée en deux points, sa ligne
+//! d'action passe par ses deux goupilles, donc elle s'incline de `splay/2`.
+//!
+//! Les deux rôles ont donc échangé par rapport au modèle précédent : l'inconnue
+//! scalaire est portée par la bielle (direction connue), et l'inconnue
+//! vectorielle par la goupille de couronne (moment nul, articulation simple).
+//! Trois inconnues, trois équations : isostatique.
+//!
+//! Le résultat inclut déjà les efforts en repère global et les angles
+//! pré-calculés (convention §2) : jamais de rotation ni de `atan2` côté front.
 //!
 //! Grappe hétérogène : la quincaillerie de la jonction appartient à l'enceinte
-//! du **haut** (son `pv`, sa couronne, son ancrage), tandis que les trous
+//! du **haut** (sa bielle, sa couronne, son ancrage), tandis que les trous
 //! rendus en repère local appartiennent à l'enceinte **chargée** — celle du
 //! haut en vol, celle du bas en stack. Les deux coïncident quand les deux
 //! modèles sont identiques, d'où des résultats inchangés sur une grappe
@@ -14,7 +25,7 @@
 
 use super::kinematics::{ChainSpeaker, SpeakerInstance};
 use super::model::Compartment;
-use crate::speaker::{CrownRow, SplayRange};
+use crate::speaker::{CrownRow, JointOffset, SpeakerGeometry, SplayRange};
 use crate::tie::TieForce;
 use crate::vector::{angle_of, Vec2};
 use serde::Serialize;
@@ -49,7 +60,17 @@ pub struct JointResult {
     pub splay_deg: f64,
     pub row: CrownRow,
     pub crown_radius: f64,
+    /// Bras de levier géométrique couronne-ancrage. Recoupement de perçage
+    /// uniquement : la statique ne s'en sert plus (brief §7).
     pub lever_mm: f64,
+    /// Bras de levier de la bielle avant autour de la goupille de couronne,
+    /// celui qui résout réellement la jonction.
+    pub bielle_lever_mm: f64,
+    /// Rotation de la bielle avant, degrés : exactement la moitié du splay.
+    pub bielle_rotation_deg: f64,
+    /// Écartement des coins avant à cette jonction (brief §5). C'est le
+    /// `verticalMm` qu'il faut afficher comme espacement entre caissons.
+    pub offset: JointOffset,
 
     /// Positions des trous, repère du flanc chargé.
     pub loaded_orientation_hole: Vec2,
@@ -83,6 +104,9 @@ pub struct JointResult {
     pub traction: bool,
     pub hinge_reversed: bool,
     pub bumper_moment_nm: f64,
+    /// Moment déversé par la barre arrière dans le caisson du bas, réduit à
+    /// l'ancrage (N·m). Nul dans l'ancien modèle à deux forces.
+    pub bar_moment_nm: f64,
     pub residual_n: f64,
 
     /// Splay recommandé entre ces deux modèles, s'il y en a un déclaré
@@ -113,7 +137,11 @@ pub fn compute_joint(input: &JointInput) -> JointResult {
     // Quincaillerie de la jonction : elle appartient à l'enceinte du haut.
     let geo = input.chain[i].geo;
 
-    let pv_g = si.o + geo.pv.rotate(si.phi);
+    // Les quatre points de la jonction, repère global. `pa`/`pb` sont les deux
+    // goupilles de la bielle avant, `bo` la goupille de couronne (articulation
+    // simple), `an` l'ancrage de la barre sur le caisson du bas.
+    let pa = si.o + geo.hb.rotate(si.phi);
+    let pb = si.o + geo.pv_at(s).rotate(si.phi);
     let bo = si.o + geo.crown(s).rotate(si.phi);
     let an = si.o + geo.anchor_at(s).rotate(si.phi);
 
@@ -132,21 +160,28 @@ pub fn compute_joint(input: &JointInput) -> JointResult {
     }
     let cm = sum * (1.0 / w_total);
 
+    // Moment extérieur pris à la goupille de couronne : c'est elle qui porte
+    // l'inconnue vectorielle, donc c'est en ce point qu'elle disparaît de
+    // l'équation de moment.
     let mut rext = Vec2::new(0.0, -w_total);
-    let mut mext = (cm - pv_g).cross(rext);
+    let mut mext = (cm - bo).cross(rext);
 
     if let (Compartment::Flown, Some(tie)) = (input.compartment, input.tie) {
         let last = input.speakers[n - 1];
         let q = last.o + tie.point_local.rotate(last.phi);
         rext = rext + tie.force;
-        mext += (q - pv_g).cross(tie.force);
+        mext += (q - bo).cross(tie.force);
     }
 
-    let u = (bo - an).normalize();
-    let lever = (an - pv_g).cross(u);
-    let lambda = -mext / lever;
-    let f_ori = u * lambda;
-    let f_piv = -rext - f_ori;
+    // Bielle avant, élément à deux forces : direction imposée par ses deux
+    // goupilles, donc une seule inconnue scalaire.
+    let u = (pb - pa).normalize();
+    let bielle_lever = (pb - bo).cross(u);
+    let lambda = -mext / bielle_lever;
+    let f_piv = u * lambda;
+    // La goupille de couronne reprend tout le reste : c'est par elle que la
+    // barre arrière, encastrée sur le caisson du bas, passe son effort.
+    let f_ori = -rext - f_piv;
 
     let ti = match input.compartment {
         Compartment::Flown => i,
@@ -205,11 +240,24 @@ pub fn compute_joint(input: &JointInput) -> JointResult {
 
     let hinge_reversed = f_pivot.dot(gravity_local) < 0.0;
     // Entraxe de bielle de l'enceinte du haut : c'est elle qui porte le bras
-    // entre `hb` et le pivot effectif de la jonction.
+    // entre `hb` et la goupille basse de la jonction.
     let bumper_moment_nm = f_pivot.norm() * geo.bielle_entraxe / 1000.0;
+    // Moment que la barre arrière, encastrée sur le caisson du bas, y déverse
+    // en plus de sa force — réduit à l'ancrage. C'est exactement ce que le
+    // modèle à deux forces ignorait : il le supposait nul.
+    //
+    // Sa répartition entre l'ancrage et le verrou reste indéterminée : deux
+    // goupilles dans un même caisson, ce sont six inconnues pour trois
+    // équations. Il faut une hypothèse de groupe de goupilles, que le brief ne
+    // fixe pas — d'où la seule résultante ici, à l'ancrage.
+    let bar_moment_nm = ((bo - an).cross(f_ori) * input.share_per_flank).abs() / 1000.0;
+    // Traction de la barre : composante de l'effort de couronne le long de son
+    // axe. Le scalaire `lambda` ne renseigne plus là-dessus — il porte
+    // désormais la bielle, pas la barre.
+    let bar_axial = f_ori.dot((bo - an).normalize());
     let traction = match input.compartment {
-        Compartment::Stacked => lambda <= 0.0,
-        Compartment::Flown => lambda >= 0.0,
+        Compartment::Stacked => bar_axial <= 0.0,
+        Compartment::Flown => bar_axial >= 0.0,
     };
     let free_body_count = match input.compartment {
         Compartment::Flown => n - i - 1,
@@ -225,7 +273,10 @@ pub fn compute_joint(input: &JointInput) -> JointResult {
         splay_deg: s,
         row: CrownRow::of(s),
         crown_radius: geo.crown_radius_at(s),
-        lever_mm: lever.abs(),
+        lever_mm: geo.lever(s),
+        bielle_lever_mm: bielle_lever.abs(),
+        bielle_rotation_deg: SpeakerGeometry::bielle_rotation_deg(s),
+        offset: geo.joint_offset(s),
         loaded_orientation_hole,
         loaded_pivot_hole,
         constrained_hinge_hole,
@@ -248,6 +299,7 @@ pub fn compute_joint(input: &JointInput) -> JointResult {
         traction,
         hinge_reversed,
         bumper_moment_nm,
+        bar_moment_nm,
         residual_n: residual,
         recommended_splay_range_deg: input.recommended_splay.map(|r| [r.min_deg, r.max_deg]),
         acoustically_optimal: input.recommended_splay.is_none_or(|r| r.contains(s)),

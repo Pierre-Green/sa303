@@ -5,7 +5,7 @@
 //! avertissement. Sert la page "Équipement et enceinte", en lecture seule
 //! côté front.
 
-use super::geometry::{speaker_outline, CrownRow, SpeakerGeometry};
+use super::geometry::{speaker_outline, CrownRow, JointOffset, SpeakerGeometry};
 use super::model::SpeakerModel;
 use crate::vector::Vec2;
 use serde::Serialize;
@@ -21,6 +21,12 @@ pub struct CrownHoleReport {
     pub row: CrownRow,
     pub radius: f64,
     pub position: Vec2,
+    /// Goupille basse de la bielle avant à ce splay : le centre depuis lequel
+    /// ce trou est percé. Il bouge d'un trou à l'autre — les huit trous ne sont
+    /// pas sur un arc centré sur un point fixe (brief §4).
+    pub pv: Vec2,
+    /// Écartement des coins avant à ce splay (brief §5).
+    pub offset: JointOffset,
     pub lever_mm: f64,
     pub lever_check_mm: f64,
     pub discrepancy_mm: f64,
@@ -32,8 +38,12 @@ pub struct SpeakerGeometryReport {
     pub ha: f64,
     pub ht: Vec2,
     pub hb: Vec2,
-    pub pv: Vec2,
+    /// Goupille basse de la bielle au splay 0. Ce n'est **pas** un pivot fixe :
+    /// voir `CrownHoleReport::pv` pour sa position à chaque cran.
+    pub pv0: Vec2,
     pub anchor_local: Vec2,
+    pub latch_local: Vec2,
+    pub front_edge: Vec2,
     pub bielle_entraxe: f64,
     /// Un par trou percé de `splay_grid`.
     pub holes: Vec<CrownHoleReport>,
@@ -78,6 +88,8 @@ pub fn geometry_report(
             row: CrownRow::of(s),
             radius: geo.crown_radius_at(s),
             position: geo.crown(s),
+            pv: geo.pv_at(s),
+            offset: geo.joint_offset(s),
             lever_mm,
             lever_check_mm,
             discrepancy_mm,
@@ -87,8 +99,10 @@ pub fn geometry_report(
         ha: geo.ha,
         ht: geo.ht,
         hb: geo.hb,
-        pv: geo.pv,
+        pv0: geo.pv_at(0.0),
         anchor_local: geo.anchor_local,
+        latch_local: geo.latch_local,
+        front_edge: geo.front_edge,
         bielle_entraxe: geo.bielle_entraxe,
         holes,
         outline: speaker_outline(speaker),

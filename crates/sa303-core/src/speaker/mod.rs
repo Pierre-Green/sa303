@@ -8,7 +8,7 @@ mod geometry;
 mod model;
 mod report;
 
-pub use geometry::{is_odd_splay, speaker_outline, CrownRow, SpeakerGeometry};
+pub use geometry::{is_odd_splay, speaker_outline, CrownRow, JointOffset, SpeakerGeometry};
 pub use model::{
     BelowCompatibility, Crown, Hinge, SpeakerAcousticsModel, SpeakerMechanicalModel, SpeakerModel,
     SplayRange, WaveguideFront,

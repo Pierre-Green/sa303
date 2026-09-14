@@ -146,7 +146,7 @@ pub fn select_block_b(cases: &[LoadCase], block_a: &[BlockACase]) -> Vec<BlockBC
 mod tests {
     use super::*;
     use crate::cluster::model::Compartment;
-    use crate::speaker::CrownRow;
+    use crate::speaker::{CrownRow, JointOffset};
     use crate::vector::Vec2;
 
     /// Un `JointResult` synthétique : seuls les champs pertinents pour la sélection
@@ -169,6 +169,12 @@ mod tests {
             row: CrownRow::of(splay_deg),
             crown_radius: 680.0,
             lever_mm: 660.0,
+            bielle_lever_mm: 660.0,
+            bielle_rotation_deg: splay_deg / 2.0,
+            offset: JointOffset {
+                front_mm: 0.0,
+                vertical_mm: 0.0,
+            },
             loaded_orientation_hole: Vec2::ZERO,
             loaded_pivot_hole: Vec2::ZERO,
             constrained_hinge_hole: Vec2::ZERO,
@@ -191,6 +197,7 @@ mod tests {
             traction,
             hinge_reversed,
             bumper_moment_nm: 0.0,
+            bar_moment_nm: 0.0,
             residual_n: 0.0,
             recommended_splay_range_deg: None,
             acoustically_optimal: true,

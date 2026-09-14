@@ -62,10 +62,12 @@ pub struct SpeakerInstance {
 /// Construit la chaîne d'enceintes (brief §4). `splays_deg` du haut vers le
 /// bas, `chain` compte exactement une enceinte de plus.
 ///
-/// La jonction relie le pivot effectif de l'enceinte du **haut** (`pv`, qui
-/// matérialise où atterrit le trou avant-haut de celle du dessous) à la
-/// charnière haute de l'enceinte du **bas** (`ht`) : d'où les deux géométries
-/// différentes dans le même pas. Déclarer deux modèles compatibles
+/// La jonction relie les deux caissons par une **bielle** goupillée en deux
+/// points : en haut sur le trou avant-bas de l'enceinte du haut, en bas sur le
+/// trou avant-haut (`ht`) de celle du dessous. Le partage est égal et imposé
+/// par construction — pour un splay `k` la bielle tourne de `k/2` et le
+/// caisson du bas de `k/2` de plus — d'où `pv_at(k)` plutôt qu'un point fixe,
+/// et deux géométries différentes dans le même pas. Déclarer deux modèles compatibles
 /// (`BelowCompatibility`), c'est justement affirmer que ces deux pièces
 /// s'assemblent.
 pub fn build_cluster(
@@ -85,7 +87,11 @@ pub fn build_cluster(
         });
         if i < splays_deg.len() {
             let phi_next = phi + splays_deg[i].to_radians();
-            o = (o + speaker.geo.pv.rotate(phi)) - chain[i + 1].geo.ht.rotate(phi_next);
+            // `pv_at` et non un `pv` figé : la bielle avant s'incline de la
+            // moitié du splay, donc la goupille basse — là où atterrit le `ht`
+            // du caisson du dessous — se déplace avec lui (brief §2, §7).
+            let pv = speaker.geo.pv_at(splays_deg[i]);
+            o = (o + pv.rotate(phi)) - chain[i + 1].geo.ht.rotate(phi_next);
             phi = phi_next;
         }
     }

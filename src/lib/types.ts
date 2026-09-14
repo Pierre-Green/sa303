@@ -12,13 +12,19 @@ export interface Vec2 {
 export interface Hinge {
   x: number;
   y: number;
+  /** Distance verticale centre à centre au splay 0 : `2*y + entraxe de bielle`. */
   jointSeparation: number;
+  /** Recul du trou de charnière depuis la face avant (`e_perp`, EN 1993-1-8 t.3.9). */
+  edgePerp: number;
 }
 
 export interface Crown {
   radius: number;
   delta: number;
   anchorAngle: number;
+  /** Second point de fixation de la barre arrière : c'est lui qui l'encastre
+   * sur le caisson du bas, donc lui transmet un moment en plus d'une force. */
+  latchAngle: number;
   splay0Angle: number;
 }
 
@@ -197,7 +203,16 @@ export interface JointResult {
   splayDeg: number;
   row: CrownRow;
   crownRadius: number;
+  /** Bras couronne-ancrage, recoupement de perçage : plus utilisé par la statique. */
   leverMm: number;
+  /** Bras de la bielle avant autour de la goupille de couronne : celui qui
+   * résout réellement la jonction. */
+  bielleLeverMm: number;
+  /** Rotation de la bielle avant : exactement la moitié du splay. */
+  bielleRotationDeg: number;
+  /** Écartement des coins avant. C'est `verticalMm` qu'on affiche comme
+   * espacement entre caissons — `frontMm` reste sous 0.05 mm en line source. */
+  offset: JointOffset;
   loadedOrientationHole: Vec2;
   loadedPivotHole: Vec2;
   constrainedHingeHole: Vec2;
@@ -223,6 +238,9 @@ export interface JointResult {
   traction: boolean;
   hingeReversed: boolean;
   bumperMomentNm: number;
+  /** Moment déversé par la barre arrière dans le caisson du bas, réduit à
+   * l'ancrage. Nul dans l'ancien modèle à deux forces. */
+  barMomentNm: number;
   residualN: number;
   /** Splay recommandé entre les deux modèles de cette jonction, s'il y en a un
    * déclaré, en degrés `[min, max]`. */
@@ -319,11 +337,20 @@ export interface BumperView {
   pivotAngleDeg: number | null;
 }
 
+export interface JointOffset {
+  frontMm: number;
+  verticalMm: number;
+}
+
 export interface CrownHoleReport {
   splayDeg: number;
   row: CrownRow;
   radius: number;
   position: Vec2;
+  /** Goupille basse de bielle à ce splay : le centre depuis lequel ce trou est
+   * percé. Il bouge d'un cran à l'autre — les trous ne sont pas sur un arc. */
+  pv: Vec2;
+  offset: JointOffset;
   leverMm: number;
   leverCheckMm: number;
   discrepancyMm: number;
@@ -333,8 +360,11 @@ export interface SpeakerGeometryReport {
   ha: number;
   ht: Vec2;
   hb: Vec2;
-  pv: Vec2;
+  /** Goupille basse de bielle au splay 0. Ce n'est pas un pivot fixe. */
+  pv0: Vec2;
   anchorLocal: Vec2;
+  latchLocal: Vec2;
+  frontEdge: Vec2;
   bielleEntraxe: number;
   holes: CrownHoleReport[];
   /** Silhouette de l'enceinte (trapèze), repère enceinte — pour l'ArrayViewer. */
@@ -450,6 +480,10 @@ export interface WstNearField {
 export interface WstCriterion5Row {
   splayDeg: number;
   stepMm: number;
+  /** Jour en façade à cet angle. Variable d'une ligne à l'autre dès qu'une
+   * enceinte est sélectionnée : la charnière est en retrait de la face, donc
+   * incliner fait bâiller la façade, et le pas s'ouvre d'autant. */
+  gapMm: number;
   arf: number;
   /** Même ordre que `WstInputs.distancesM`. */
   fMaxByDistanceHz: (number | null)[];

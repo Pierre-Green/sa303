@@ -11,7 +11,7 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
-pub const SPEAKER_SCHEMA_VERSION: u32 = 3;
+pub const SPEAKER_SCHEMA_VERSION: u32 = 4;
 pub const CLUSTER_SCHEMA_VERSION: u32 = 2;
 pub const BUMPER_SCHEMA_VERSION: u32 = 1;
 pub const BUMPER_BAR_SCHEMA_VERSION: u32 = 1;
@@ -190,6 +190,17 @@ const SA303_SPLAY_GRID_V3: [f64; 17] = [
     0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 8.0, 9.0, 10.0, 11.0, 12.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0,
 ];
 
+/// Grille de trous après le passage à la liaison par bielle : huit crans, les
+/// pairs sur la couronne extérieure, les impairs sur l'intérieure. Figée.
+const SA303_SPLAY_GRID_V4: [f64; 8] = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 20.0];
+
+/// Perçage de référence SA303 pour les champs apparus en v4, quand une fiche
+/// enregistrée avant ne les porte pas. Dérivés de la table 3.9 EN 1993-1-8
+/// appliquée à la charge réelle (brief §1), donc pas des forfaits.
+const SA303_EDGE_PERP_MM: f64 = 12.569;
+const SA303_ANCHOR_ANGLE_DEG: f64 = 3.0;
+const SA303_LATCH_ANGLE_DEG: f64 = 1.0;
+
 fn same_grid(grid: &[f64], reference: &[f64]) -> bool {
     grid.len() == reference.len()
         && grid
@@ -212,6 +223,14 @@ fn migrate_speaker_model(mut s: SpeakerModel) -> SpeakerModel {
     if same_grid(&s.mechanical.splay_grid, &LEGACY_SA303_SPLAY_GRID) {
         s.mechanical.splay_grid = SA303_SPLAY_GRID_V3.to_vec();
     }
+    // v3 → v4 : la liaison avant est devenue une bielle et la barre arrière est
+    // goupillée en deux points. Les crans disponibles s'en trouvent réduits à
+    // huit ; les trous v3 qui ne sont plus percés doivent disparaître, sinon
+    // l'outil continuerait de proposer des jonctions impossibles. Même règle
+    // stricte qu'en v2 → v3 : une grille personnalisée n'est jamais écrasée.
+    if same_grid(&s.mechanical.splay_grid, &SA303_SPLAY_GRID_V3) {
+        s.mechanical.splay_grid = SA303_SPLAY_GRID_V4.to_vec();
+    }
     s.schema_version = SPEAKER_SCHEMA_VERSION;
     s
 }
@@ -226,6 +245,22 @@ fn migrate_speaker_model(mut s: SpeakerModel) -> SpeakerModel {
 /// Le renommage `radiatingHeight` → `wgOutputHeight` est couvert par un
 /// `#[serde(alias)]` et n'a donc rien à faire ici.
 fn migrate_legacy_speaker_json(mut value: serde_json::Value) -> serde_json::Value {
+    // v3 → v4 : `edgePerp`, `latchAngle`. Ils sont requis à la
+    // désérialisation, donc ils se remplissent ici, sur le JSON brut — une
+    // fiche v3 ne se lirait même pas sans ça. `anchorAngle` est repris de 2.5°
+    // à 3.0° car le trou d'ancrage a bougé avec l'accastillage, et le laisser
+    // décalerait toute la couronne en silence.
+    if let Some(hinge) = value.get_mut("hinge").and_then(|h| h.as_object_mut()) {
+        hinge
+            .entry("edgePerp")
+            .or_insert_with(|| SA303_EDGE_PERP_MM.into());
+    }
+    if let Some(crown) = value.get_mut("crown").and_then(|c| c.as_object_mut()) {
+        if !crown.contains_key("latchAngle") {
+            crown.insert("latchAngle".into(), SA303_LATCH_ANGLE_DEG.into());
+            crown.insert("anchorAngle".into(), SA303_ANCHOR_ANGLE_DEG.into());
+        }
+    }
     let Some(acoustics) = value.get_mut("acoustics").and_then(|a| a.as_object_mut()) else {
         return value;
     };
@@ -746,17 +781,54 @@ mod tests {
     #[test]
     fn the_hardware_change_reaches_speakers_already_on_disk() {
         // Le seed ne s'exécute que sur une installation vierge : sans cette
-        // reprise, une fiche déjà enregistrée continuerait d'offrir 6° et 7°,
-        // qui ne sont plus percés.
-        let mut speaker: SpeakerModel =
-            serde_json::from_value(migrate_legacy_speaker_json(legacy_speaker_json(20.0))).unwrap();
-        speaker.mechanical.splay_grid = LEGACY_SA303_SPLAY_GRID.to_vec();
+        // reprise, une fiche enregistrée sous l'ancien accastillage
+        // continuerait d'offrir des crans qui ne sont plus percés. Les deux
+        // sauts se rattrapent en une passe : v1 comme v3 arrivent en v4.
+        for legacy in [
+            LEGACY_SA303_SPLAY_GRID.to_vec(),
+            SA303_SPLAY_GRID_V3.to_vec(),
+        ] {
+            let mut speaker: SpeakerModel =
+                serde_json::from_value(migrate_legacy_speaker_json(legacy_speaker_json(20.0)))
+                    .unwrap();
+            speaker.mechanical.splay_grid = legacy;
 
-        let migrated = migrate_speaker_model(speaker);
-        assert_eq!(migrated.schema_version, SPEAKER_SCHEMA_VERSION);
-        assert_eq!(migrated.mechanical.splay_grid, SA303_SPLAY_GRID_V3.to_vec());
-        assert!(!migrated.mechanical.splay_grid.contains(&6.0));
-        assert!(migrated.mechanical.splay_grid.contains(&17.0));
+            let migrated = migrate_speaker_model(speaker);
+            assert_eq!(migrated.schema_version, SPEAKER_SCHEMA_VERSION);
+            assert_eq!(migrated.mechanical.splay_grid, SA303_SPLAY_GRID_V4.to_vec());
+            // 6° n'a jamais survécu à la v3, 17° ne survit pas à la v4.
+            assert!(!migrated.mechanical.splay_grid.contains(&6.0));
+            assert!(!migrated.mechanical.splay_grid.contains(&17.0));
+        }
+    }
+
+    /// Les champs apparus en v4 sont **requis** : une fiche v3 ne se
+    /// désérialiserait même pas sans la reprise sur le JSON brut. Et
+    /// `anchorAngle` doit bouger avec, sinon toute la couronne se décale en
+    /// silence (brief §1).
+    #[test]
+    fn a_speaker_saved_before_the_bielle_gets_the_holes_that_appeared_with_it() {
+        let speaker: SpeakerModel =
+            serde_json::from_value(migrate_legacy_speaker_json(legacy_speaker_json(20.0))).unwrap();
+        assert_eq!(speaker.mechanical.hinge.edge_perp, SA303_EDGE_PERP_MM);
+        assert_eq!(speaker.mechanical.crown.latch_angle, SA303_LATCH_ANGLE_DEG);
+        assert_eq!(speaker.mechanical.crown.anchor_angle, SA303_ANCHOR_ANGLE_DEG);
+    }
+
+    /// À l'inverse, une fiche qui porte déjà ces champs n'est pas réécrite :
+    /// la migration comble un manque, elle n'impose pas le perçage SA303 à une
+    /// enceinte percée autrement.
+    #[test]
+    fn a_speaker_that_already_declares_them_keeps_its_own_values() {
+        let mut raw = legacy_speaker_json(20.0);
+        raw["hinge"]["edgePerp"] = 9.5.into();
+        raw["crown"]["latchAngle"] = 2.0.into();
+        raw["crown"]["anchorAngle"] = 2.5.into();
+        let speaker: SpeakerModel =
+            serde_json::from_value(migrate_legacy_speaker_json(raw)).unwrap();
+        assert_eq!(speaker.mechanical.hinge.edge_perp, 9.5);
+        assert_eq!(speaker.mechanical.crown.latch_angle, 2.0);
+        assert_eq!(speaker.mechanical.crown.anchor_angle, 2.5);
     }
 
     #[test]
@@ -777,7 +849,7 @@ mod tests {
         // divergeaient, deux installations donneraient deux enceintes.
         assert_eq!(
             crate::seed::sa303_splay_grid(),
-            SA303_SPLAY_GRID_V3.to_vec()
+            SA303_SPLAY_GRID_V4.to_vec()
         );
     }
 

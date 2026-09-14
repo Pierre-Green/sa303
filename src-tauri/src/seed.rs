@@ -91,12 +91,12 @@ pub fn builtin_clusters() -> Vec<Builtin<Cluster>> {
 /// c'est la convention que `speaker::geometry::is_odd_splay` applique pour
 /// choisir le rayon, donc les deux doivent rester d'accord.
 #[cfg(test)]
-pub const SA303_SHORT_ARC_SPLAYS: [f64; 8] = [1.0, 3.0, 5.0, 9.0, 11.0, 15.0, 17.0, 19.0];
+pub const SA303_SHORT_ARC_SPLAYS: [f64; 3] = [1.0, 3.0, 5.0];
 
 /// Trous percés sur l'arc long, la couronne extérieure (rayon `radius`) : les
 /// splays pairs.
 #[cfg(test)]
-pub const SA303_LONG_ARC_SPLAYS: [f64; 9] = [0.0, 2.0, 4.0, 8.0, 10.0, 12.0, 16.0, 18.0, 20.0];
+pub const SA303_LONG_ARC_SPLAYS: [f64; 5] = [0.0, 2.0, 4.0, 10.0, 20.0];
 
 /// Les angles réellement disponibles sur l'accastillage, les deux arcs réunis
 /// et triés. Un angle absent de cette liste n'a pas de trou : la jonction est
