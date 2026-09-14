@@ -7,6 +7,7 @@ import type {
   BuiltinIds,
   BumperBarModel,
   BumperModel,
+  AuditExport,
   Cluster,
   ClusterResult,
   Settings,
@@ -51,6 +52,24 @@ export const api = {
     invoke<SpeakerGeometryReport>("get_speaker_geometry_report", { speakerModelId }),
 
   computeAggregateReport: () => invoke<AggregateReport>("compute_aggregate_report"),
+
+  // Export d'audit. `clusterIds` omis ou vide = toutes les grappes
+  // enregistrées ; sinon la sélection, dans l'ordre donné. L'horodatage vient
+  // d'ici parce que le cœur de calcul n'a volontairement pas d'horloge.
+  buildClusterAuditExport: (clusterIds?: string[]) =>
+    invoke<AuditExport>("build_cluster_audit_export", {
+      clusterIds: clusterIds ?? null,
+      generatedAt: new Date().toISOString(),
+    }),
+
+  // Même export, écrit via la boîte de dialogue système. Rend le chemin
+  // retenu, ou `null` si l'utilisateur a annulé — annuler n'est pas une erreur.
+  exportClustersForAudit: (clusterIds: string[] | undefined, suggestedFileName: string) =>
+    invoke<string | null>("export_clusters_for_audit", {
+      clusterIds: clusterIds ?? null,
+      generatedAt: new Date().toISOString(),
+      suggestedFileName,
+    }),
 
   exportAggregateReportForShapeOptimizationFem: () =>
     invoke<string>("export_aggregate_report_for_shape_optimization_fem"),

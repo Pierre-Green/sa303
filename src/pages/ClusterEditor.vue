@@ -218,6 +218,64 @@ watch(
 
 // Grappes suspendues d'abord, stacks ensuite — plus lisible qu'un ordre de
 // fichier arbitraire (tri stable : l'ordre relatif au sein d'un groupe est conservé).
+/* --- Export d'audit -------------------------------------------------------
+ *
+ * Trois portées, un seul bouton : la grappe courante, les grappes cochées, ou
+ * tout le catalogue. Le mode se déduit de l'état plutôt que d'être choisi dans
+ * un menu — cocher des grappes est déjà l'expression de l'intention.
+ */
+const exportSelection = ref<Set<string>>(new Set());
+const exporting = ref(false);
+const exportMessage = ref<string | null>(null);
+
+function toggleExportSelection(id: string) {
+  const next = new Set(exportSelection.value);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  exportSelection.value = next;
+}
+
+/** Ce que le bouton exportera si on clique maintenant. */
+const exportScope = computed(() => {
+  if (exportSelection.value.size > 0) {
+    return { ids: [...exportSelection.value], label: `${exportSelection.value.size} cochée(s)` };
+  }
+  if (selectedClusterId.value && isEditingExisting.value) {
+    return { ids: [selectedClusterId.value], label: "la grappe courante" };
+  }
+  return { ids: undefined, label: `tout (${clustersStore.items.length})` };
+});
+
+function exportFileName(ids: string[] | undefined): string {
+  const date = new Date().toISOString().slice(0, 10);
+  if (!ids) return `sa303-audit-toutes-${date}.json`;
+  if (ids.length === 1) {
+    const one = clustersStore.items.find((c) => c.id === ids[0]);
+    // Le nom de la grappe se retrouve dans le nom de fichier : un dossier
+    // d'audit contient vite une dizaine de ces exports.
+    const slug = (one?.name ?? "grappe").replace(/[^\p{L}\p{N}]+/gu, "-").toLowerCase();
+    return `sa303-audit-${slug}-${date}.json`;
+  }
+  return `sa303-audit-${ids.length}-grappes-${date}.json`;
+}
+
+async function exportForAudit() {
+  exporting.value = true;
+  exportMessage.value = null;
+  error.value = null;
+  try {
+    const { ids } = exportScope.value;
+    const path = await api.exportClustersForAudit(ids, exportFileName(ids));
+    // Annuler la boîte de dialogue n'est pas une erreur : pas de bandeau rouge
+    // pour un geste délibéré.
+    exportMessage.value = path ? `Exporté : ${path}` : null;
+  } catch (e) {
+    error.value = String(e);
+  } finally {
+    exporting.value = false;
+  }
+}
+
 const sortedClusters = computed(() =>
   [...clustersStore.items].sort((a, b) => {
     if (a.compartment === b.compartment) return 0;
@@ -414,18 +472,42 @@ watch(form, recomputeViewer, { deep: true, immediate: true });
           <Button size="sm" variant="outline" @click="newCluster">+ Ajouter</Button>
         </div>
         <div class="flex flex-col gap-1">
-          <button
+          <div
             v-for="c in sortedClusters"
             :key="c.id"
-            class="flex items-center justify-between rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
+            class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
             :class="c.id === selectedClusterId ? 'bg-accent text-accent-foreground' : ''"
-            @click="selectedClusterId = c.id"
           >
-            <span>{{ c.name }}</span>
-            <Badge :class="c.compartment === 'flown' ? 'bg-zone-orientation' : 'bg-zone-lift'" class="text-white">
-              {{ c.compartment === "flown" ? "vol" : "stack" }}
-            </Badge>
-          </button>
+            <Checkbox
+              :model-value="exportSelection.has(c.id)"
+              :aria-label="`Cocher ${c.name} pour l'export d'audit`"
+              @update:model-value="toggleExportSelection(c.id)"
+            />
+            <button class="flex flex-1 items-center justify-between text-left" @click="selectedClusterId = c.id">
+              <span>{{ c.name }}</span>
+              <Badge :class="c.compartment === 'flown' ? 'bg-zone-orientation' : 'bg-zone-lift'" class="text-white">
+                {{ c.compartment === "flown" ? "vol" : "stack" }}
+              </Badge>
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-3 flex flex-col gap-1.5">
+          <Button
+            size="sm"
+            variant="outline"
+            :disabled="exporting || clustersStore.items.length === 0"
+            @click="exportForAudit"
+          >
+            {{ exporting ? "Export en cours…" : "Exporter pour audit" }}
+          </Button>
+          <p class="flex items-center text-xs text-muted-foreground">
+            Portée : {{ exportScope.label }}
+            <InfoTip
+              text="JSON autoportant : d'abord les définitions des enceintes, bumpers et barres utilisés, puis chaque grappe avec le détail de ses jonctions — positions, efforts, moments de barre, efforts sur chaque goupille et taux de travail des cinq chemins. Cocher des grappes exporte la sélection ; sans coche, la grappe affichée ; sans grappe enregistrée affichée, tout le catalogue."
+            />
+          </p>
+          <p v-if="exportMessage" class="break-all text-xs text-status-ok">{{ exportMessage }}</p>
         </div>
       </div>
 

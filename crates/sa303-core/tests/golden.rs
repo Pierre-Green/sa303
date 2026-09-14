@@ -1811,3 +1811,206 @@ fn dump_joint_load_table() {
         }
     }
 }
+
+fn export_selection(bumper_id: &str) -> Vec<Cluster> {
+    representative_clusters(bumper_id)
+}
+
+/// L'export d'audit doit être **autoportant** : tout ce qu'il faut pour refaire
+/// le calcul doit être dedans. Un relecteur qui reçoit ce fichier n'a pas le
+/// logiciel, pas le catalogue, pas les réglages — s'il manque une cote, il ne
+/// peut ni recouper ni contester.
+#[test]
+fn the_audit_export_carries_everything_needed_to_recompute_it() {
+    use sa303_core::export::build_audit_export;
+
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let settings = default_settings();
+    let selection = export_selection(&bumper.id);
+
+    let export = build_audit_export(
+        "2026-09-15T10:00:00Z".into(),
+        &selection,
+        std::slice::from_ref(&sm),
+        std::slice::from_ref(&bumper),
+        &[],
+        &settings,
+    );
+
+    // Les réglages : sans eux aucun taux du document n'est reproductible.
+    assert_eq!(export.settings.safety_factor, settings.safety_factor);
+    assert_eq!(export.settings.dynamic_factor, settings.dynamic_factor);
+
+    // Toute grappe est soit résolue, soit expliquée. Jamais disparue.
+    assert_eq!(
+        export.clusters.len() + export.impossible.len(),
+        selection.len(),
+        "des grappes se sont perdues entre l'entrée et la sortie"
+    );
+    for dead in &export.impossible {
+        assert!(!dead.reason.is_empty(), "{} sans raison", dead.name);
+    }
+
+    for c in &export.clusters {
+        // Chaque modèle référencé est présent dans les définitions : c'est
+        // l'exigence d'autoportance.
+        for id in &c.definition.speaker_model_ids {
+            assert!(
+                export.definitions.speakers.iter().any(|s| &s.id == id),
+                "{} : enceinte « {id} » absente des définitions",
+                c.definition.name
+            );
+        }
+        assert!(
+            export
+                .definitions
+                .bumpers
+                .iter()
+                .any(|b| b.id == c.definition.bumper_model_id),
+            "{} : bumper absent des définitions",
+            c.definition.name
+        );
+
+        // Une vérification par jonction, et le pire de la grappe les majore
+        // toutes — sinon le résumé mentirait sur le détail qu'il résume.
+        assert_eq!(c.joint_checks.len(), c.result.joints.len());
+        for check in &c.joint_checks {
+            assert!(c.utilization_worst >= check.utilization_worst - 1e-12);
+            // Le chemin nommé comme gouvernant est bien celui qui gouverne.
+            let by_name = match check.governing_path {
+                "couronne" => check.utilization_crown,
+                "bielle" => check.utilization_bielle,
+                "ancrage" => check.utilization_anchor,
+                "verrou" => check.utilization_latch,
+                "flexion de barre" => check.utilization_bar,
+                other => panic!("chemin inconnu : {other}"),
+            };
+            assert!((by_name - check.utilization_worst).abs() < 1e-12);
+        }
+    }
+}
+
+/// Seuls les modèles réellement référencés partent. Livrer tout le catalogue
+/// noierait la pièce à auditer dans des modèles qui ne participent pas, et
+/// laisserait croire qu'ils ont été pris en compte.
+#[test]
+fn the_audit_export_ships_only_the_models_the_selection_references() {
+    use sa303_core::export::build_audit_export;
+
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let settings = default_settings();
+
+    // Un second catalogue, qu'aucune grappe de la sélection n'utilise.
+    let mut unused_speaker = default_speaker();
+    unused_speaker.id = "jamais-monte".into();
+    let mut unused_bumper = default_bumper();
+    unused_bumper.id = "bumper-inutilise".into();
+
+    let selection = vec![flown_cluster("une seule", &[1.0, 5.0], None, &bumper.id)];
+    let export = build_audit_export(
+        "2026-09-15T10:00:00Z".into(),
+        &selection,
+        &[sm.clone(), unused_speaker],
+        &[bumper.clone(), unused_bumper],
+        &[],
+        &settings,
+    );
+
+    assert_eq!(export.definitions.speakers.len(), 1);
+    assert_eq!(export.definitions.speakers[0].id, sm.id);
+    assert_eq!(export.definitions.bumpers.len(), 1);
+    assert_eq!(export.definitions.bumpers[0].id, bumper.id);
+}
+
+/// Une grappe qui ne se résout pas n'est pas omise : elle part avec sa raison.
+/// Un export où il manque des grappes sans explication ne se recoupe pas avec
+/// l'écran dont il sort.
+#[test]
+fn a_cluster_that_cannot_be_solved_is_exported_with_its_reason() {
+    use sa303_core::export::build_audit_export;
+
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let settings = default_settings();
+
+    // 7° n'est pas percé sur la grille en vigueur.
+    let selection = vec![flown_cluster("angle inexistant", &[7.0], None, &bumper.id)];
+    let export = build_audit_export(
+        "2026-09-15T10:00:00Z".into(),
+        &selection,
+        std::slice::from_ref(&sm),
+        std::slice::from_ref(&bumper),
+        &[],
+        &settings,
+    );
+
+    assert!(export.clusters.is_empty());
+    assert_eq!(export.impossible.len(), 1);
+    assert!(
+        export.impossible[0].reason.contains("7"),
+        "{}",
+        export.impossible[0].reason
+    );
+}
+
+/// Le JSON produit doit être relisible tel quel : une structure qui ne
+/// sérialise pas rond ne s'audite pas.
+#[test]
+fn the_audit_export_round_trips_through_json() {
+    use sa303_core::export::build_audit_export;
+
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let settings = default_settings();
+    let selection = vec![flown_cluster("aller-retour", &[1.0, 10.0], None, &bumper.id)];
+    let export = build_audit_export(
+        "2026-09-15T10:00:00Z".into(),
+        &selection,
+        std::slice::from_ref(&sm),
+        std::slice::from_ref(&bumper),
+        &[],
+        &settings,
+    );
+
+    let json = serde_json::to_string_pretty(&export).expect("sérialisable");
+    let parsed: serde_json::Value = serde_json::from_str(&json).expect("relisible");
+
+    // L'ordre du document : les définitions avant les résultats.
+    assert!(
+        json.find("\"definitions\"") < json.find("\"clusters\""),
+        "les définitions doivent précéder les grappes"
+    );
+    // Et le détail attendu est bien là, jusqu'aux sections de barre.
+    let joint = &parsed["clusters"][0]["jointChecks"][0];
+    assert!(joint["governingPath"].is_string());
+    assert!(joint["bar"]["sections"][0]["stressMpa"].is_number());
+    assert!(parsed["clusters"][0]["result"]["joints"][0]["fAnchorN"].is_number());
+    assert!(parsed["definitions"]["speakers"][0]["rearBar"]["length"].is_number());
+}
+
+/// Échantillon d export, pour inspecter la forme du document sans passer par
+/// l interface :
+///
+/// ```text
+/// cargo test --test golden dump_audit_export_sample -- --ignored --nocapture
+/// ```
+#[test]
+#[ignore]
+fn dump_audit_export_sample() {
+    use sa303_core::export::build_audit_export;
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let settings = default_settings();
+    let selection = vec![flown_cluster("Exemple", &[5.0, 10.0], None, &bumper.id)];
+    let export = build_audit_export(
+        "2026-09-15T10:00:00Z".into(),
+        &selection,
+        std::slice::from_ref(&sm),
+        std::slice::from_ref(&bumper),
+        &[],
+        &settings,
+    );
+    println!("{}", serde_json::to_string_pretty(&export).unwrap());
+}

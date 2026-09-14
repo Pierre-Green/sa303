@@ -4,6 +4,7 @@
 use crate::persistence;
 use sa303_core::bumper::{BumperBarModel, BumperModel};
 use sa303_core::cluster::Cluster;
+use sa303_core::export::{build_audit_export, AuditExport};
 use sa303_core::settings::Settings;
 use sa303_core::speaker::{geometry_report, SpeakerGeometryReport, SpeakerModel};
 use sa303_core::wst::{wst_report, WstInputs, WstReport};
@@ -161,6 +162,84 @@ pub fn compute_aggregate_report(app: AppHandle) -> Result<AggregateReport, Strin
         &bumpers,
         &bumper_bars,
     ))
+}
+
+/// Export d'audit : un JSON autoportant décrivant une sélection de grappes.
+///
+/// `cluster_ids` absent ou vide = toutes les grappes enregistrées. Sinon, la
+/// sélection, dans l'ordre où le front l'a donnée — c'est l'ordre d'affichage,
+/// donc celui que le relecteur retrouvera à l'écran.
+///
+/// `generated_at` vient du front plutôt que d'une horloge côté Rust : le cœur
+/// de calcul n'a pas de dépendance à une bibliothèque de dates, et lui en
+/// ajouter une pour un champ d'en-tête serait cher payé.
+#[tauri::command]
+pub fn build_cluster_audit_export(
+    app: AppHandle,
+    cluster_ids: Option<Vec<String>>,
+    generated_at: String,
+) -> Result<AuditExport, String> {
+    let all = persistence::list_clusters(&app)?;
+    let selection: Vec<Cluster> = match cluster_ids {
+        Some(ids) if !ids.is_empty() => {
+            // Résolus dans l'ordre demandé, et une absence est une erreur :
+            // exporter en silence une sélection amputée donnerait un document
+            // qui ne correspond à rien de ce que l'utilisateur a vu.
+            ids.iter()
+                .map(|id| {
+                    all.iter()
+                        .find(|c| &c.id == id)
+                        .cloned()
+                        .ok_or_else(|| format!("grappe « {id} » introuvable"))
+                })
+                .collect::<Result<_, _>>()?
+        }
+        _ => all,
+    };
+    if selection.is_empty() {
+        return Err("aucune grappe à exporter".into());
+    }
+
+    Ok(build_audit_export(
+        generated_at,
+        &selection,
+        &persistence::list_speaker_models(&app)?,
+        &persistence::list_bumper_models(&app)?,
+        &persistence::list_bumper_bar_models(&app)?,
+        &persistence::load_settings(&app)?,
+    ))
+}
+
+/// Même export, écrit sur disque via la boîte de dialogue système.
+///
+/// Rend le chemin retenu, ou `None` si l'utilisateur a annulé — annuler n'est
+/// pas une erreur, et remonter un `Err` ferait afficher un bandeau rouge pour
+/// un geste délibéré.
+#[tauri::command]
+pub async fn export_clusters_for_audit(
+    app: AppHandle,
+    cluster_ids: Option<Vec<String>>,
+    generated_at: String,
+    suggested_file_name: String,
+) -> Result<Option<String>, String> {
+    let export = build_cluster_audit_export(app.clone(), cluster_ids, generated_at)?;
+    // Indenté : ce fichier est fait pour être lu et commenté par un tiers, pas
+    // seulement reparsé.
+    let json = serde_json::to_string_pretty(&export).map_err(|e| e.to_string())?;
+
+    let Some(file) = app
+        .dialog()
+        .file()
+        .set_title("Exporter les grappes pour audit")
+        .set_file_name(&suggested_file_name)
+        .add_filter("JSON", &["json"])
+        .blocking_save_file()
+    else {
+        return Ok(None);
+    };
+    let path = file.into_path().map_err(|e| e.to_string())?;
+    std::fs::write(&path, json).map_err(|e| format!("écriture impossible : {e}"))?;
+    Ok(Some(path.to_string_lossy().into_owned()))
 }
 
 #[tauri::command]

@@ -34,6 +34,8 @@ pub fn run() {
             commands::get_speaker_geometry_report,
             commands::compute_aggregate_report,
             commands::compute_wst_report,
+            commands::build_cluster_audit_export,
+            commands::export_clusters_for_audit,
             commands::export_aggregate_report_for_shape_optimization_fem
         ])
         .run(tauri::generate_context!())

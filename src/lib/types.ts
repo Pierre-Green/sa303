@@ -613,3 +613,78 @@ export interface WstReport {
   /** Renseigné uniquement pour un guide à front courbé. */
   curvedGuide: WstCurvedGuide | null;
 }
+
+/* ---------------------------------------------------------------------------
+ * Export d'audit (brief : valider le calcul avec un tiers).
+ *
+ * Document autoportant : les définitions des pièces d'abord, les résultats
+ * ensuite. Un relecteur qui reçoit ce fichier n'a ni le logiciel, ni le
+ * catalogue, ni les réglages — tout ce qu'il faut pour refaire le calcul doit
+ * donc être dedans.
+ * ------------------------------------------------------------------------- */
+
+/** Une section vérifiée de la barre arrière. */
+export interface BarSectionCheck {
+  location: string;
+  atMm: number;
+  widthMm: number;
+  drilled: boolean;
+  momentNmm: number;
+  axialN: number;
+  stressMpa: number;
+  /** Rapport à R_m/sf — le critère. */
+  utilization: number;
+  /** Rapport à f_y, indicatif : ce n'est pas le critère retenu. */
+  yieldRatio: number;
+}
+
+export interface BarCheck {
+  sections: BarSectionCheck[];
+  /** Index de la section la plus sollicitée dans `sections`. */
+  worst: number;
+}
+
+/** Les cinq chemins de charge d'une jonction, chacun rapporté à son admissible. */
+export interface JointChecks {
+  utilizationCrown: number;
+  utilizationBielle: number;
+  utilizationAnchor: number;
+  utilizationLatch: number;
+  utilizationBar: number;
+  utilizationWorst: number;
+  /** Nom du chemin qui gouverne : l'information qui dit quoi renforcer. */
+  governingPath: string;
+  bar: BarCheck;
+}
+
+export interface ClusterExport {
+  definition: Cluster;
+  result: ClusterResult;
+  /** Un par jonction, même ordre que `result.joints`. */
+  jointChecks: JointChecks[];
+  utilizationWorst: number;
+}
+
+export interface ImpossibleClusterExport {
+  id: string;
+  name: string;
+  reason: string;
+}
+
+export interface AuditExportDefinitions {
+  speakers: SpeakerModel[];
+  bumpers: BumperModel[];
+  bumperBars: BumperBarModel[];
+}
+
+export interface AuditExport {
+  schemaVersion: number;
+  generatedAt: string;
+  /** Réglages sous lesquels tout le reste a été calculé. Sans eux, aucun taux
+   * du document n'est reproductible. */
+  settings: Settings;
+  definitions: AuditExportDefinitions;
+  clusters: ClusterExport[];
+  /** Grappes écartées, avec leur raison. Jamais omises en silence. */
+  impossible: ImpossibleClusterExport[];
+}

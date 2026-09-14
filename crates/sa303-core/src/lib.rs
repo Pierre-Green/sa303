@@ -8,6 +8,7 @@
 pub mod bumper;
 pub mod checks;
 pub mod cluster;
+pub mod export;
 pub mod settings;
 pub mod speaker;
 pub mod tie;
