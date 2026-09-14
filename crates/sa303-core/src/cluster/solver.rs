@@ -302,7 +302,7 @@ fn compute_bumper_loads(
     let geo = chain[0].geo;
     let b0 = speakers[0];
     let pvg = b0.o + geo.ht.rotate(b0.phi);
-    let an_local = geo.anchor_at(0.0);
+    let an_local = geo.anchor_local;
     let bo_local = Vec2::new(an_local.x, pickup_local.y);
     let bo = b0.o + bo_local.rotate(b0.phi);
     let an = b0.o + an_local.rotate(b0.phi);
@@ -470,12 +470,8 @@ pub fn compute_cluster(
                     if raw_x.abs() <= bumper_bar_max {
                         (Vec2::new(raw_x, pickup_height), false, None, None)
                     } else {
-                        // Point 0° arrière-bas de l'enceinte du bas — même
-                        // référence que côté bumper (anchor_at(0)), pas la
-                        // charnière avant.
-                        // Point 0° de l'enceinte du BAS : c'est elle qui porte
-                        // la tirette, pas celle du haut.
-                        let tie_point = chain[chain.len() - 1].geo.anchor_at(0.0);
+                        // Point 0° arrière-bas de l'enceinte
+                        let tie_point = chain[chain.len() - 1].geo.crown(0.0);
                         let capped_x = bumper_bar_max * raw_x.signum();
                         let capped_pickup = Vec2::new(capped_x, pickup_height);
                         let range = tie_valid_angle_range_deg(
