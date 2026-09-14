@@ -570,7 +570,12 @@ pub fn compute_cluster(
             };
             compute_joint(&input)
         })
-        .collect();
+        // Une jonction sans solution n'est pas un résultat dégradé : c'est une
+        // configuration impossible, au même titre qu'un splay sans trou percé.
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| ImpossibleConfiguration {
+            reason: format!("Jonction {} : {}", e.joint_index + 1, e.reason),
+        })?;
 
     let pickup_global =
         (compartment == Compartment::Flown).then(|| speakers[0].o + pickup.rotate(speakers[0].phi));

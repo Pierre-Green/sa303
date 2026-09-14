@@ -226,3 +226,35 @@ fn an_edge_distance_below_the_minimum_is_reported() {
     );
 }
 
+
+/// §7 — un bras de bielle nul doit remonter une erreur, pas un NaN. Les
+/// comparaisons sur NaN étant fausses, un NaN traverserait tous les seuils de
+/// vérification sans en déclencher un seul : la grappe passerait pour bonne.
+#[test]
+fn a_degenerate_bielle_lever_is_an_error_not_a_silent_nan() {
+    use sa303_core::cluster::{build_cluster, compute_joint, ChainSpeaker, Compartment, JointInput};
+
+    let mut sm = sa303();
+    // On amène la couronne sur la ligne d'action de la bielle : au splay 0
+    // celle-ci est verticale sous `hb`, donc un rayon nul y place la goupille
+    // de couronne exactement.
+    sm.mechanical.crown.radius = 0.0;
+    sm.mechanical.crown.delta = 0.0;
+    let chain = vec![ChainSpeaker::from_model(&sm); 2];
+    let splays = [0.0];
+    let speakers = build_cluster(&chain, &splays, 0.0);
+    let err = compute_joint(&JointInput {
+        chain: &chain,
+        speakers: &speakers,
+        splays_deg: &splays,
+        joint_index: 0,
+        compartment: Compartment::Flown,
+        g: 9.80665,
+        k_dyn: 1.3,
+        share_per_flank: 0.5,
+        tie: None,
+        recommended_splay: None,
+    })
+    .expect_err("bras nul : la jonction n'a pas de solution");
+    assert!(err.reason.contains("bras de bielle"), "{}", err.reason);
+}

@@ -259,7 +259,7 @@ mod tests {
             f_pivot_global: Vec2::new(mag_p, 0.0),
             traction,
             hinge_reversed,
-            bumper_moment_nm: 0.0,
+            moment_residual_nmm: 0.0,
             bar_axial_n: 0.0,
             bar_shear_n: 0.0,
             bar_moment_at_pair_nm: 0.0,

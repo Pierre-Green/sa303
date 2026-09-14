@@ -18,6 +18,25 @@ export interface Hinge {
   edgePerp: number;
 }
 
+export interface RearBar {
+  thickness: number;
+  length: number;
+  wideWidth: number;
+  /** Longueur de la section large, depuis l'extrémité couronne. C'est ce
+   * bout-là qui est large. */
+  wideLength: number;
+  narrowWidth: number;
+  holeDiameter: number;
+  /** Deux trous de couronne : l'entraxe couronne-ancrage n'est pas le même sur
+   * les deux couronnes. */
+  crownHoleOuterAt: number;
+  crownHoleInnerAt: number;
+  latchHoleAt: number;
+  anchorHoleAt: number;
+  yieldStrength: number;
+  ultimateStrength: number;
+}
+
 export interface Crown {
   radius: number;
   delta: number;
@@ -84,6 +103,7 @@ export interface SpeakerModel {
   crown: Crown;
   splayGrid: number[];
   frameHoleSplay: number;
+  rearBar: RearBar;
   acoustics: SpeakerAcoustics;
   compatibleBelow: BelowCompatibility[];
 }
@@ -237,11 +257,36 @@ export interface JointResult {
   fPivotGlobal: Vec2;
   traction: boolean;
   hingeReversed: boolean;
-  bumperMomentNm: number;
-  /** Moment déversé par la barre arrière dans le caisson du bas, réduit à
-   * l'ancrage. Nul dans l'ancien modèle à deux forces. */
-  barMomentNm: number;
+  /** Décomposition de l'effort de couronne dans le repère de la barre, par
+   * flanc. Axial positif = barre comprimée. */
+  barAxialN: number;
+  barShearN: number;
+  /** Moment réduit au barycentre de la paire ancrage/verrou, N·m par flanc. */
+  barMomentAtPairNm: number;
+  /** Moment de flexion maximal dans la barre, N·m par flanc. Nul à la couronne
+   * (articulation), maximal au premier trou de la paire. */
+  barMomentMaxNm: number;
+  barMomentMaxAtMm: number;
+  rearBar: RearBar;
+  /** Efforts sur les deux goupilles de la paire, repère du flanc chargé, par
+   * flanc. Répartition élastique à raideurs égales. */
+  fAnchor: Vec2;
+  fLatch: Vec2;
+  fAnchorN: number;
+  fAnchorAngleDeg: number;
+  fLatchN: number;
+  fLatchAngleDeg: number;
+  /** Les trois trous de barre dans le repère du flanc chargé, cohérents entre
+   * eux et avec les efforts — de quoi recouper un moment. */
+  crownHoleLocal: Vec2;
+  anchorHoleLocal: Vec2;
+  latchHoleLocal: Vec2;
+  anchorHoleGlobal: Vec2;
+  latchHoleGlobal: Vec2;
   residualN: number;
+  /** Résidu de l'équation de moment, pris ailleurs qu'à la goupille de
+   * couronne. Contrairement à `residualN`, il n'est pas nul par construction. */
+  momentResidualNmm: number;
   /** Splay recommandé entre les deux modèles de cette jonction, s'il y en a un
    * déclaré, en degrés `[min, max]`. */
   recommendedSplayRangeDeg: [number, number] | null;

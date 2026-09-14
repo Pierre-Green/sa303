@@ -210,10 +210,52 @@ fn invariant_equilibrium_residual_is_negligible() {
                 j.residual_n,
                 j.joint_index + 1
             );
+
+            // Le résidu de force ci-dessus est nul par construction : `f_ori`
+            // est posé à `−rext − f_piv`, donc il passerait même si `lambda`
+            // était faux. C'est le résidu de MOMENT, pris ailleurs qu'à la
+            // goupille de couronne, qui atteste réellement de la résolution.
+            let scale = rext_norm * 1_000.0;
+            assert!(
+                j.moment_residual_nmm < 1e-6 * scale,
+                "{}: résidu de moment {:.3} N·mm trop grand au joint {} (échelle {scale:.0})",
+                cluster.name,
+                j.moment_residual_nmm,
+                j.joint_index + 1
+            );
         }
     }
 }
 
+/// Le résidu de moment doit réellement mordre : un résidu nul ne prouve rien
+/// tant qu'on n'a pas montré qu'une erreur le ferait sortir. On compare donc la
+/// tolérance à ce que produirait une bielle fausse de 1 % — le seul terme de
+/// l'équation de moment qui ne se rattrape pas tout seul.
+#[test]
+fn the_moment_residual_is_sensitive_enough_to_catch_a_wrong_bielle_force() {
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let settings = default_settings();
+    let cluster = flown_cluster("contrôle", &[1.0, 5.0, 10.0], None, &bumper.id);
+    let result = compute_cluster(std::slice::from_ref(&sm), &cluster, &settings, &bumper, &[])
+        .expect("configuration possible");
+
+    for j in &result.joints {
+        // Efforts totaux, l'inverse du `sg = −share` appliqué à la sortie.
+        let f_piv_total = j.f_pivot.norm() / settings.share_per_flank;
+        // Une bielle fausse de 1 % laisse un moment résiduel de son bras.
+        let would_leave = 0.01 * f_piv_total * j.bielle_lever_mm;
+        let tolerance = 1e-6 * (j.f_orientation + j.f_pivot).norm().max(1.0) * 1_000.0;
+        assert!(
+            would_leave > 1_000.0 * tolerance,
+            "J{} : une erreur de 1 % laisserait {would_leave:.1} N·mm pour une \
+             tolérance de {tolerance:.4} — le test ne mordrait pas",
+            j.joint_index + 1
+        );
+        // Et le calcul réel, lui, est bien en dessous.
+        assert!(j.moment_residual_nmm < tolerance);
+    }
+}
 #[test]
 fn invariant_lever_matches_trigonometric_recoupement() {
     use sa303_core::speaker::SpeakerGeometry;

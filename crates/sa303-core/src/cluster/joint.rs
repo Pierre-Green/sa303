@@ -30,6 +30,20 @@ use crate::tie::TieForce;
 use crate::vector::{angle_of, Vec2};
 use serde::Serialize;
 
+/// Bras de bielle en dessous duquel la jonction n'a pas de solution. Très en
+/// dessous des 629 mm de la géométrie SA303 : cette borne ne se déclenche que
+/// sur un perçage aberrant, jamais sur une variation de splay.
+pub const MIN_BIELLE_LEVER_MM: f64 = 1.0;
+
+/// Jonction sans solution : la géométrie ne permet pas de résoudre l'équilibre.
+/// Remontée plutôt que rendue en NaN — les comparaisons sur NaN étant fausses,
+/// un NaN traverserait tous les seuils sans en déclencher aucun.
+#[derive(Clone, Debug)]
+pub struct JointInconsistency {
+    pub joint_index: usize,
+    pub reason: String,
+}
+
 pub struct JointInput<'a> {
     /// Une entrée par enceinte de la chaîne, du haut vers le bas.
     pub chain: &'a [ChainSpeaker],
@@ -109,7 +123,6 @@ pub struct JointResult {
 
     pub traction: bool,
     pub hinge_reversed: bool,
-    pub bumper_moment_nm: f64,
 
     /// Effort de couronne décomposé dans le repère de la **barre** : axe
     /// `e = (an − bo).normalize()`, dirigé de la couronne vers l'ancrage.
@@ -165,6 +178,11 @@ pub struct JointResult {
     pub anchor_hole_global: Vec2,
     pub latch_hole_global: Vec2,
     pub residual_n: f64,
+    /// Résidu de l'équation de moment, pris ailleurs qu'à la goupille de
+    /// couronne (N·mm, effort total et non par flanc). Contrairement à
+    /// `residual_n`, il n'est **pas** nul par construction : c'est lui qui
+    /// atteste que la résolution est juste.
+    pub moment_residual_nmm: f64,
 
     /// Splay recommandé entre ces deux modèles, s'il y en a un déclaré
     /// (`BelowCompatibility::recommended_splay`), en degrés `[min, max]`.
@@ -185,7 +203,7 @@ impl JointResult {
     }
 }
 
-pub fn compute_joint(input: &JointInput) -> JointResult {
+pub fn compute_joint(input: &JointInput) -> Result<JointResult, JointInconsistency> {
     let i = input.joint_index;
     let n = input.speakers.len();
     let si = input.speakers[i];
@@ -235,6 +253,22 @@ pub fn compute_joint(input: &JointInput) -> JointResult {
     // goupilles, donc une seule inconnue scalaire.
     let u = (pb - pa).normalize();
     let bielle_lever = (pb - bo).cross(u);
+    // Sans cette garde, une géométrie où la ligne d'action de la bielle passe
+    // par la goupille de couronne rendrait un `lambda` infini, puis des efforts
+    // NaN qui traverseraient tout le calcul sans rien déclencher : les
+    // comparaisons sur NaN sont fausses, donc aucun seuil ne les arrêterait.
+    // 1 mm est très en dessous des 629 mm de la géométrie SA303 — cette borne
+    // ne peut se déclencher que sur un perçage aberrant.
+    if bielle_lever.abs() < MIN_BIELLE_LEVER_MM {
+        return Err(JointInconsistency {
+            joint_index: i,
+            reason: format!(
+                "bras de bielle {bielle_lever:.4} mm au splay {s}° : la ligne d'action \
+                 de la bielle passe par la goupille de couronne, la jonction n'a pas \
+                 de solution"
+            ),
+        });
+    }
     let lambda = -mext / bielle_lever;
     let f_piv = u * lambda;
     // La goupille de couronne reprend tout le reste : c'est par elle que la
@@ -295,7 +329,19 @@ pub fn compute_joint(input: &JointInput) -> JointResult {
     let f_latch = (f_latch_g * input.share_per_flank).rotate_transpose(rt_phi);
     let gravity_local = Vec2::new(0.0, -1.0).rotate_transpose(rt_phi);
     let ext_local = (rext * input.share_per_flank).rotate_transpose(rt_phi);
+    // Résidu de FORCE : nul par construction, puisque `f_ori` est posé à
+    // `−rext − f_piv`. Conservé parce qu'il attrape une faute de signe ou de
+    // repère dans les rotations, mais il ne teste pas la résolution.
     let residual = (f_orientation + f_pivot - ext_local).norm();
+    // Résidu de MOMENT, lui, autour d'un point **autre** que la goupille de
+    // couronne. À `bo` il serait nul par construction lui aussi — c'est là
+    // qu'on a annulé l'inconnue vectorielle. Pris en `pa` (goupille haute de
+    // bielle) et au centre de masse, il vérifie réellement que `lambda` sort
+    // juste : une erreur de bras ou de signe s'y voit immédiatement.
+    let moment_residual_nmm = [pa, cm]
+        .into_iter()
+        .map(|o| ((bo - o).cross(f_ori) + (pb - o).cross(f_piv) + (cm - o).cross(rext)).abs())
+        .fold(0.0_f64, f64::max);
 
     let (loaded_orientation_hole, constrained_crown_splay) = match input.compartment {
         Compartment::Flown => (loaded.geo.crown(s), None),
@@ -337,9 +383,6 @@ pub fn compute_joint(input: &JointInput) -> JointResult {
     let f_pivot_angle_deg = angle_of(f_pivot);
 
     let hinge_reversed = f_pivot.dot(gravity_local) < 0.0;
-    // Entraxe de bielle de l'enceinte du haut : c'est elle qui porte le bras
-    // entre `hb` et la goupille basse de la jonction.
-    let bumper_moment_nm = f_pivot.norm() * geo.bielle_entraxe / 1000.0;
     // --- La barre arrière, dans son propre repère ---------------------------
     //
     // `f_ori` est l'effort que le caisson du haut applique à la barre par la
@@ -388,7 +431,7 @@ pub fn compute_joint(input: &JointInput) -> JointResult {
         Compartment::Stacked => i + 1,
     };
 
-    JointResult {
+    Ok(JointResult {
         joint_index: i,
         compartment: input.compartment,
         free_body_count,
@@ -422,7 +465,6 @@ pub fn compute_joint(input: &JointInput) -> JointResult {
         f_pivot_global,
         traction,
         hinge_reversed,
-        bumper_moment_nm,
         bar_axial_n,
         bar_shear_n,
         bar_moment_at_pair_nm,
@@ -441,7 +483,8 @@ pub fn compute_joint(input: &JointInput) -> JointResult {
         anchor_hole_global: an,
         latch_hole_global: lt,
         residual_n: residual,
+        moment_residual_nmm,
         recommended_splay_range_deg: input.recommended_splay.map(|r| [r.min_deg, r.max_deg]),
         acoustically_optimal: input.recommended_splay.is_none_or(|r| r.contains(s)),
-    }
+    })
 }
