@@ -315,6 +315,65 @@ pub struct ImpossibleConfiguration {
     pub reason: String,
 }
 
+/// Efforts aux **deux pions** qui tiennent le bumper à l'enceinte de référence
+/// en **stack** : le pion avant (charnière haute, `ht`) et le pion arrière (le
+/// trou de cadre de calage, celui qui fixe l'assiette).
+///
+/// Le bumper est un corps rigide goupillé en deux points sur cette enceinte :
+/// c'est exactement le problème de la paire ancrage/verrou, et il se résout de
+/// la même façon — part directe partagée en deux, plus un couple perpendiculaire
+/// à la ligne des deux pions, à raideurs égales. Deux pions dans un même corps,
+/// ce sont 4 inconnues pour 3 équations : sans cette hypothèse, la répartition
+/// n'est pas déterminée.
+///
+/// Rien de tout ceci n'existait en stack : le bumper y était purement
+/// géométrique. Cette fonction n'altère donc aucune valeur déjà validée, elle
+/// remplit un trou.
+fn compute_stacked_bumper_pins(
+    chain: &[ChainSpeaker],
+    speakers: &[SpeakerInstance],
+    reference_index: usize,
+    frame_hole_splay: f64,
+    g: f64,
+    k_dyn: f64,
+    share_per_flank: f64,
+) -> (Vec2, Vec2, Vec2, Vec2) {
+    let geo = chain[reference_index].geo;
+    let bref = speakers[reference_index];
+    // Pion avant : la charnière haute. Pion arrière : le trou de cadre, celui
+    // qui impose l'assiette de calage.
+    let front = bref.o + geo.ht.rotate(bref.phi);
+    let rear = bref.o + geo.crown(frame_hole_splay).rotate(bref.phi);
+
+    let mut w_total = 0.0;
+    let mut sum = Vec2::ZERO;
+    for (speaker, instance) in chain.iter().zip(speakers) {
+        let w = speaker.mass_kg * g * k_dyn;
+        w_total += w;
+        sum = sum + instance.cg * w;
+    }
+    let cm = sum * (1.0 / w_total);
+
+    // Ce que le bumper reprend : le poids de tout ce qui est posé dessus.
+    let load = Vec2::new(0.0, -w_total);
+    let span = rear - front;
+    let d = span.norm();
+    let g_point = (front + rear) * 0.5;
+    let m_g = (cm - g_point).cross(load);
+    let perp = Vec2::new(-span.y, span.x) * (1.0 / d);
+    let p = perp * (m_g / d);
+    // `−load/2 ± P` est la réaction que les pions opposent au corps libre ; ce
+    // que la quincaillerie **subit** en est l'opposé, comme partout ailleurs.
+    // Sur un stack d'aplomb le couple s'annule et chaque pion voit `W/2` vers
+    // le bas : la pile appuie sur le bumper, ce qui est le sens attendu.
+    //
+    // Par flanc : ces pions traversent les flancs de l'enceinte, ils sont
+    // doublés — contrairement à la manille de levage, qui ne l'est pas.
+    let f_front = (load * 0.5 - p) * share_per_flank;
+    let f_rear = (load * 0.5 + p) * share_per_flank;
+    (front, f_front, rear, f_rear)
+}
+
 /// Efforts transmis par le bumper à l'enceinte de référence (`speakers[0]`),
 /// exprimés dans le repère de cette enceinte — même schéma qu'une jonction
 /// réelle (brief §5) : un bras à deux forces entre le trou de splay 0
@@ -687,12 +746,24 @@ pub fn compute_cluster(
                 front_bottom_global + Vec2::new(bumper_model.depth, -bumper_model.height),
                 front_bottom_global + Vec2::new(0.0, -bumper_model.height),
             ];
-            // En stack, le bumper ne transmet pas d'effort de jonction : il
-            // porte. La réaction du sol remonte la totalité du poids dynamisé,
-            // appliquée au milieu de la face d'appui — le bumper repose à plat,
-            // donc la résultante n'a pas de raison d'être ailleurs.
+            // En stack, le bumper porte au lieu de suspendre. La réaction du
+            // sol remonte la totalité du poids dynamisé, appliquée au milieu de
+            // la face d'appui — le bumper repose à plat, donc la résultante n'a
+            // pas de raison d'être ailleurs.
             let support = Vec2::new(0.0, total_weight_n);
             let support_point = (outline_global[2] + outline_global[3]) * 0.5;
+            // Et les deux pions qui le tiennent à l'enceinte du bas.
+            let (front_pt, front_f, rear_pt, rear_f) = compute_stacked_bumper_pins(
+                chain,
+                &speakers,
+                reference_index,
+                chain[reference_index].frame_hole_splay,
+                settings.gravity,
+                settings.dynamic_factor,
+                settings.share_per_flank,
+            );
+            let front_local = front_f.rotate_transpose(attach.phi);
+            let rear_local = rear_f.rotate_transpose(attach.phi);
             BumperView {
                 outline_global,
                 pickup_global: None,
@@ -701,14 +772,17 @@ pub fn compute_cluster(
                 bar_deport_mm: None,
                 bumper_bar_exceeded: false,
                 tie_angle_range_deg: None,
-                orientation_force_n: None,
-                orientation_angle_deg: None,
-                pivot_force_n: None,
-                pivot_angle_deg: None,
-                orientation_point_global: None,
-                pivot_point_global: None,
-                orientation_force_global: None,
-                pivot_force_global: None,
+                // Le pion arrière (trou de cadre) joue le rôle « orientation »,
+                // le pion avant (charnière) celui du pivot : mêmes noms qu'en
+                // vol, pour que le front n'ait pas deux schémas à gérer.
+                orientation_force_n: Some(rear_local.norm()),
+                orientation_angle_deg: Some(angle_of(rear_local)),
+                pivot_force_n: Some(front_local.norm()),
+                pivot_angle_deg: Some(angle_of(front_local)),
+                orientation_point_global: Some(rear_pt),
+                pivot_point_global: Some(front_pt),
+                orientation_force_global: Some(rear_f),
+                pivot_force_global: Some(front_f),
                 support_force_n: support.norm(),
                 support_force_global: support,
                 support_point_global: support_point,

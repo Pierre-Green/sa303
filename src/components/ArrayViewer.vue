@@ -234,6 +234,18 @@ function speakerLoadedJoint(idx: number) {
   return props.result.joints.find((j) => j.loadedFlank === idx) ?? null;
 }
 
+/// La jonction dont CETTE enceinte est le caisson du **bas**, donc celle dont
+/// elle porte la paire ancrage/verrou. La paire de la jonction `j` est toujours
+/// sur l'enceinte `j + 1`, dans les deux compartiments.
+///
+/// Sans ça, la dernière enceinte d'une grappe suspendue n'affichait aucune
+/// charge : le flanc « chargé » d'une jonction en vol est celui du **haut**,
+/// donc elle n'était jamais trouvée — alors qu'elle porte bien deux goupilles
+/// et que le viewer y dessine deux flèches.
+function speakerPairJoint(idx: number) {
+  return props.result.joints.find((j) => j.jointIndex === idx - 1) ?? null;
+}
+
 // Survol = aperçu (pas besoin de cliquer) ; clic = épinglé, pour pouvoir
 // déplacer la souris jusque dans la popup et sélectionner le texte sans
 // qu'elle se referme. Un petit délai à la sortie du survol laisse le temps
@@ -362,6 +374,7 @@ const speakerPopupData = computed(() => {
     angleDeg: (speaker.phi * 180) / Math.PI,
     splay: speakerSplayDeg(idx),
     joint: speakerLoadedJoint(idx),
+    pairJoint: speakerPairJoint(idx),
     bottomElevationMm: props.result.elevation.speakerBottomMm[idx],
     pinned: pinnedIdx.value === idx,
   };
@@ -837,7 +850,40 @@ function handleWheel(e: { evt: WheelEvent }) {
             </dd>
           </div>
         </template>
-        <p v-else class="mt-1 text-muted-foreground">Aucune charge directe (flanc non porteur).</p>
+
+        <!-- Ce que cette enceinte porte en tant que caisson du BAS de la
+             jonction au-dessus d'elle : la paire ancrage/verrou. C'est la seule
+             charge de la dernière enceinte d'une grappe suspendue. -->
+        <template v-if="speakerPopupData.pairJoint">
+          <div class="mt-1 text-xs text-muted-foreground">
+            Paire (jonction J{{ speakerPopupData.pairJoint.jointIndex + 1 }}, au-dessus)
+          </div>
+          <div class="flex justify-between text-zone-orientation">
+            <dt>F ancrage</dt>
+            <dd>
+              {{ speakerPopupData.pairJoint.fAnchorN.toFixed(0) }} N @
+              {{ speakerPopupData.pairJoint.fAnchorAngleDeg.toFixed(1) }}°
+            </dd>
+          </div>
+          <div class="flex justify-between text-zone-orientation">
+            <dt>F verrou</dt>
+            <dd>
+              {{ speakerPopupData.pairJoint.fLatchN.toFixed(0) }} N @
+              {{ speakerPopupData.pairJoint.fLatchAngleDeg.toFixed(1) }}°
+            </dd>
+          </div>
+          <div class="flex justify-between text-muted-foreground">
+            <dt>M barre</dt>
+            <dd>{{ speakerPopupData.pairJoint.barMomentMaxNm.toFixed(1) }} N·m</dd>
+          </div>
+        </template>
+
+        <p
+          v-if="!speakerPopupData.joint && !speakerPopupData.pairJoint"
+          class="mt-1 text-muted-foreground"
+        >
+          Aucune charge directe (flanc non porteur).
+        </p>
       </dl>
 
       <dl v-else class="flex flex-col gap-1">
@@ -870,14 +916,17 @@ function handleWheel(e: { evt: WheelEvent }) {
         <p class="text-xs text-muted-foreground">
           Charge entière, pas par flanc : une manille n'est pas doublée.
         </p>
-        <div v-if="speakerPopupData.orientationForceN !== null" class="flex justify-between text-zone-orientation">
-          <dt>F orientation</dt>
-          <dd>{{ speakerPopupData.orientationForceN.toFixed(0) }} N @ {{ speakerPopupData.orientationAngleDeg!.toFixed(1) }}°</dd>
-        </div>
         <div v-if="speakerPopupData.pivotForceN !== null" class="flex justify-between text-zone-pivot">
-          <dt>F pivot</dt>
+          <dt>Pion avant</dt>
           <dd>{{ speakerPopupData.pivotForceN.toFixed(0) }} N @ {{ speakerPopupData.pivotAngleDeg!.toFixed(1) }}°</dd>
         </div>
+        <div v-if="speakerPopupData.orientationForceN !== null" class="flex justify-between text-zone-orientation">
+          <dt>Pion arrière</dt>
+          <dd>{{ speakerPopupData.orientationForceN.toFixed(0) }} N @ {{ speakerPopupData.orientationAngleDeg!.toFixed(1) }}°</dd>
+        </div>
+        <p v-if="speakerPopupData.pivotForceN !== null" class="text-xs text-muted-foreground">
+          Charges de pion par flanc : elles traversent les flancs, elles sont doublées.
+        </p>
       </dl>
 
       <p v-if="!speakerPopupData.pinned" class="mt-2 text-[10px] text-muted-foreground">

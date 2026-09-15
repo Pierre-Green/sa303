@@ -2199,10 +2199,12 @@ fn the_bumper_carries_exactly_what_hangs_below_it() {
     assert!(residual < 1e-6 * bv.support_force_n, "résidu {residual} N");
 }
 
-/// En stack le bumper ne transmet pas d'effort de jonction : il porte. La
-/// réaction du sol doit remonter le poids entier, vers le haut.
+/// En stack, le bumper porte ET il est goupillé : la réaction du sol remonte le
+/// poids entier, et les deux pions qui le tiennent à l'enceinte du bas se
+/// partagent cette charge. Sans cette répartition, le stack n'avait aucune
+/// charge de pion du tout — le bumper y était purement géométrique.
 #[test]
-fn a_stacked_bumper_reports_the_ground_reaction_instead_of_joint_loads() {
+fn a_stacked_bumper_reports_both_its_ground_reaction_and_its_two_pins() {
     let sm = default_speaker();
     let bumper = default_bumper();
     let settings = default_settings();
@@ -2211,9 +2213,36 @@ fn a_stacked_bumper_reports_the_ground_reaction_instead_of_joint_loads() {
         .expect("configuration possible");
 
     let bv = &r.bumper_view;
-    assert!(bv.orientation_force_global.is_none());
-    assert!(bv.pivot_force_global.is_none());
     let expected = r.total_mass_kg * settings.gravity * settings.dynamic_factor;
     assert!((bv.support_force_n - expected).abs() < 1e-6 * expected);
     assert!((bv.support_angle_deg - 180.0).abs() < 1e-6);
+
+    // Les deux pions existent, et leur somme rend exactement la part de flanc
+    // du poids porté : c'est le même contrôle que le résidu d'une jonction.
+    let front = bv.pivot_force_global.expect("pion avant");
+    let rear = bv.orientation_force_global.expect("pion arrière");
+    let sum = front + rear;
+    let expected_per_flank = expected * settings.share_per_flank;
+    assert!(
+        (sum.x).abs() < 1e-6 * expected_per_flank,
+        "les pions poussent de travers : {sum:?}"
+    );
+    assert!(
+        (sum.y + expected_per_flank).abs() < 1e-6 * expected_per_flank,
+        "Σ pions {} contre {} attendus vers le bas",
+        sum.y,
+        -expected_per_flank
+    );
+
+    // Et le moment se recoupe autour d'un point quelconque : c'est ce qui
+    // atteste que le couple est bien réparti, pas seulement la résultante.
+    let fp = bv.pivot_point_global.expect("point avant");
+    let rp = bv.orientation_point_global.expect("point arrière");
+    let o = sa303_core::vector::Vec2::new(-3000.0, 1500.0);
+    let m_pins = (fp - o).cross(front) + (rp - o).cross(rear);
+    let m_load = (r.cg - o).cross(sa303_core::vector::Vec2::new(0.0, -expected_per_flank));
+    assert!(
+        (m_pins - m_load).abs() < 1e-6 * m_load.abs().max(1e3),
+        "ΣM pions {m_pins:.1} contre {m_load:.1} N·mm"
+    );
 }
