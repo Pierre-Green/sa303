@@ -2156,3 +2156,64 @@ fn the_reported_utilization_covers_the_pair_and_the_bar() {
         "seulement {understated} cas sur {seen} où l'ancien taux sous-estimait de moitié"
     );
 }
+
+/// Ce que la manille reprend doit être exactement ce qui pend dessous : le
+/// poids dynamisé de toute la grappe, plus la tirette quand elle existe. Un
+/// chiffre affiché sur le bumper qui ne serait pas cette résultante-là
+/// tromperait le rigger sur le calibre de son point d'accroche.
+#[test]
+fn the_bumper_carries_exactly_what_hangs_below_it() {
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let settings = default_settings();
+
+    let cluster = flown_cluster("charge bumper", &[1.0, 2.0, 5.0, 10.0], None, &bumper.id);
+    let r = compute_cluster(std::slice::from_ref(&sm), &cluster, &settings, &bumper, &[])
+        .expect("configuration possible");
+
+    let expected = r.total_mass_kg * settings.gravity * settings.dynamic_factor;
+    let bv = &r.bumper_view;
+    assert!(
+        (bv.support_force_n - expected).abs() < 1e-6 * expected,
+        "manille {} N contre {expected} N suspendus",
+        bv.support_force_n
+    );
+    // Sans tirette, elle tire droit vers le haut : 180° dans la convention de
+    // sortie (0° = vers le bas).
+    assert!(
+        (bv.support_angle_deg - 180.0).abs() < 1e-6,
+        "{}°",
+        bv.support_angle_deg
+    );
+
+    // Et les deux efforts transmis à l'enceinte de référence sont rendus avec
+    // leur point d'application : sans lui, le viewer ne saurait pas où planter
+    // la flèche.
+    assert!(bv.orientation_point_global.is_some());
+    assert!(bv.pivot_point_global.is_some());
+    let of = bv.orientation_force_global.expect("effort orientation");
+    let pf = bv.pivot_force_global.expect("effort pivot");
+    // Ils s'équilibrent avec la part de charge du flanc : même contrôle que le
+    // `residual_n` d'une jonction réelle.
+    let residual = (of + pf + bv.support_force_global * settings.share_per_flank).norm();
+    assert!(residual < 1e-6 * bv.support_force_n, "résidu {residual} N");
+}
+
+/// En stack le bumper ne transmet pas d'effort de jonction : il porte. La
+/// réaction du sol doit remonter le poids entier, vers le haut.
+#[test]
+fn a_stacked_bumper_reports_the_ground_reaction_instead_of_joint_loads() {
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let settings = default_settings();
+    let cluster = stack_cluster("appui", &[0.0, 10.0], 20.0, &bumper.id);
+    let r = compute_cluster(std::slice::from_ref(&sm), &cluster, &settings, &bumper, &[])
+        .expect("configuration possible");
+
+    let bv = &r.bumper_view;
+    assert!(bv.orientation_force_global.is_none());
+    assert!(bv.pivot_force_global.is_none());
+    let expected = r.total_mass_kg * settings.gravity * settings.dynamic_factor;
+    assert!((bv.support_force_n - expected).abs() < 1e-6 * expected);
+    assert!((bv.support_angle_deg - 180.0).abs() < 1e-6);
+}

@@ -122,11 +122,44 @@ pub struct BumperView {
     /// Efforts transmis par le bumper à l'enceinte de référence, repère de
     /// cette enceinte — même schéma qu'une jonction réelle (bras à deux
     /// forces + pivot), avec pour seuls points d'accroche le trou de splay 0
-    /// et la charnière. Vol uniquement.
+    /// et la charnière. Vol uniquement. Par flanc, comme les efforts de
+    /// jonction.
     pub orientation_force_n: Option<f64>,
     pub orientation_angle_deg: Option<f64>,
     pub pivot_force_n: Option<f64>,
     pub pivot_angle_deg: Option<f64>,
+
+    /// Les deux mêmes efforts en repère **global**, avec leur point
+    /// d'application sur l'enceinte de référence : le viewer les dessine tels
+    /// quels, il n'a pas à tourner un vecteur (brief §1).
+    pub orientation_point_global: Option<Vec2>,
+    pub pivot_point_global: Option<Vec2>,
+    pub orientation_force_global: Option<Vec2>,
+    pub pivot_force_global: Option<Vec2>,
+
+    /// Charge que le bumper reprend en entier : la manille en vol, la réaction
+    /// du sol en stack. **Pas** par flanc — une manille n'est pas doublée,
+    /// contrairement à la quincaillerie de flanc. C'est le poids dynamisé de
+    /// toute la grappe, tirette comprise.
+    pub support_force_n: f64,
+    pub support_force_global: Vec2,
+    pub support_point_global: Vec2,
+    /// Direction de `support_force_global` (convention §2), pré-calculée.
+    pub support_angle_deg: f64,
+}
+
+/// Ce que `compute_bumper_loads` rend : les deux efforts transmis à l'enceinte
+/// de référence, leurs points d'application, et la charge totale reprise par la
+/// manille. Un type nommé plutôt qu'un tuple de huit éléments — à ce
+/// nombre-là, l'ordre des champs n'est plus lisible sur le site d'appel.
+struct BumperLoads {
+    orientation_force: Vec2,
+    orientation_point: Vec2,
+    pivot_force: Vec2,
+    pivot_point: Vec2,
+    /// Résultante extérieure reprise par la manille, déjà retournée : c'est ce
+    /// que la manille **tire**, pas ce que la grappe pèse.
+    support_force: Vec2,
 }
 
 /// Chaîne résolue : chaque position de `Cluster::speaker_model_ids` pointe
@@ -296,7 +329,7 @@ fn compute_bumper_loads(
     k_dyn: f64,
     share_per_flank: f64,
     tie: Option<TieForce>,
-) -> (f64, f64, f64, f64) {
+) -> BumperLoads {
     // Le bumper est posé sur l'enceinte du haut : c'est sa quincaillerie à
     // elle qui reprend l'effort.
     let geo = chain[0].geo;
@@ -333,15 +366,18 @@ fn compute_bumper_loads(
     let f_piv = -rext - f_ori;
 
     let sg = -share_per_flank;
-    let f_ori_local = (f_ori * sg).rotate_transpose(b0.phi);
-    let f_piv_local = (f_piv * sg).rotate_transpose(b0.phi);
-
-    (
-        f_ori_local.norm(),
-        angle_of(f_ori_local),
-        f_piv_local.norm(),
-        angle_of(f_piv_local),
-    )
+    BumperLoads {
+        // Par flanc et retournés, comme partout ailleurs : ce que la
+        // quincaillerie subit, pas ce qui agit sur le corps libre.
+        orientation_force: f_ori * sg,
+        orientation_point: an,
+        pivot_force: f_piv * sg,
+        pivot_point: pvg,
+        // La manille, elle, n'est pas doublée : elle reprend la résultante
+        // entière. `rext` est l'effort extérieur sur le corps libre (poids vers
+        // le bas, plus la tirette) ; ce que la manille tire est son opposé.
+        support_force: -rext,
+    }
 }
 
 /// Calcule la géométrie, la statique de chaque jonction et la tension de tirette
@@ -598,7 +634,7 @@ pub fn compute_cluster(
                 let edge_x = threshold * pickup.x.signum();
                 attach.o + Vec2::new(edge_x, pickup.y).rotate(attach.phi)
             });
-            let (of_n, of_a, pf_n, pf_a) = compute_bumper_loads(
+            let loads = compute_bumper_loads(
                 chain,
                 &speakers,
                 pickup,
@@ -607,18 +643,29 @@ pub fn compute_cluster(
                 settings.share_per_flank,
                 tie_force,
             );
+            let of_local = loads.orientation_force.rotate_transpose(attach.phi);
+            let pf_local = loads.pivot_force.rotate_transpose(attach.phi);
+            let pickup_g = attach.o + pickup.rotate(attach.phi);
             BumperView {
                 outline_global,
-                pickup_global: Some(attach.o + pickup.rotate(attach.phi)),
+                pickup_global: Some(pickup_g),
                 bumper_bar_start_global,
                 pickup_offset_mm: Some(pickup.x),
                 bar_deport_mm: Some(deport),
                 bumper_bar_exceeded,
                 tie_angle_range_deg: tie_angle_range_deg.map(|(lo, hi)| [lo, hi]),
-                orientation_force_n: Some(of_n),
-                orientation_angle_deg: Some(of_a),
-                pivot_force_n: Some(pf_n),
-                pivot_angle_deg: Some(pf_a),
+                orientation_force_n: Some(of_local.norm()),
+                orientation_angle_deg: Some(angle_of(of_local)),
+                pivot_force_n: Some(pf_local.norm()),
+                pivot_angle_deg: Some(angle_of(pf_local)),
+                orientation_point_global: Some(loads.orientation_point),
+                pivot_point_global: Some(loads.pivot_point),
+                orientation_force_global: Some(loads.orientation_force),
+                pivot_force_global: Some(loads.pivot_force),
+                support_force_n: loads.support_force.norm(),
+                support_force_global: loads.support_force,
+                support_point_global: pickup_g,
+                support_angle_deg: angle_of(loads.support_force),
             }
         }
         Compartment::Stacked => {
@@ -640,6 +687,12 @@ pub fn compute_cluster(
                 front_bottom_global + Vec2::new(bumper_model.depth, -bumper_model.height),
                 front_bottom_global + Vec2::new(0.0, -bumper_model.height),
             ];
+            // En stack, le bumper ne transmet pas d'effort de jonction : il
+            // porte. La réaction du sol remonte la totalité du poids dynamisé,
+            // appliquée au milieu de la face d'appui — le bumper repose à plat,
+            // donc la résultante n'a pas de raison d'être ailleurs.
+            let support = Vec2::new(0.0, total_weight_n);
+            let support_point = (outline_global[2] + outline_global[3]) * 0.5;
             BumperView {
                 outline_global,
                 pickup_global: None,
@@ -652,6 +705,14 @@ pub fn compute_cluster(
                 orientation_angle_deg: None,
                 pivot_force_n: None,
                 pivot_angle_deg: None,
+                orientation_point_global: None,
+                pivot_point_global: None,
+                orientation_force_global: None,
+                pivot_force_global: None,
+                support_force_n: support.norm(),
+                support_force_global: support,
+                support_point_global: support_point,
+                support_angle_deg: angle_of(support),
             }
         }
     };

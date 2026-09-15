@@ -343,6 +343,8 @@ const speakerPopupData = computed(() => {
       pickupOffsetMm: bv.pickupOffsetMm,
       barDeportMm: bv.barDeportMm,
       bumperBarExceeded: bv.bumperBarExceeded,
+      supportForceN: bv.supportForceN,
+      supportAngleDeg: bv.supportAngleDeg,
       orientationForceN: bv.orientationForceN,
       orientationAngleDeg: bv.orientationAngleDeg,
       pivotForceN: bv.pivotForceN,
@@ -512,6 +514,64 @@ const maxForceN = computed(() =>
   ),
 );
 
+// La charge de manille est hors de cette échelle, volontairement : elle porte
+// toute la grappe, donc elle vaut plusieurs fois le plus gros effort de
+// jonction. La mettre à la même échelle écraserait toutes les autres flèches à
+// quelques pixels. Elle a donc sa propre longueur, fixe, et son intensité se lit
+// sur son étiquette — pas sur sa taille.
+const SUPPORT_ARROW_LENGTH_MM = computed(() => referenceDepth.value * 0.9);
+
+const bumperSupportArrow = computed(() => {
+  const bv = props.result.bumperView;
+  const mag = Math.hypot(bv.supportForceGlobal.x, bv.supportForceGlobal.y);
+  if (mag <= 0) return null;
+  const from = bv.supportPointGlobal;
+  const len = SUPPORT_ARROW_LENGTH_MM.value;
+  const to = {
+    x: from.x + (bv.supportForceGlobal.x / mag) * len,
+    y: from.y + (bv.supportForceGlobal.y / mag) * len,
+  };
+  const p0 = toLocal(from);
+  const p1 = toLocal(to);
+  return {
+    arrow: {
+      points: [p0.x, p0.y, p1.x, p1.y],
+      stroke: colors.value.lift,
+      fill: colors.value.lift,
+      strokeWidth: px(3),
+      pointerLength: px(10),
+      pointerWidth: px(10),
+    },
+    label: {
+      x: p1.x + px(6),
+      y: p1.y - px(6),
+      text: `${(bv.supportForceN / 1000).toFixed(2)} kN`,
+      fontSize: px(12),
+      fontStyle: "600",
+      fill: colors.value.lift,
+    },
+  };
+});
+
+// Les deux efforts que le bumper transmet à l'enceinte de référence, à leur
+// point d'application réel. Même schéma qu'une jonction : un bras à deux forces
+// au trou de splay 0, un pivot à la charnière haute.
+const bumperJointArrows = computed(() => {
+  const bv = props.result.bumperView;
+  if (!bv.orientationPointGlobal || !bv.orientationForceGlobal) return null;
+  if (!bv.pivotPointGlobal || !bv.pivotForceGlobal) return null;
+  return {
+    orientation: arrowConfig(
+      bv.orientationPointGlobal,
+      bv.orientationForceGlobal,
+      colors.value.orientation,
+    ),
+    pivot: arrowConfig(bv.pivotPointGlobal, bv.pivotForceGlobal, colors.value.pivot),
+    orientationHole: holeMarkerConfig(bv.orientationPointGlobal, colors.value.orientation),
+    pivotHole: holeMarkerConfig(bv.pivotPointGlobal, colors.value.pivot),
+  };
+});
+
 function arrowConfig(from: Vec2, force: Vec2, color: string) {
   const mag = Math.hypot(force.x, force.y);
   const lenMm = (mag / maxForceN.value) * FORCE_REF_LENGTH_MM.value;
@@ -649,19 +709,39 @@ function handleWheel(e: { evt: WheelEvent }) {
                      dans un groupe d'enceinte) pour ne subir aucune rotation
                      supplémentaire. Inclus dans le groupe mesuré pour la ligne
                      de sol : en stack, c'est le bumper qui touche le sol.
-                     Survolable/cliquable en vol uniquement (charges calculées
-                     là ; en stack le bumper est purement décoratif). -->
+                     Survolable dans les deux compartiments : il portait déjà
+                     les efforts de jonction en vol, il porte maintenant la
+                     charge reprise en stack aussi — il n'est plus décoratif
+                     nulle part. -->
                 <v-line
                   v-if="bumperOutlineConfig"
                   :config="bumperOutlineConfig!"
-                  @click="compartment === 'flown' ? onBumperClick() : undefined"
-                  @mouseenter="compartment === 'flown' ? onBumperMouseEnter() : undefined"
-                  @mouseleave="compartment === 'flown' ? onBumperMouseLeave() : undefined"
+                  @click="onBumperClick()"
+                  @mouseenter="onBumperMouseEnter()"
+                  @mouseleave="onBumperMouseLeave()"
                 />
               </v-group>
 
             <v-line v-if="bumperBarConfig" :config="bumperBarConfig!" />
             <v-circle v-if="compartment === 'flown' && pickupMarkerConfig" :config="pickupMarkerConfig!" />
+
+            <!-- Charge reprise par le bumper : la manille en vol, la réaction
+                 du sol en stack. Toute la grappe pend dessus, c'est donc le
+                 chiffre qui dit le calibre du point d'accroche. -->
+            <template v-if="bumperSupportArrow">
+              <v-arrow :config="bumperSupportArrow!.arrow" />
+              <v-text :config="bumperSupportArrow!.label" />
+            </template>
+
+            <!-- Efforts que le bumper transmet à l'enceinte n°1, à leur point
+                 d'application : la jonction bumper est la seule dont les
+                 charges n'étaient jusqu'ici lisibles qu'au survol. -->
+            <template v-if="bumperJointArrows">
+              <v-arrow :config="bumperJointArrows!.orientation" />
+              <v-arrow :config="bumperJointArrows!.pivot" />
+              <v-circle :config="bumperJointArrows!.orientationHole" />
+              <v-circle :config="bumperJointArrows!.pivotHole" />
+            </template>
 
             <template v-if="compartment === 'flown' && tieArrowConfig">
               <v-arrow :config="tieArrowConfig!" />
@@ -780,7 +860,17 @@ function handleWheel(e: { evt: WheelEvent }) {
           <dd>{{ Math.abs(speakerPopupData.barDeportMm!).toFixed(0) }} mm</dd>
         </div>
         <div v-if="speakerPopupData.bumperBarExceeded" class="text-status-alarm">Portée barre dépassée : tirette active.</div>
-        <div v-if="speakerPopupData.orientationForceN !== null" class="mt-1 flex justify-between text-zone-orientation">
+        <div class="mt-1 flex justify-between text-zone-lift">
+          <dt>{{ compartment === "flown" ? "Charge manille" : "Réaction sol" }}</dt>
+          <dd>
+            {{ (speakerPopupData.supportForceN / 1000).toFixed(2) }} kN @
+            {{ speakerPopupData.supportAngleDeg.toFixed(1) }}°
+          </dd>
+        </div>
+        <p class="text-xs text-muted-foreground">
+          Charge entière, pas par flanc : une manille n'est pas doublée.
+        </p>
+        <div v-if="speakerPopupData.orientationForceN !== null" class="flex justify-between text-zone-orientation">
           <dt>F orientation</dt>
           <dd>{{ speakerPopupData.orientationForceN.toFixed(0) }} N @ {{ speakerPopupData.orientationAngleDeg!.toFixed(1) }}°</dd>
         </div>

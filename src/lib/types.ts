@@ -385,11 +385,23 @@ export interface BumperView {
    * de décider seul. */
   tieAngleRangeDeg: [number, number] | null;
   /** Efforts transmis par le bumper à l'enceinte de référence, repère de
-   * cette enceinte. Vol uniquement. */
+   * cette enceinte, par flanc. Vol uniquement. */
   orientationForceN: number | null;
   orientationAngleDeg: number | null;
   pivotForceN: number | null;
   pivotAngleDeg: number | null;
+  /** Les deux mêmes en repère global, avec leur point d'application sur
+   * l'enceinte de référence : le viewer les dessine tels quels. */
+  orientationPointGlobal: Vec2 | null;
+  pivotPointGlobal: Vec2 | null;
+  orientationForceGlobal: Vec2 | null;
+  pivotForceGlobal: Vec2 | null;
+  /** Charge que le bumper reprend en entier : la manille en vol, la réaction du
+   * sol en stack. **Pas** par flanc — une manille n'est pas doublée. */
+  supportForceN: number;
+  supportForceGlobal: Vec2;
+  supportPointGlobal: Vec2;
+  supportAngleDeg: number;
 }
 
 export interface JointOffset {
