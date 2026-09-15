@@ -106,7 +106,23 @@ pub struct ClusterExport {
     pub joint_checks: Vec<JointChecks>,
     /// Le pire taux de la grappe, tous chemins et toutes jonctions confondus.
     pub utilization_worst: f64,
+    /// Coefficient de sécurité réel de la grappe : l'inverse du pire taux. Le
+    /// taux est rapporté à `R_m / sf`, donc un taux de 0,5 sous `sf = 4` veut
+    /// dire qu'il reste un facteur 8 à la rupture.
+    pub safety_factor: f64,
+    /// Le même, recalculé à `k_dyn = 1,1` au lieu du facteur dynamique des
+    /// réglages. C'est la valeur qu'on compare à Soundvision, qui ne dynamise
+    /// pas de la même façon — les mettre côte à côte sans le dire ferait croire
+    /// à un désaccord de calcul là où il n'y a qu'un coefficient différent.
+    ///
+    /// Les réglages ne sont **pas** modifiés pour autant : la grappe est
+    /// recalculée à part.
+    pub safety_factor_static: f64,
 }
+
+/// Facteur dynamique de la comparaison Soundvision. Figé : il ne suit pas les
+/// réglages, sinon les deux colonnes finiraient par dire la même chose.
+pub const STATIC_COMPARISON_K_DYN: f64 = 1.1;
 
 /// Grappe écartée du calcul, avec la raison. Jamais omise en silence.
 #[derive(Clone, Debug, Serialize)]
@@ -186,11 +202,31 @@ pub fn build_audit_export(
                     .iter()
                     .map(|c| c.utilization_worst)
                     .fold(0.0_f64, f64::max);
+                // Même grappe, même barre, seul `k_dyn` change. Recalculée
+                // plutôt que mise à l'échelle : les efforts ne sont pas tous
+                // proportionnels au poids — la tirette, elle, est résolue pour
+                // tenir une assiette, donc la règle de trois serait fausse.
+                let mut static_settings = settings.clone();
+                static_settings.dynamic_factor = STATIC_COMPARISON_K_DYN;
+                let static_worst =
+                    compute_cluster(speakers, cluster, &static_settings, bumper, bumper_bars)
+                        .ok()
+                        .map(|r| {
+                            let spec = SandwichSpec::from_settings(&static_settings);
+                            r.joints
+                                .iter()
+                                .map(|j| JointChecks::of(j, &spec).utilization_worst)
+                                .fold(0.0_f64, f64::max)
+                        })
+                        .unwrap_or(utilization_worst);
+
                 clusters.push(ClusterExport {
                     definition: cluster.clone(),
                     result,
                     joint_checks,
                     utilization_worst,
+                    safety_factor: safety_from(utilization_worst, settings.safety_factor),
+                    safety_factor_static: safety_from(static_worst, settings.safety_factor),
                 });
             }
         }
@@ -203,6 +239,16 @@ pub fn build_audit_export(
         definitions: referenced_definitions(selection, speakers, bumpers, bumper_bars),
         clusters,
         impossible,
+    }
+}
+
+/// Coefficient de sécurité réel depuis un taux de travail. Le taux est rapporté
+/// à `R_m / sf`, donc le facteur à la rupture est `sf / taux`.
+fn safety_from(utilization: f64, safety_factor: f64) -> f64 {
+    if utilization <= 0.0 {
+        f64::INFINITY
+    } else {
+        safety_factor / utilization
     }
 }
 

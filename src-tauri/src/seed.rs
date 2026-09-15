@@ -264,3 +264,51 @@ fn dump_catalogue_load_table() {
         }
     }
 }
+
+/// Écrit l'export d'audit des grappes livrées dans le dossier courant, sans
+/// passer par l'interface :
+///
+/// ```text
+/// cargo test -p sa303 dump_audit_export_file -- --ignored --nocapture
+/// ```
+#[cfg(test)]
+#[test]
+#[ignore]
+fn dump_audit_export_file() {
+    use sa303_core::export::build_audit_export;
+
+    let speakers: Vec<_> = builtin_speakers().into_iter().map(|b| b.model).collect();
+    let bumpers: Vec<_> = builtin_bumpers().into_iter().map(|b| b.model).collect();
+    let bars: Vec<_> = builtin_bumper_bars().into_iter().map(|b| b.model).collect();
+    let clusters: Vec<_> = builtin_clusters().into_iter().map(|b| b.model).collect();
+    let settings = default_settings();
+
+    let date = "2026-09-16";
+    let export = build_audit_export(
+        format!("{date}T00:00:00Z"),
+        &clusters,
+        &speakers,
+        &bumpers,
+        &bars,
+        &settings,
+    );
+    // Écrit dans docs/audit/, à côté du dossier d'audit qu'il accompagne.
+    let name = format!("../docs/audit/sa303-audit-{}-grappes-{date}.json", clusters.len());
+    let json = serde_json::to_string_pretty(&export).expect("sérialisable");
+    std::fs::write(&name, &json).expect("écriture");
+    println!("écrit {name} ({} Ko)", json.len() / 1024);
+    println!(
+        "{} grappes résolues, {} impossibles",
+        export.clusters.len(),
+        export.impossible.len()
+    );
+    for c in &export.clusters {
+        println!(
+            "SF|{}|{:.3}|{:.2}|{:.2}",
+            c.definition.name, c.utilization_worst, c.safety_factor, c.safety_factor_static
+        );
+    }
+    for d in &export.impossible {
+        println!("IMPOSSIBLE|{}|{}", d.name, d.reason);
+    }
+}

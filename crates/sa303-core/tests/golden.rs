@@ -2255,3 +2255,89 @@ fn a_stacked_bumper_reports_both_its_ground_reaction_and_its_two_pins() {
         "ΣM pions {m_pins:.1} contre {m_load:.1} N·mm"
     );
 }
+
+/// §7 — chaque grappe exportée porte son coefficient de sécurité réel, et le
+/// même recalculé au facteur dynamique de comparaison Soundvision. Les deux
+/// doivent différer, sinon la seconde colonne n'apprendrait rien ; et les
+/// réglages ne doivent pas avoir bougé.
+#[test]
+fn the_export_carries_both_safety_factors_without_touching_the_settings() {
+    use sa303_core::export::{build_audit_export, STATIC_COMPARISON_K_DYN};
+
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let settings = default_settings();
+    let selection = representative_clusters(&bumper.id);
+    let export = build_audit_export(
+        "2026-09-16T10:00:00Z".into(),
+        &selection,
+        std::slice::from_ref(&sm),
+        std::slice::from_ref(&bumper),
+        &[],
+        &settings,
+    );
+
+    assert!(STATIC_COMPARISON_K_DYN < settings.dynamic_factor);
+    // Les réglages exportés restent ceux de l'utilisateur : la comparaison est
+    // calculée à part, elle ne les écrase pas.
+    assert_eq!(export.settings.dynamic_factor, settings.dynamic_factor);
+
+    for c in &export.clusters {
+        // Le coefficient est l'inverse du taux, rapporté au même `sf`.
+        let expected = settings.safety_factor / c.utilization_worst;
+        assert!(
+            (c.safety_factor - expected).abs() < 1e-9,
+            "{} : {} contre {expected}",
+            c.definition.name,
+            c.safety_factor
+        );
+        // Moins de charge dynamique, donc plus de marge : le coefficient
+        // « statique » est forcément le plus grand des deux.
+        assert!(
+            c.safety_factor_static > c.safety_factor,
+            "{} : statique {} n'est pas au-dessus de {}",
+            c.definition.name,
+            c.safety_factor_static,
+            c.safety_factor
+        );
+    }
+}
+
+/// Le profil σ(a) part bien dans l'export, échantillonné, avec la section
+/// critique : c'est ce qui permet de tracer la courbe sans le logiciel.
+#[test]
+fn the_export_carries_the_sampled_stress_profile_and_its_critical_section() {
+    use sa303_core::export::build_audit_export;
+
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let settings = default_settings();
+    let selection = vec![flown_cluster("profil", &[1.0, 5.0, 10.0], None, &bumper.id)];
+    let export = build_audit_export(
+        "2026-09-16T10:00:00Z".into(),
+        &selection,
+        std::slice::from_ref(&sm),
+        std::slice::from_ref(&bumper),
+        &[],
+        &settings,
+    );
+
+    for c in &export.clusters {
+        for jc in &c.joint_checks {
+            let p = &jc.bar.profile;
+            assert!(p.len() > 50, "profil trop court : {} points", p.len());
+            // Échantillonné régulièrement, du verrou à la couronne.
+            assert!(p[0].at_mm < 20.0);
+            assert!(p[p.len() - 1].at_mm > 420.0);
+            for w in p.windows(2) {
+                let step = w[1].at_mm - w[0].at_mm;
+                assert!((step - 5.0).abs() < 1e-6, "pas d'échantillonnage {step}");
+            }
+            // La section critique est au moins aussi chargée que tout le profil :
+            // elle sort d'un balayage plus fin, elle ne peut pas être en dessous.
+            for pt in p {
+                assert!(jc.bar.critical.utilization >= pt.utilization - 1e-12);
+            }
+        }
+    }
+}
