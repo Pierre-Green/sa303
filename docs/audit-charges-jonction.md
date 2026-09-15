@@ -79,6 +79,10 @@ l'axe couronne–ancrage. Son seul lien avec le caisson supérieur est la goupil
 de couronne : une articulation simple, **moment nul**, force de direction
 quelconque.
 
+L'ordre le long de la barre est verrou, ancrage, épaulement, couronne : le
+premier pion rencontré depuis la couronne est donc l'**ancrage**, et c'est là
+que le moment culmine.
+
 → **2 inconnues** (le vecteur d'effort à la couronne).
 
 ### 2.3 Bilan
@@ -94,40 +98,81 @@ quelconque.
 
 ## 3. Géométrie de la jonction
 
-Les quatre points, exprimés dans le repère du **caisson du haut**, puis portés
-en global. `ha` = demi-angle du caisson (10°), `splay0_angle` = 5°,
-`anchor_angle` = 3°, `R` = 680 mm (couronne extérieure, splays pairs) ou 660 mm
-(intérieure, splays impairs).
+Les points de la jonction, exprimés dans le repère du **caisson du haut**, puis
+portés en global. `ha` = demi-angle du caisson (10°), `splay0_angle` = 5°,
+`R` = 680 mm (couronne extérieure, splays pairs) ou 660 mm (intérieure, impairs).
 
 | Point | Définition | Formule |
 |---|---|---|
 | `pa` | goupille haute de bielle | `hb = (hinge.x, −hinge.y)` |
 | `pb` | goupille basse de bielle | `pv_at(k)` — voir §2.1 |
 | `bo` | goupille de couronne | `pv_at(k) + R·(cos(ha+5+k), sin(ha+5+k))` |
-| `an` | ancrage de la barre | `pv_at(k) + 680·(cos(−(ha+3)+k), sin(−(ha+3)+k))` |
+| `an` | ancrage de la barre | porté depuis `polar(ht, 680, −13°)` |
+| `lt` | verrou de la barre | porté depuis `polar(ht, 710,845, −20,8453°)` |
 
-```rust
-let pa = si.o + geo.hb.rotate(si.phi);
-let pb = si.o + geo.pv_at(s).rotate(si.phi);
-let bo = si.o + geo.crown(s).rotate(si.phi);
-let an = si.o + geo.anchor_at(s).rotate(si.phi);
-```
+> **Point d'attention n°4 — plus de rayon commun.** Le verrou n'est **pas** sur
+> le cercle de 680 mm de l'ancrage : il est à 710,845 mm, au bout de l'axe de
+> barre. Toute écriture qui les place sur un rayon commun et ne les distingue
+> que par un angle est fausse. Ancrage et verrou sont donc donnés en polaires
+> **indépendantes** depuis `ht`, et portés dans le repère du caisson du haut par
+> la formule générale :
+>
+> ```rust
+> fn carry(&self, local: Vec2, splay_deg: f64) -> Vec2 {
+>     self.pv_at(splay_deg) + (local - self.ht).rotate(splay_deg.to_radians())
+> }
+> ```
 
-**Couronne et ancrage sont tous deux radiaux depuis `pv_at(k)`**, à écart
-angulaire constant : leur entraxe ne dépend donc pas du splay — une seule
-longueur de barre dessert tous les crans d'une même couronne. Vérifié par
-`the_bar_length_does_not_depend_on_the_splay`.
+### 3.1 La barre arrière
 
-Il dépend en revanche de **quelle** couronne : 329,01 mm sur l'extérieure,
-324,76 sur l'intérieure. La barre porte donc deux trous de couronne (§9.4).
+L'ordre le long de la barre, depuis le petit bout : **verrou, ancrage,
+épaulement, couronne**. Les abscisses sont comptées depuis ce petit bout, le
+latéral positif vers l'avant du caisson.
 
-Le verrou, quatrième trou, est à 680 mm et −(ha + 1°) + k.
+| | abscisse | latéral | largeur locale |
+|---|---|---|---|
+| verrou | 14,500 | 0 | 40 |
+| ancrage | 114,500 | 0 | 40 |
+| épaulement | 380,000 | — | 40 → 55 |
+| `up660` (splays impairs) | 438,675 | **+19,406** | 55 |
+| `up680` (splays pairs) | 443,514 | 0 | 55 |
 
-Les huit positions de couronne calculées ainsi ont été recoupées contre le
-perçage relevé en atelier : **écart < 0,003 mm** sur les huit crans
-(`every_crown_hole_matches_the_drilled_table`).
+Longueur 458,514 mm, épaisseur 10 mm, perçage Ø 12,08. La longueur est pilotée
+par l'entraxe de paire : `length = 443,514 + latch_offset − 85`.
 
----
+**L'élargissement est d'un seul côté.** Le bord arrière est une droite sur toute
+la longueur ; c'est le bord avant qui s'écarte à partir de l'épaulement. C'est
+ce qui loge `up660`, déporté de 19,4 mm, en lui laissant 15,6 mm de bord.
+
+**`up660` n'est pas sur l'axe** — conséquence directe sur le calcul, voir §7.2.
+
+### 3.2 Invariants vérifiés au chargement
+
+`check_rear_bar` ne suppose aucun de ces points, il les contrôle :
+
+| Invariant | Valeur | Tolérance |
+|---|---|---|
+| \|ancrage − verrou\| = `latch_offset` | 100,000 mm | 0,05 |
+| verrou sur la droite ancrage → couronne 680 | 0 mm hors axe | **0,01** |
+| \|ancrage − `up680`\| | 329,014 mm | 0,05 |
+| \|ancrage − `up660`\| | 324,756 mm | 0,05 |
+| déport latéral `up660` / `up680` | +19,406 / 0 mm | 0,05 |
+| épaulement coté depuis les deux bouts | `length − wide_length` | 0,05 |
+
+Puis les distances au bord, signalées sous `1,2·d₀ = 14,496 mm` : e₁ verrou 14,5,
+e₁ couronne 15,0, e₂ `up660` 15,6. **Le verrou passe à 4 µm près** — il est
+exactement sur la limite réglementaire, et un arrondi de cotation le ferait
+basculer.
+
+Sur la géométrie Fusion livrée, aucun avertissement n'est remonté.
+
+**La couronne est à une place fixe dans le repère du caisson qui porte la
+paire.** En `ht + R∠(ha + splay0)`, indépendamment du splay : le caisson du bas
+tourne avec elle. C'est pour ça qu'une seule barre dessert tous les crans d'une
+couronne, et c'est cette position qui sert de référence à l'axe.
+
+Les huit positions de couronne ont été recoupées contre le perçage relevé en
+atelier : **écart < 0,003 mm** (`every_crown_hole_matches_the_drilled_table`).
 
 ## 4. Chaînage cinématique
 
@@ -260,59 +305,91 @@ l'impose l'élément à deux forces.
 
 ### 7.2 La barre arrière
 
-Splay 5, donc splay impair, donc couronne intérieure (660) : entraxe
-couronne-ancrage **L = 324,756 mm**, axe `e = (0,16377 ; −0,98650)`.
+Splay 5, donc splay **impair**, donc couronne intérieure : l'effort s'applique à
+`up660`, **déporté de 19,406 mm de l'axe de barre**.
 
-Tout ce qui suit est **par flanc** (× 0,5).
+Le repère de barre est l'axe ancrage → `up680`, origine au petit bout. Tout ce
+qui suit est **par flanc** (× 0,5).
 
 ```
-N (axial)   = −700,2 N        négatif = barre tendue
-V (transverse) = −131,9 N     c'est lui qui fait fléchir
-
-bras couronne → verrou   = 301,81 mm      M = 39,82 N·m   ← maximum
-bras couronne → ancrage  = 324,76 mm      M = 42,85 N·m   (réduction, pas un maximum)
-bras couronne → barycentre = 313,28 mm    M = 41,33 N·m   ← ce que la paire reprend
+N (axial)      = −706,9 N     négatif = barre tendue
+V (transverse) = − 89,9 N     |F| = 712,5 N
 ```
 
-Le moment culmine au **verrou**, première goupille rencontrée depuis la
-couronne : entre la couronne et lui, la barre ne voit qu'un seul effort et le
-moment croît linéairement depuis zéro ; au-delà, la réaction de la paire le fait
-redescendre, et il est nul à l'ancrage — la barre s'y termine sur 15,9 mm qui ne
-portent rien.
+> **Point d'attention n°5 — le moment n'est pas `|V| × abscisse`.** La couronne
+> étant hors de l'axe sur les splays impairs, il faut le produit vectoriel
+> complet `(P_section − P_application) × F`. Une abscisse seule perdrait le bras
+> transversal, donc la part de moment qu'il introduit.
+
+```
+bras ancrage → couronne (impair)  = 324,756 mm
+M à l'ancrage                     = 42,847 N·m     ← SECTION CRITIQUE
+M au verrou                       = 0
+M aux trous de couronne           = 0  (articulation)
+```
+
+**Le maximum est à l'ancrage**, premier pion rencontré depuis la couronne. Entre
+la couronne et lui, la barre ne voit qu'un seul effort et le moment croît depuis
+zéro ; au-delà, la réaction de la paire le fait redescendre, et il est nul au
+verrou — il ne reste derrière lui que 14,5 mm de barre où rien ne s'applique.
+
+C'est l'**inverse** de la géométrie précédente, où le verrou était le premier
+pion. Les deux ont échangé leur rang le long de la barre.
+
+> **Invariant utile en relecture.** Le moment à l'ancrage est indépendant du
+> repère : c'est `|F|` fois la distance de l'ancrage à la ligne d'action. La
+> décomposition `N`/`V`, elle, dépend de l'axe choisi. Un relecteur qui trouve
+> un autre `N` mais le même `M` n'a pas une erreur de calcul, il a un autre axe.
 
 ### 7.3 La paire ancrage/verrou
 
-Entraxe `d = 23,735 mm`. Répartition élastique à raideurs égales :
+Entraxe `d = 100,000 mm`. Répartition élastique à raideurs égales :
 
 ```
-part directe  = |F_couronne|/2 par flanc  = 356,3 N
-couple        = M_barycentre / d          = 1 741,5 N        ← domine largement
-F_ancrage = 1 909,9 N à 107,7°
-F_verrou  = 1 839,7 N à 265,9°
+part directe = |F_couronne|/2 par flanc  = 356,3 N
+couple       = M_barycentre / d          = 473,4 N
+F_ancrage = 627,4 N à 229,7°
+F_verrou  = 555,4 N à 123,5°
 ```
 
-**Le couple vaut cinq fois la part directe.** C'est la raison pour laquelle
-vérifier l'ancrage sur la seule résultante de couronne le sous-estimait d'un
-facteur ~3.
+L'entraxe est passé de 23,7 mm à 100 mm : le couple qui reprend le moment est
+donc environ **quatre fois plus petit** à moment comparable, et les efforts de
+pion tombent de ~1,9 kN à ~0,6 kN. C'est le gain principal du nouveau dessin.
 
 ### 7.4 Contraintes dans la barre
 
-Section étroite 40 × 10, perçage Ø 12,08.
+Section critique : l'ancrage, largeur **40** × 10, perçage Ø 12,08 centré.
 
 ```
 A_net = t(w − d0)          = 280,0 mm²
 W_net = t(w³ − d0³)/(6w)   = 2 593,2 mm³
 
-σ_verrou     = 39 820/2 593,2 + 700,2/280,0 = 15,4 + 2,5 = 17,9 MPa
-σ_transition = (section 40 brute, non percée)              =  8,2 MPa
+σ_ancrage = 42 847/2 593,2 + 706,9/280,0 = 16,5 + 2,5 = 19,0 MPa
 ```
 
-Le module net traite le trou comme une **fente sur la fibre neutre**. La formule
-`t(w − d0)²/6`, qui vaudrait pour un trou en fibre extrême, donnerait 249 MPa au
-lieu de 125 pour 325 N·m — un facteur 2 sur le dimensionnement de la barre.
-Contrôle : 325 N·m sur cette section donnent **125,33 MPa**.
+Le module net traite le trou centré comme une **fente sur la fibre neutre**. La
+formule `t(w − d0)²/6`, qui vaudrait pour un trou en fibre extrême, donnerait un
+facteur 2 sur le dimensionnement. Contrôle : 325 N·m sur cette section donnent
+**125,33 MPa**.
 
----
+Pour `up660`, déporté, le module net est calculé **centroïde décalé** : retirer
+de la matière hors de la fibre neutre déplace le centre de gravité, donc les deux
+fibres extrêmes n'ont plus le même module et c'est la plus petite qui gouverne.
+Le moment y est nul aujourd'hui ; la formule est écrite pour que déplacer un trou
+ne demande pas de la retrouver dans l'urgence, et un test vérifie qu'à déport nul
+elle retombe exactement sur la formule centrée.
+
+### 7.5 Arrachement de bord
+
+Mode distinct du matage, qui ne regarde pas où est le bord. La goupille chasse
+devant elle le bloc de matière qui la sépare du bord libre, cisaillé sur ses deux
+flancs : `2 × (e₂ − d₀/2) × t`, comparé à `0,6·R_m/sf`. Seule compte la
+composante de l'effort **dirigée vers ce bord** — un effort parallèle au bord ne
+chasse rien devant lui.
+
+Sur le jeu de grappes réel, ce mode reste très en dessous des autres (≤ 0,12).
+Il devient dimensionnant dès qu'une cote de bord se referme, ce que la largeur de
+barre fait varier directement.
 
 ## 8. Ce qui est rendu, et dans quel repère
 
@@ -355,10 +432,22 @@ let f_latch  = (f_latch_g  * input.share_per_flank).rotate_transpose(rt_phi);
 |---|---|
 | `bar_axial_n` | effort normal, par flanc. Positif = comprimée |
 | `bar_shear_n` | composante transverse, celle qui fait fléchir |
-| `bar_moment_max_nm` | moment de flexion **maximal**, au premier trou de la paire |
-| `bar_moment_max_at_mm` | son abscisse depuis l'extrémité couronne |
-| `bar_moment_at_pair_nm` | moment réduit au barycentre de la paire, celui qu'elle reprend en couple |
+| `bar_moment_max_nm` | moment à la **section critique**, c'est-à-dire à l'**ancrage** |
+| `bar_moment_max_at_mm` | son abscisse, 114,5 mm depuis le petit bout |
+| `bar_moment_at_pair_nm` | moment réduit au barycentre de la paire. **Signé**, et exactement celui qui produit `f_anchor`/`f_latch` — même produit vectoriel, pas une reconstruction `\|V\| × bras` qui perdrait le bras transversal de `up660` |
 | `rear_bar` | cotation de la barre de cette jonction |
+
+`bar_axial_n` et `bar_shear_n` dépendent de l'axe de barre ; le moment n'en
+dépend pas (§7.2).
+
+### 8.2 bis Vérifications de section (`checks::bar`)
+
+| Champ | Contenu |
+|---|---|
+| `sections[]` | ancrage, épaulement, verrou, couronne 680, couronne 660 |
+| `…width_mm`, `…hole_offset_mm`, `…section_modulus_mm3` | ce qui a servi au calcul, rendu plutôt que sous-entendu |
+| `critical_width_mm` | largeur de la section critique — **le paramètre de dimensionnement**, rendu pour qu'un balayage 40/50/60/70 se lise dans la sortie sans recouper le modèle |
+| `tear_out[]` | arrachement de bord par trou, avec `edge_distance_mm` et la composante dirigée vers le bord |
 
 ### 8.3 Géométrie et contrôles
 
@@ -411,27 +500,76 @@ fixe au `ht`. C'est une liaison différente, non décrite par la spécification 
 la liaison à bielle. Les jonctions concernées portent `bumper_model_legacy = true`
 et **leurs grandeurs de barre ne décrivent pas cette liaison**.
 
-### 9.3 La flexion de barre est un mode dimensionnant
+### 9.3 La flexion de barre est LE mode dimensionnant à 40 de large
 
-Ce n'est plus une limite mais un résultat : sur le jeu de grappes
-représentatives, le chemin couronne ne dépasse jamais **0,41** de taux de
-travail, alors que le verrou atteint **1,17** et la flexion de barre **1,03**.
-Le mode que l'ancien modèle ne pouvait pas voir est parmi ceux qui gouvernent.
+Ce n'est plus une limite mais un résultat, et il est net. Sur les quatre grappes
+de référence du catalogue, **largeur de barre 40 mm** :
 
-Voir `dump_joint_load_table` pour régénérer le tableau complet.
+| grappe | flexion | pions | arrachement | pire |
+|---|---|---|---|---|
+| 12u 40d-88d | **2,674** | 0,922 | 0,122 | 2,674 (J11) |
+| 14u 0-60m | **2,414** | 0,831 | 0,110 | 2,414 (J13) |
+| banane 12u −20/46 | **1,779** | 0,617 | 0,082 | 1,779 (J1) |
+| 14u 0-150m | **1,571** | 0,581 | 0,060 | 1,571 (J2) |
+
+La barre est dépassée d'un facteur 1,6 à 2,7 partout, alors que **la paire ne
+gouverne plus nulle part** : elle reste sous 0,93. Avec l'entraxe porté de
+23,7 mm à 100 mm, le couple qui reprend le moment a été divisé par quatre — le
+problème s'est entièrement déplacé du pion vers la section de barre.
+
+À **largeur 70 mm** entre l'ancrage et la couronne, tout repasse :
+
+| grappe | flexion | pire | chemin résiduel |
+|---|---|---|---|
+| 12u 40d-88d | 0,866 | 0,922 | ancrage (matage flanc 4 mm) |
+| 14u 0-60m | 0,783 | 0,831 | ancrage (matage flanc 4 mm) |
+| banane 12u −20/46 | 0,573 | 0,617 | ancrage (matage flanc 4 mm) |
+| 14u 0-150m | 0,548 | **0,841** | **couronne**, pas ancrage |
+
+Trois grappes sur quatre laissent le matage du flanc à l'ancrage comme critère
+résiduel. La quatrième, 14u 0-150m, est gouvernée par la **goupille de
+couronne** à 0,841 : 14 caissons à faibles splays alignent la barre sur la
+charge, d'où un effort normal de 10,3 kN que le pion de couronne encaisse
+entier, là où la paire le partage en deux.
+
+Élargir la barre doit se faire **vers l'arrière**, bord avant fixe : le bord
+avant est à 35 mm de l'axe et `up660` vit à 19,4 mm, donc le ramener
+étoufferait ce trou (voir `dump_catalogue_load_table`).
+
+Régénérer ces tableaux :
+
+```text
+cargo test -p sa303 dump_catalogue_load_table -- --ignored --nocapture
+```
 
 ### 9.4 Concordance barre / perçage
 
-Les trois trous de la barre ne sont **pas alignés** : le verrou est déporté de
-5,3 à 6,7 mm de l'axe couronne-ancrage selon la couronne. Il est donc comparé
-sur son abscisse le long de cet axe, et il subsiste un écart de +0,12 mm
-(couronne extérieure) / −0,24 mm (intérieure) entre la cotation déclarée et ce
-que la jonction impose — une seule position de verrou ne peut pas satisfaire les
-deux couronnes exactement. Remonté en avertissement par `check_rear_bar`.
+Les trois trous de l'axe — verrou, ancrage, `up680` — sont **alignés** à mieux
+que 0,01 mm, ce que `check_rear_bar` contrôle plutôt que de le supposer. C'est
+la condition d'existence d'une barre droite.
 
-La barre porte **deux** trous de couronne, distants de 4,26 mm : l'entraxe
-couronne-ancrage vaut 329,01 mm sur la couronne extérieure et 324,76 sur
-l'intérieure. Un trou unique ne pourrait pas desservir les deux.
+Les deux couronnes ne sont pas séparées le long de l'axe mais **en travers** :
+`up660` et `up680` sont à 4,84 mm l'un de l'autre en abscisse, et surtout à
+**19,4 mm en latéral**. C'est ce déport qui justifie l'élargissement à 55 et qui
+met l'effort de couronne hors de l'axe sur les splays impairs (§7.2).
+
+La géométrie Fusion livrée ne remonte **aucun** avertissement de concordance.
+Seule réserve : `e₁` au verrou vaut 14,500 mm pour un minimum de 14,496 — la
+cote est exactement sur la limite, à 4 µm près.
+
+### 9.4 bis Incohérence connue sur la plage de tirette
+
+`tie_valid_angle_range_deg` ne borne que la statique — les directions où la
+tension reste positive. Le test de collision est appliqué séparément, au moment
+de retenir l'angle. Les deux ne se parlent pas, et depuis que le point
+d'accroche est passé sur `crown(0)` — un vrai trou de l'enceinte, au lieu d'un
+point situé 170 mm sous son plancher — une partie des directions annoncées
+traverse les enceintes du dessus.
+
+Test `user_can_pick_their_own_angle_inside_the_reported_range`, marqué `#[ignore]`
+avec cette raison. Trancher demande de décider si la plage annoncée doit être
+filtrée par la collision avant d'être affichée, ou si le refus reste au moment
+du choix.
 
 ### 9.5 Valeurs de référence de `golden.rs`
 
