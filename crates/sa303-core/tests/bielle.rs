@@ -315,15 +315,56 @@ fn golden_bar_loads_on_the_reference_joint() {
     let l = (j.anchor_hole_local - j.crown_hole_local).norm();
     assert!((l - 324.8).abs() < 0.1, "L = {l}");
 
-    // Décomposition, par flanc. Axial négatif = barre tendue.
+    // Décomposition dans le repère de barre, par flanc. Axial négatif = tendue.
+    //
+    // N et V ont bougé par rapport à la géométrie précédente, et c'est
+    // attendu : l'axe de barre n'est plus la droite couronne-ancrage mais la
+    // droite ancrage-`up680`. Au splay 5, impair, la couronne utilisée est
+    // `up660`, déportée de 19,4 mm — les deux droites font donc 3,43° entre
+    // elles, et la décomposition tourne d'autant. |F| ne bouge pas.
     assert!(
-        (j.bar_axial_n - -700.0).abs() < 1.0,
+        (j.bar_axial_n - -706.854).abs() < 0.01,
         "N = {}",
         j.bar_axial_n
     );
     assert!(
-        (j.bar_shear_n.abs() - 132.0).abs() < 1.0,
+        (j.bar_shear_n - -89.858).abs() < 0.01,
         "V = {}",
         j.bar_shear_n
+    );
+    // La résultante, elle, est invariante : c'est bien la même force, lue dans
+    // un repère qui a tourné.
+    let f_norm = (j.bar_axial_n.powi(2) + j.bar_shear_n.powi(2)).sqrt();
+    assert!((f_norm - 712.54).abs() < 0.02, "|F| = {f_norm}");
+
+    // Moment. La section critique est l'**ancrage**, premier pion depuis la
+    // couronne. Le moment y est un invariant de repère — c'est |F| fois la
+    // distance de l'ancrage à la ligne d'action — donc il ne bouge pas avec
+    // l'axe, contrairement à N et V.
+    assert_eq!(
+        j.bar_moment_max_at_mm,
+        sm.mechanical.rear_bar.holes.anchor.along()
+    );
+    assert!(
+        (j.bar_moment_max_nm - 42.847).abs() < 0.01,
+        "M_ancrage = {}",
+        j.bar_moment_max_nm
+    );
+
+    // Paire : entraxe 100 mm au lieu de 23,7, donc un couple quatre fois plus
+    // petit pour un moment comparable.
+    let d = (j.anchor_hole_local - j.latch_hole_local).norm();
+    assert!((d - 100.0).abs() < 0.001, "d = {d}");
+    let couple = j.bar_moment_at_pair_nm.abs() * 1000.0 / d;
+    assert!((couple - 473.4).abs() < 1.0, "couple = {couple}");
+    assert!(
+        (j.f_anchor_n - 627.4).abs() < 1.0,
+        "F_ancrage = {}",
+        j.f_anchor_n
+    );
+    assert!(
+        (j.f_latch_n - 555.4).abs() < 1.0,
+        "F_verrou = {}",
+        j.f_latch_n
     );
 }

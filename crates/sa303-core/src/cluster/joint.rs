@@ -134,14 +134,20 @@ pub struct JointResult {
     /// Composante transverse, celle qui fait fléchir la barre. C'est elle qui
     /// dimensionne, pas l'axiale.
     pub bar_shear_n: f64,
-    /// Moment réduit au barycentre de la paire ancrage/verrou (N·m, par flanc) :
-    /// c'est lui que la paire doit reprendre en couple.
+    /// Moment réduit au barycentre de la paire ancrage/verrou (N·m, par flanc).
+    /// Signé, et **exactement** celui qui produit `f_anchor`/`f_latch` : il sort
+    /// du même produit vectoriel, pas d'une reconstruction `|V| × bras` qui
+    /// perdrait le bras transversal de `up660` et ne coïnciderait donc plus
+    /// avec les efforts rendus juste à côté.
     pub bar_moment_at_pair_nm: f64,
-    /// Moment de flexion maximal dans la barre (N·m, par flanc). Il vaut zéro à
-    /// la couronne — articulation simple — et croît linéairement jusqu'à la
-    /// **première** goupille de la paire rencontrée depuis la couronne, le
-    /// verrou : au-delà, la réaction de la paire le fait redescendre. C'est donc
-    /// là qu'il culmine, pas à l'ancrage.
+    /// Moment de flexion à la **section critique** (N·m, par flanc), c'est-à-dire
+    /// à l'**ancrage** : premier pion rencontré depuis la couronne.
+    ///
+    /// Le moment vaut zéro à la couronne — articulation simple — croît jusqu'à
+    /// l'ancrage, puis redescend sous l'effet de la réaction de la paire ; il
+    /// est nul au verrou, derrière lequel il ne reste que 14,5 mm de barre où
+    /// rien ne s'applique. Les deux pions ont échangé leur rang par rapport à
+    /// la géométrie précédente, où le maximum était au verrou.
     pub bar_moment_max_nm: f64,
     /// Abscisse le long de la barre où `bar_moment_max_nm` est atteint, mesurée
     /// depuis l'extrémité couronne.
@@ -329,6 +335,10 @@ pub fn compute_joint(input: &JointInput) -> Result<JointResult, JointInconsisten
     let p = perp * (m_g / d);
     let f_anchor_g = f_pair * 0.5 + p;
     let f_latch_g = f_pair * 0.5 - p;
+    // Exactement le moment qui produit le couple ci-dessus — pas une
+    // reconstruction `|V| × bras`, qui perdrait le bras transversal de `up660`
+    // et ne coïnciderait donc plus avec les efforts réellement rendus.
+    let bar_moment_at_pair_nm = m_g * input.share_per_flank / 1000.0;
 
     let ti = match input.compartment {
         Compartment::Flown => i,
@@ -406,45 +416,53 @@ pub fn compute_joint(input: &JointInput) -> Result<JointResult, JointInconsisten
     let hinge_reversed = f_pivot.dot(gravity_local) < 0.0;
     // --- La barre arrière, dans son propre repère ---------------------------
     //
-    // `f_ori` est l'effort que le caisson du haut applique à la barre par la
-    // goupille de couronne. La barre n'ayant que deux liaisons — cette goupille
-    // et la paire — c'est le seul chargement qu'elle voit entre son extrémité
-    // couronne et le premier trou de la paire. D'où un diagramme de moment
-    // simple : nul à la couronne, linéaire, maximal au verrou.
+    // Le repère de barre : abscisse depuis le petit bout (côté verrou), latéral
+    // positif vers l'avant du caisson. L'axe est la droite ancrage -> couronne
+    // extérieure ; verrou, ancrage et `up680` y sont tous à latéral nul, ce qui
+    // est vérifié au chargement par `check_rear_bar`.
     //
-    // Axe de la barre orienté couronne -> ancrage. `V` est pris en produit
-    // vectoriel plutôt qu'en projection sur une normale construite à la main :
-    // un signe de moins s'y glisserait sans se voir.
+    // **`up660` n'est pas sur l'axe.** Sur les splays impairs, l'effort de
+    // couronne s'applique 19,4 mm en travers. Le moment ne peut donc pas
+    // s'écrire `|V| × abscisse` : il faut le produit vectoriel complet, sans
+    // quoi le bras transversal disparaîtrait et avec lui la part de moment
+    // qu'il introduit.
     let bar = &input.chain[i].rear_bar;
-    let e = (an - bo).normalize();
-    let axial = f_ori.dot(e);
-    let shear = f_ori.cross(e);
+    // Direction d'abscisse croissante, du verrou vers la couronne. Prise sur
+    // les deux trous de la paire, qui sont sur l'axe par construction.
+    let e_axis = (an - lt).normalize();
+    // Normale « vers l'avant », même construction qu'en géométrie : tourner
+    // l'axe d'un quart de tour direct. Nommée plutôt que laissée à un ordre de
+    // produit vectoriel — l'inverser mettrait `up660` du mauvais côté.
+    let e_front = Vec2::new(-e_axis.y, e_axis.x);
 
-    let crown_at = bar.crown_hole(s).along();
-    let latch_arm = (bar.holes.latch.along() - crown_at).abs();
-    let anchor_arm = (bar.holes.anchor.along() - crown_at).abs();
-    // La goupille de la paire la plus proche de la couronne : c'est là que le
-    // moment culmine. Le verrou par construction, mais lu sur la cotation
-    // plutôt que supposé — une barre cotée autrement inverserait les deux.
-    let (first_arm, first_at) = if latch_arm <= anchor_arm {
-        (latch_arm, bar.holes.latch.along())
-    } else {
-        (anchor_arm, bar.holes.anchor.along())
-    };
-    let pair_centroid_arm = (latch_arm + anchor_arm) / 2.0;
+    // Effort vu par la barre, exprimé dans son repère.
+    let f_bar = Vec2::new(f_on_bar.dot(e_axis), f_on_bar.dot(e_front));
+    let p_crown = bar.crown_hole(s).as_vec();
+    let p_anchor = bar.holes.anchor.as_vec();
+    let p_latch = bar.holes.latch.as_vec();
 
     let sf = input.share_per_flank;
-    let bar_axial_n = axial * sf;
-    let bar_shear_n = shear * sf;
-    let bar_moment_at_pair_nm = (shear * sf).abs() * pair_centroid_arm / 1000.0;
-    let bar_moment_max_nm = (shear * sf).abs() * first_arm / 1000.0;
-    let bar_moment_max_at_mm = first_at;
+    // Axial compté positif en compression, donc le long de l'axe **descendant**
+    // vers la paire : c'est le sens dans lequel la couronne pousse la barre.
+    let bar_axial_n = -f_bar.x * sf;
+    let bar_shear_n = f_bar.y * sf;
 
-    // Traction de la barre : signe de sa composante axiale. Le scalaire
-    // `lambda` ne renseigne plus là-dessus — il porte désormais la bielle.
+    // Moment exact en une section, vu depuis le côté couronne : entre la
+    // couronne et l'ancrage, la barre ne voit que cet effort-là.
+    let moment_from_crown = |p: Vec2| (p - p_crown).cross(f_bar) * sf;
+
+    // Section critique : l'**ancrage**, premier pion rencontré depuis la
+    // couronne. Au-delà, la réaction de la paire fait redescendre le moment,
+    // qui est nul au verrou — il ne reste que 14,5 mm de barre derrière lui, et
+    // rien ne s'y applique. Les deux pions ont échangé leur rang par rapport à
+    // la géométrie précédente : c'était le verrou, c'est l'ancrage.
+    let bar_moment_max_nm = moment_from_crown(p_anchor).abs() / 1000.0;
+    let bar_moment_max_at_mm = p_anchor.x;
+
+    // Traction de la barre : signe de sa composante axiale.
     let traction = match input.compartment {
-        Compartment::Stacked => axial <= 0.0,
-        Compartment::Flown => axial >= 0.0,
+        Compartment::Stacked => bar_axial_n <= 0.0,
+        Compartment::Flown => bar_axial_n >= 0.0,
     };
 
     let free_body_count = match input.compartment {
