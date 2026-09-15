@@ -439,7 +439,6 @@ pub fn compute_joint(input: &JointInput) -> Result<JointResult, JointInconsisten
     let f_bar = Vec2::new(f_on_bar.dot(e_axis), f_on_bar.dot(e_front));
     let p_crown = bar.crown_hole(s).as_vec();
     let p_anchor = bar.holes.anchor.as_vec();
-    let p_latch = bar.holes.latch.as_vec();
 
     let sf = input.share_per_flank;
     // Axial compté positif en compression, donc le long de l'axe **descendant**

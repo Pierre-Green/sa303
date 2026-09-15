@@ -134,3 +134,92 @@ pub fn default_settings() -> Settings {
         },
     }
 }
+
+/// Tableau de charges par jonction sur le catalogue de grappes livré, avec
+/// balayage de la largeur de barre. Ce n'est pas un test — rien n'y est asserté
+/// — mais le moyen de régénérer le tableau du dossier d'audit sur les grappes
+/// réelles plutôt que sur le jeu synthétique de `sa303-core` :
+///
+/// ```text
+/// cargo test -p sa303 dump_catalogue_load_table -- --ignored --nocapture
+/// ```
+#[cfg(test)]
+#[test]
+#[ignore]
+fn dump_catalogue_load_table() {
+    use sa303_core::checks::{check_bar, utilization, SandwichSpec};
+    use sa303_core::compute_cluster;
+
+    let speakers: Vec<_> = builtin_speakers().into_iter().map(|b| b.model).collect();
+    let bumpers: Vec<_> = builtin_bumpers().into_iter().map(|b| b.model).collect();
+    let bars: Vec<_> = builtin_bumper_bars().into_iter().map(|b| b.model).collect();
+    let clusters: Vec<_> = builtin_clusters().into_iter().map(|b| b.model).collect();
+    let settings = default_settings();
+    let spec = SandwichSpec::from_settings(&settings);
+
+    // Les quatre grappes demandées, repérées par un fragment de leur nom.
+    let wanted = ["40d-88d", "-20d-46d", "0-150m", "0-60m"];
+
+    for width in [40.0_f64, 70.0] {
+        println!("=== largeur de barre {width} mm ===");
+        println!("grappe|J|splay|N|V|Mmax|sigma|ou|larg|Fverrou|Fancrage|couronne|bielle|verrou|ancrage|barre|arrach|pire");
+        for cluster in &clusters {
+            if !wanted.iter().any(|w| cluster.name.contains(w)) {
+                continue;
+            }
+            // Le balayage se fait sur le modèle, pas dans le code de calcul :
+            // c'est bien la cote de la pièce qu'on fait varier.
+            //
+            // Élargir la partie courante sans bouger la partie élargie
+            // produirait une pièce absurde — un « large » plus étroit que
+            // l'« étroit » — et surtout ramènerait le bord avant sur `up660`,
+            // qui vit à 19,4 mm de l'axe. Le bord avant est donc tenu fixe :
+            // l'élargissement se fait d'un seul côté, vers l'arrière, et
+            // `e₂ up660` reste à ses 15,6 mm.
+            let front_edge = 55.0 - 40.0 / 2.0;
+            let swept: Vec<_> = speakers
+                .iter()
+                .cloned()
+                .map(|mut s| {
+                    s.mechanical.rear_bar.narrow_width = width;
+                    s.mechanical.rear_bar.wide_width = front_edge + width / 2.0;
+                    s
+                })
+                .collect();
+            let Some(bumper) = bumpers.iter().find(|b| b.id == cluster.bumper_model_id) else {
+                println!("{}|bumper introuvable", cluster.name);
+                continue;
+            };
+            match compute_cluster(&swept, cluster, &settings, bumper, &bars) {
+                Err(e) => println!("{}|IMPOSSIBLE|{}", cluster.name, e.reason),
+                Ok(r) => {
+                    for j in &r.joints {
+                        let b = check_bar(
+                            &j.rear_bar,
+                            j.splay_deg,
+                            j.bar_shear_n,
+                            j.bar_axial_n,
+                            settings.safety_factor,
+                        );
+                        let w = b.worst_section();
+                        let uo = utilization(j.f_orientation_n, &spec);
+                        let up = utilization(j.f_pivot_n, &spec);
+                        let ua = utilization(j.f_anchor_n, &spec);
+                        let ul = utilization(j.f_latch_n, &spec);
+                        let ub = w.utilization;
+                        let ut = b.worst_tear_out().utilization;
+                        println!(
+                            "{}|{}|{}|{:.0}|{:.0}|{:.1}|{:.1}|{}|{:.0}|{:.0}|{:.0}|{:.3}|{:.3}|{:.3}|{:.3}|{:.3}|{:.3}|{:.3}",
+                            cluster.name, j.joint_index + 1, j.splay_deg,
+                            j.bar_axial_n, j.bar_shear_n, j.bar_moment_max_nm,
+                            w.stress_mpa, w.location, b.critical_width_mm,
+                            j.f_latch_n, j.f_anchor_n,
+                            uo, up, ul, ua, ub, ut,
+                            uo.max(up).max(ua).max(ul).max(ub).max(ut)
+                        );
+                    }
+                }
+            }
+        }
+    }
+}

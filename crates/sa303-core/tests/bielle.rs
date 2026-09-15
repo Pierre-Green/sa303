@@ -278,7 +278,6 @@ fn a_degenerate_bielle_lever_is_an_error_not_a_silent_nan() {
 /// zéro. Les valeurs ci-dessous ne vaudraient plus.
 #[test]
 fn golden_bar_loads_on_the_reference_joint() {
-    use sa303_core::checks::check_bar;
     use sa303_core::cluster::{
         build_cluster, compute_joint, ChainSpeaker, Compartment, JointInput,
     };
