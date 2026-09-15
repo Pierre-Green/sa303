@@ -367,4 +367,22 @@ fn golden_bar_loads_on_the_reference_joint() {
         "F_verrou = {}",
         j.f_latch_n
     );
+
+    // Le moment au verrou est nul : il ne reste que 14,5 mm de barre derrière
+    // lui, et rien ne s'y applique. C'est l'ancrage qui est la section critique.
+    let check = sa303_core::checks::check_bar(
+        &sm.mechanical.rear_bar,
+        j.splay_deg,
+        j.bar_shear_n,
+        j.bar_axial_n,
+        4.0,
+    );
+    let latch = check
+        .sections
+        .iter()
+        .find(|x| x.location == "verrou")
+        .expect("le verrou doit être vérifié");
+    assert_eq!(latch.moment_nmm, 0.0);
+    assert_eq!(check.worst_section().location, "ancrage");
+    assert_eq!(check.critical_width_mm, 40.0);
 }
