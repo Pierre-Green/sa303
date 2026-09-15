@@ -2063,3 +2063,96 @@ fn dump_audit_export_sample() {
     );
     println!("{}", serde_json::to_string_pretty(&export).unwrap());
 }
+
+/// Les deux perçages d'orientation doivent chacun avoir leur pire cas. Ils ne
+/// culminent pas au même endroit : chaque goupille porte la part directe plus ou
+/// moins le couple, donc celle qui gouverne change de côté avec le signe du
+/// moment. N'en suivre qu'une laisserait l'autre sans enveloppe.
+#[test]
+fn both_orientation_holes_get_their_own_worst_case() {
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let settings = default_settings();
+    let clusters = representative_clusters(&bumper.id);
+    let report = compute_aggregate(
+        std::slice::from_ref(&sm),
+        &clusters,
+        &settings,
+        std::slice::from_ref(&bumper),
+        &[],
+    );
+
+    for compartment in [&report.flown, &report.stacked] {
+        let labels: Vec<&str> = compartment
+            .block_a
+            .iter()
+            .flat_map(|c| c.labels.iter().copied())
+            .collect();
+        for wanted in [
+            "effort ancrage max",
+            "effort verrou max",
+            "paire la plus déséquilibrée",
+        ] {
+            assert!(
+                labels.contains(&wanted),
+                "« {wanted} » absent de {labels:?}"
+            );
+        }
+
+        // Et le cas retenu pour chaque goupille est bien celui qui la charge le
+        // plus : sinon le label nommerait un chemin qu'il ne couvre pas.
+        let worst_anchor = compartment
+            .block_a
+            .iter()
+            .chain(&compartment.block_b)
+            .map(|c| c.result.f_anchor_n)
+            .fold(0.0_f64, f64::max);
+        let retained = compartment
+            .block_a
+            .iter()
+            .find(|c| c.labels.contains(&"effort ancrage max"))
+            .expect("un cas doit porter ce label");
+        assert!(
+            (retained.result.f_anchor_n - worst_anchor).abs() < 1e-9,
+            "le cas « effort ancrage max » n'est pas le plus chargé à l'ancrage"
+        );
+    }
+}
+
+/// Le taux affiché doit être celui des cinq chemins, pas celui de la couronne.
+/// Sur le jeu représentatif, la couronne seule sous-estime franchement : c'est
+/// exactement ce que le tableau montrait avant.
+#[test]
+fn the_reported_utilization_covers_the_pair_and_the_bar() {
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let settings = default_settings();
+    let clusters = representative_clusters(&bumper.id);
+    let report = compute_aggregate(
+        std::slice::from_ref(&sm),
+        &clusters,
+        &settings,
+        std::slice::from_ref(&bumper),
+        &[],
+    );
+
+    let mut understated = 0;
+    let mut seen = 0;
+    for compartment in [&report.flown, &report.stacked] {
+        for c in compartment.block_a.iter().chain(&compartment.block_b) {
+            let crown_and_bielle = c.utilization_orientation.max(c.utilization_pivot);
+            assert!(c.utilization_worst >= crown_and_bielle - 1e-12);
+            if c.utilization_worst > crown_and_bielle * 1.5 {
+                understated += 1;
+            }
+            seen += 1;
+        }
+    }
+    assert!(seen > 0);
+    // Si l'ancien taux n'avait jamais été loin du compte, la distinction serait
+    // cosmétique. Elle ne l'est pas.
+    assert!(
+        understated * 2 >= seen,
+        "seulement {understated} cas sur {seen} où l'ancien taux sous-estimait de moitié"
+    );
+}

@@ -183,6 +183,11 @@ pub struct JointResult {
     /// côté TypeScript.
     pub anchor_hole_global: Vec2,
     pub latch_hole_global: Vec2,
+    /// Efforts sur les deux goupilles de la paire, repère global. Même raison :
+    /// le viewer dessine deux flèches à leur point d'application, il ne doit
+    /// pas avoir à tourner un vecteur pour ça (brief §1).
+    pub f_anchor_global: Vec2,
+    pub f_latch_global: Vec2,
     pub residual_n: f64,
     /// Résidu de l'équation de moment, pris ailleurs qu'à la goupille de
     /// couronne (N·mm, effort total et non par flanc). Contrairement à
@@ -520,6 +525,8 @@ pub fn compute_joint(input: &JointInput) -> Result<JointResult, JointInconsisten
         latch_hole_local: to_local(lt),
         anchor_hole_global: an,
         latch_hole_global: lt,
+        f_anchor_global: f_anchor_g * input.share_per_flank,
+        f_latch_global: f_latch_g * input.share_per_flank,
         residual_n: residual,
         moment_residual_nmm,
         recommended_splay_range_deg: input.recommended_splay.map(|r| [r.min_deg, r.max_deg]),

@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import InfoTip from "@/components/InfoTip.vue";
 import { FileIcon } from "@lucide/vue";
 
 const report = ref<AggregateReport | null>(null);
@@ -33,6 +34,29 @@ async function exportAggregateReportForShapeOptimizationFem() {
     error.value = String(e);
   }
 };
+
+/// Les cinq chemins de charge d'un cas, nommés. L'ordre n'a pas d'importance :
+/// c'est le maximum qui gouverne, et `utilizationWorst` le donne déjà côté
+/// Rust — on ne le recalcule pas ici, on ne fait que le nommer.
+function paths(c: LoadCaseReport): [string, number][] {
+  return [
+    ["couronne", c.utilizationOrientation],
+    ["ancrage", c.utilizationAnchor],
+    ["verrou", c.utilizationLatch],
+    ["bielle", c.utilizationPivot],
+    ["flexion de barre", c.utilizationBar],
+  ];
+}
+
+function governingPath(c: LoadCaseReport): string {
+  return paths(c).reduce((a, b) => (b[1] > a[1] ? b : a))[0];
+}
+
+/// Met en évidence la colonne du chemin qui gouverne : sur une ligne de cinq
+/// nombres, savoir lequel dimensionne est ce qui se lit le moins bien.
+function pathClass(c: LoadCaseReport, path: string): string {
+  return governingPath(c) === path ? "font-semibold" : "";
+}
 
 function utilizationVariant(u: number): "default" | "secondary" | "destructive" {
   if (u > 1) return "destructive";
@@ -95,12 +119,28 @@ function rowLabel(c: LoadCaseReport, block: "a" | "b"): string {
                   <TableHead>Cas</TableHead>
                   <TableHead>Grappe</TableHead>
                   <TableHead>Joint</TableHead>
-                  <TableHead>F orientation</TableHead>
-                  <TableHead>A orientation</TableHead>
+                  <TableHead>F couronne</TableHead>
+                  <TableHead>F ancrage</TableHead>
+                  <TableHead>F verrou</TableHead>
                   <TableHead>F pivot</TableHead>
-                  <TableHead>A pivot</TableHead>
+                  <TableHead>M barre</TableHead>
                   <TableHead>Angle absolut</TableHead>
-                  <TableHead>Taux</TableHead>
+                  <TableHead>
+                    <span class="flex items-center">
+                      Chemin
+                      <InfoTip
+                        text="Le chemin de charge qui gouverne : couronne, ancrage, verrou, bielle ou flexion de barre. C'est lui qui dit quoi renforcer."
+                      />
+                    </span>
+                  </TableHead>
+                  <TableHead>
+                    <span class="flex items-center">
+                      Taux
+                      <InfoTip
+                        text="Pire des cinq chemins. Regarder la seule couronne sous-estime la paire d'un facteur 3 et ignore complètement la flexion de barre."
+                      />
+                    </span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -108,24 +148,28 @@ function rowLabel(c: LoadCaseReport, block: "a" | "b"): string {
                   <TableCell>{{ rowLabel(c, "a") }}</TableCell>
                   <TableCell>{{ c.clusterName }}</TableCell>
                   <TableCell>J{{ c.jointNumber }}</TableCell>
-                  <TableCell>
+                  <TableCell :class="pathClass(c, 'couronne')">
                     {{ c.result.fOrientationN.toFixed(0) }} N
                   </TableCell>
-                  <TableCell>
-                    {{ c.result.fOrientationAngleDeg.toFixed(0) }} °
+                  <TableCell :class="pathClass(c, 'ancrage')">
+                    {{ c.result.fAnchorN.toFixed(0) }} N
                   </TableCell>
-                  <TableCell>
+                  <TableCell :class="pathClass(c, 'verrou')">
+                    {{ c.result.fLatchN.toFixed(0) }} N
+                  </TableCell>
+                  <TableCell :class="pathClass(c, 'bielle')">
                     {{ c.result.fPivotN.toFixed(0) }} N
                   </TableCell>
-                  <TableCell>
-                    {{ c.result.fPivotAngleDeg.toFixed(0) }} °
+                  <TableCell :class="pathClass(c, 'flexion de barre')">
+                    {{ c.result.barMomentMaxNm.toFixed(0) }} N·m
                   </TableCell>
                   <TableCell>
                     {{ c.result.inclinationDeg.toFixed(0) }} °
                   </TableCell>
+                  <TableCell class="text-muted-foreground">{{ governingPath(c) }}</TableCell>
                   <TableCell>
-                    <Badge :variant="utilizationVariant(Math.max(c.utilizationOrientation, c.utilizationPivot))">
-                      {{ (Math.max(c.utilizationOrientation, c.utilizationPivot) * 100).toFixed(0) }}%
+                    <Badge :variant="utilizationVariant(c.utilizationWorst)">
+                      {{ (c.utilizationWorst * 100).toFixed(0) }}%
                     </Badge>
                   </TableCell>
                 </TableRow>
@@ -153,12 +197,28 @@ function rowLabel(c: LoadCaseReport, block: "a" | "b"): string {
                   <TableHead>Splay</TableHead>
                   <TableHead>Grappe</TableHead>
                   <TableHead>Joint</TableHead>
-                  <TableHead>F orientation</TableHead>
-                  <TableHead>A orientation</TableHead>
+                  <TableHead>F couronne</TableHead>
+                  <TableHead>F ancrage</TableHead>
+                  <TableHead>F verrou</TableHead>
                   <TableHead>F pivot</TableHead>
-                  <TableHead>A pivot</TableHead>
+                  <TableHead>M barre</TableHead>
                   <TableHead>Angle absolut</TableHead>
-                  <TableHead>Taux</TableHead>
+                  <TableHead>
+                    <span class="flex items-center">
+                      Chemin
+                      <InfoTip
+                        text="Le chemin de charge qui gouverne : couronne, ancrage, verrou, bielle ou flexion de barre. C'est lui qui dit quoi renforcer."
+                      />
+                    </span>
+                  </TableHead>
+                  <TableHead>
+                    <span class="flex items-center">
+                      Taux
+                      <InfoTip
+                        text="Pire des cinq chemins. Regarder la seule couronne sous-estime la paire d'un facteur 3 et ignore complètement la flexion de barre."
+                      />
+                    </span>
+                  </TableHead>
                   <TableHead>Doublon</TableHead>
                 </TableRow>
               </TableHeader>
@@ -171,24 +231,28 @@ function rowLabel(c: LoadCaseReport, block: "a" | "b"): string {
                   <TableCell>{{ c.result.splayDeg }}°</TableCell>
                   <TableCell>{{ c.clusterName }}</TableCell>
                   <TableCell>J{{ c.jointNumber }}</TableCell>
-                  <TableCell>
+                  <TableCell :class="pathClass(c, 'couronne')">
                     {{ c.result.fOrientationN.toFixed(0) }} N
                   </TableCell>
-                  <TableCell>
-                    {{ c.result.fOrientationAngleDeg.toFixed(0) }} °
+                  <TableCell :class="pathClass(c, 'ancrage')">
+                    {{ c.result.fAnchorN.toFixed(0) }} N
                   </TableCell>
-                  <TableCell>
+                  <TableCell :class="pathClass(c, 'verrou')">
+                    {{ c.result.fLatchN.toFixed(0) }} N
+                  </TableCell>
+                  <TableCell :class="pathClass(c, 'bielle')">
                     {{ c.result.fPivotN.toFixed(0) }} N
                   </TableCell>
-                  <TableCell>
-                    {{ c.result.fPivotAngleDeg.toFixed(0) }} °
+                  <TableCell :class="pathClass(c, 'flexion de barre')">
+                    {{ c.result.barMomentMaxNm.toFixed(0) }} N·m
                   </TableCell>
                   <TableCell>
                     {{ c.result.inclinationDeg.toFixed(0) }} °
                   </TableCell>
+                  <TableCell class="text-muted-foreground">{{ governingPath(c) }}</TableCell>
                   <TableCell>
-                    <Badge :variant="utilizationVariant(Math.max(c.utilizationOrientation, c.utilizationPivot))">
-                      {{ (Math.max(c.utilizationOrientation, c.utilizationPivot) * 100).toFixed(0) }}%
+                    <Badge :variant="utilizationVariant(c.utilizationWorst)">
+                      {{ (c.utilizationWorst * 100).toFixed(0) }}%
                     </Badge>
                   </TableCell>
                   <TableCell>{{ c.duplicate ? "bloc A" : "" }}</TableCell>

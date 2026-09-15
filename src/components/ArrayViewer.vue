@@ -497,12 +497,17 @@ const tiePointMarkerConfig = computed(() => {
 });
 
 const FORCE_REF_LENGTH_MM = computed(() => referenceDepth.value * 0.85);
+// Échelle commune à toutes les flèches. Les efforts de paire y entrent : ils
+// dépassent souvent celui de couronne, et les laisser hors de l'échelle les
+// ferait sortir du cadre — ou, pire, ferait paraître la couronne dominante.
 const maxForceN = computed(() =>
   Math.max(
     1,
     ...props.result.joints.flatMap((j) => [
       Math.hypot(j.fOrientationGlobal.x, j.fOrientationGlobal.y),
       Math.hypot(j.fPivotGlobal.x, j.fPivotGlobal.y),
+      Math.hypot(j.fAnchorGlobal.x, j.fAnchorGlobal.y),
+      Math.hypot(j.fLatchGlobal.x, j.fLatchGlobal.y),
     ]),
   ),
 );
@@ -521,6 +526,19 @@ function arrowConfig(from: Vec2, force: Vec2, color: string) {
     strokeWidth: px(2.5),
     pointerLength: px(8),
     pointerWidth: px(8),
+  };
+}
+
+// Trait fin entre les deux goupilles de la paire : il matérialise l'entraxe,
+// bras du couple qui reprend le moment de barre.
+function pairSpanConfig(j: ClusterResult["joints"][number]) {
+  const a = toLocal(j.anchorHoleGlobal);
+  const b = toLocal(j.latchHoleGlobal);
+  return {
+    points: [a.x, a.y, b.x, b.y],
+    stroke: colors.value.orientation,
+    strokeWidth: px(1),
+    opacity: 0.5,
   };
 }
 
@@ -652,8 +670,20 @@ function handleWheel(e: { evt: WheelEvent }) {
             </template>
 
             <template v-for="(j, idx) in result.joints" :key="'joint-' + idx">
+              <!-- Les DEUX perçages d'orientation. La barre est encastrée sur
+                   la paire : elle y déverse une force et un moment, repris en
+                   couple, donc les deux goupilles sont chargées différemment et
+                   n'en montrer qu'une donne une image fausse de la jonction. -->
+              <v-arrow :config="arrowConfig(j.anchorHoleGlobal, j.fAnchorGlobal, colors.orientation)" />
+              <v-arrow :config="arrowConfig(j.latchHoleGlobal, j.fLatchGlobal, colors.orientation)" />
               <v-arrow :config="arrowConfig(j.loadedOrientationHoleGlobal, j.fOrientationGlobal, colors.orientation)" />
               <v-arrow :config="arrowConfig(j.loadedPivotHoleGlobal, j.fPivotGlobal, colors.pivot)" />
+              <!-- Segment ancrage-verrou : c'est l'entraxe qui fixe le bras du
+                   couple, donc la grandeur qui explique l'écart entre les deux
+                   flèches ci-dessus. -->
+              <v-line :config="pairSpanConfig(j)" />
+              <v-circle :config="holeMarkerConfig(j.anchorHoleGlobal, colors.orientation)" />
+              <v-circle :config="holeMarkerConfig(j.latchHoleGlobal, colors.orientation)" />
               <v-circle :config="holeMarkerConfig(j.loadedOrientationHoleGlobal, colors.orientation)" />
               <v-circle :config="holeMarkerConfig(j.loadedPivotHoleGlobal, colors.pivot)" />
               <v-circle v-if="j.hingeReversed" :config="reversedRingConfig(j.loadedPivotHoleGlobal)" />
@@ -699,10 +729,24 @@ function handleWheel(e: { evt: WheelEvent }) {
         </div>
         <template v-if="speakerPopupData.joint">
           <div class="mt-1 flex justify-between text-zone-orientation">
-            <dt>F orientation</dt>
+            <dt>F couronne</dt>
             <dd>
               {{ speakerPopupData.joint.fOrientationN.toFixed(0) }} N @
               {{ speakerPopupData.joint.fOrientationAngleDeg.toFixed(1) }}°
+            </dd>
+          </div>
+          <div class="flex justify-between text-zone-orientation">
+            <dt>F ancrage</dt>
+            <dd>
+              {{ speakerPopupData.joint.fAnchorN.toFixed(0) }} N @
+              {{ speakerPopupData.joint.fAnchorAngleDeg.toFixed(1) }}°
+            </dd>
+          </div>
+          <div class="flex justify-between text-zone-orientation">
+            <dt>F verrou</dt>
+            <dd>
+              {{ speakerPopupData.joint.fLatchN.toFixed(0) }} N @
+              {{ speakerPopupData.joint.fLatchAngleDeg.toFixed(1) }}°
             </dd>
           </div>
           <div class="flex justify-between text-zone-pivot">

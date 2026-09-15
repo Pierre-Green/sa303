@@ -283,6 +283,11 @@ export interface JointResult {
   latchHoleLocal: Vec2;
   anchorHoleGlobal: Vec2;
   latchHoleGlobal: Vec2;
+  /** Efforts sur les deux goupilles de la paire, repère global — le viewer
+   * dessine deux flèches à leur point d'application, il n'a pas à tourner un
+   * vecteur pour ça. */
+  fAnchorGlobal: Vec2;
+  fLatchGlobal: Vec2;
   residualN: number;
   /** Résidu de l'équation de moment, pris ailleurs qu'à la goupille de
    * couronne. Contrairement à `residualN`, il n'est pas nul par construction. */
@@ -427,8 +432,21 @@ export interface LoadCaseReport {
   labels: string[];
   duplicate: boolean;
   result: JointResult;
+  /** Sandwich à la goupille de couronne. */
   utilizationOrientation: number;
+  /** Sandwich aux goupilles de bielle. */
   utilizationPivot: number;
+  /** Sandwich aux deux goupilles de la paire. Elles ne culminent pas au même
+   * endroit : chacune porte la part directe plus ou moins le couple. */
+  utilizationAnchor: number;
+  utilizationLatch: number;
+  /** Flexion composée de la barre arrière. */
+  utilizationBar: number;
+  barCheck: BarCheck;
+  /** Le pire des cinq chemins. C'est lui qui dit si la jonction passe :
+   * `utilizationOrientation` seul sous-estime la paire d'un facteur 3 et ignore
+   * complètement la flexion. */
+  utilizationWorst: number;
 }
 
 export interface CompartmentReport {

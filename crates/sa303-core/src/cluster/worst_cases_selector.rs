@@ -70,7 +70,7 @@ fn max_by(
 /// Bloc A : un cas par chemin de charge distinct (brief §9), fusionnés si le même
 /// joint gagne plusieurs critères.
 pub fn select_block_a(cases: &[LoadCase]) -> Vec<BlockACase> {
-    let candidates: [(&'static str, Option<usize>); 9] = [
+    let candidates: [(&'static str, Option<usize>); 11] = [
         (
             "effort orientation max",
             max_by(cases, |_| true, |c| c.result.mag_orientation()),
@@ -107,9 +107,27 @@ pub fn select_block_a(cases: &[LoadCase]) -> Vec<BlockACase> {
             "moment de barre max",
             max_by(cases, |_| true, |c| c.result.bar_moment_max_nm),
         ),
+        // Les deux goupilles de la paire ont chacune leur critère. Elles ne
+        // culminent pas au même endroit : chacune porte la part directe plus ou
+        // moins le couple, donc celle qui gouverne change de côté selon le
+        // signe du moment. N'en suivre qu'une laisserait l'autre sans pire cas.
+        (
+            "effort ancrage max",
+            max_by(cases, |_| true, |c| c.result.f_anchor_n),
+        ),
         (
             "effort verrou max",
             max_by(cases, |_| true, |c| c.result.f_latch_n),
+        ),
+        // La paire la plus déséquilibrée : c'est là que le couple domine le plus
+        // la part directe, donc le cas qui dimensionne l'entraxe lui-même.
+        (
+            "paire la plus déséquilibrée",
+            max_by(
+                cases,
+                |_| true,
+                |c| (c.result.f_anchor_n - c.result.f_latch_n).abs(),
+            ),
         ),
         (
             "flexion de barre max",
@@ -205,9 +223,10 @@ mod tests {
     /// les chemins « barre » soient pilotés indépendamment des efforts de
     /// couronne et de bielle : c'est justement parce qu'ils ne coïncident pas
     /// qu'ils méritent leurs propres critères.
-    fn with_bar(mut j: JointResult, shear_n: f64, latch_n: f64) -> JointResult {
+    fn with_bar(mut j: JointResult, shear_n: f64, anchor_n: f64, latch_n: f64) -> JointResult {
         j.bar_shear_n = shear_n;
         j.bar_moment_max_nm = shear_n.abs() * 0.3;
+        j.f_anchor_n = anchor_n;
         j.f_latch_n = latch_n;
         j
     }
@@ -291,6 +310,8 @@ mod tests {
             latch_hole_local: Vec2::ZERO,
             anchor_hole_global: Vec2::ZERO,
             latch_hole_global: Vec2::ZERO,
+            f_anchor_global: Vec2::ZERO,
+            f_latch_global: Vec2::ZERO,
             residual_n: 0.0,
             recommended_splay_range_deg: None,
             acoustically_optimal: true,
@@ -321,12 +342,18 @@ mod tests {
                 with_bar(
                     fake_joint(100.0, 10.0, false, true, 1.0, -5.0),
                     900.0,
+                    1800.0,
                     1500.0,
                 ),
             ),
             load_case(
                 2,
-                with_bar(fake_joint(50.0, 200.0, true, false, 2.0, 10.0), 40.0, 90.0),
+                with_bar(
+                    fake_joint(50.0, 200.0, true, false, 2.0, 10.0),
+                    40.0,
+                    110.0,
+                    90.0,
+                ),
             ),
         ];
         let block_a = select_block_a(&cases);
@@ -338,7 +365,9 @@ mod tests {
             vec![
                 "effort orientation max",
                 "moment de barre max",
+                "effort ancrage max",
                 "effort verrou max",
+                "paire la plus déséquilibrée",
                 "flexion de barre max",
             ]
         );
@@ -414,12 +443,18 @@ mod tests {
                 with_bar(
                     fake_joint(100.0, 10.0, false, true, 1.0, -5.0),
                     900.0,
+                    1800.0,
                     1500.0,
                 ),
             ), // idx0 : gagne tous les critères applicables
             load_case(
                 2,
-                with_bar(fake_joint(10.0, 5.0, false, true, 2.0, 0.0), 10.0, 20.0),
+                with_bar(
+                    fake_joint(10.0, 5.0, false, true, 2.0, 0.0),
+                    10.0,
+                    25.0,
+                    20.0,
+                ),
             ), // idx1 : strictement dominé, n'apparaît nulle part
         ];
         let block_a = select_block_a(&cases);
