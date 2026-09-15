@@ -5,5 +5,8 @@
 mod bar;
 mod sandwich;
 
-pub use bar::{check_bar, BarCheck, BarSectionCheck, BarTearOutCheck};
+pub use bar::{
+    check_bar, BarCheck, BarGeometryWarning, BarLoads, BarProfilePoint, BarSectionCheck,
+    BarTearOutCheck, MOMENT_CONTINUITY_TOLERANCE_NMM, PROFILE_SAMPLE_MM, SWEEP_STEP_MM,
+};
 pub use sandwich::{utilization, utilization_breakdown, SandwichSpec, UtilizationBreakdown};

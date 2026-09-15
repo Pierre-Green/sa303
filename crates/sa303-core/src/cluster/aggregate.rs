@@ -84,9 +84,10 @@ fn load_case_report(
     let bar_check = check_bar(
         &case.result.rear_bar,
         case.result.splay_deg,
-        case.result.bar_shear_n,
-        case.result.bar_axial_n,
+        &case.result.bar_loads(),
         spec.safety_factor,
+        Some(case.result.rear_face_x),
+        Some(case.result.bar_rear_edge_max_x),
     );
     let utilization_bar = bar_check.utilization();
     let utilization_anchor = utilization(case.result.f_anchor_n, spec);
@@ -102,7 +103,7 @@ fn load_case_report(
         joint_number: case.joint_number,
         labels,
         duplicate,
-        result: case.result,
+        result: case.result.clone(),
         utilization_orientation,
         utilization_pivot,
         utilization_worst: utilization_orientation

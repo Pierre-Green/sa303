@@ -1,291 +1,357 @@
-//! Barre arrière : flexion composée, et arrachement de bord aux perçages.
+//! Barre arrière : flexion composée balayée en continu, et arrachement de bord
+//! aux perçages.
 //!
-//! C'est le mode que le modèle à deux forces ne pouvait pas voir : tant que la
-//! barre était supposée bi-articulée, elle ne portait qu'un effort normal et sa
-//! section n'avait qu'à passer la traction. Goupillée en deux points sur le
-//! caisson du bas, elle fléchit.
+//! **Pourquoi un balayage et non une liste de sections.** Tant que la barre
+//! avait une largeur constante par morceaux, regarder les trous et la marche
+//! suffisait : entre deux discontinuités, le moment croît mais la section ne
+//! bouge pas, donc le maximum de contrainte tombe forcément sur une des deux
+//! bornes. Le profil v3 a une **pente** de 40 à 70 mm entre les abscisses 30 et
+//! 100 : la largeur et le moment y varient tous les deux, et rien ne garantit
+//! que leur rapport culmine à une extrémité. La contrainte est donc calculée
+//! millimètre par millimètre, et le maximum sort du balayage.
 //!
-//! **Diagramme de moment.** La barre n'a que deux liaisons : la goupille de
-//! couronne (articulation, moment nul) et la paire ancrage/verrou. L'ordre le
-//! long de la barre est verrou, ancrage, épaulement, couronne. Entre la couronne
-//! et l'ancrage, la barre ne voit qu'un seul effort : le moment y croît depuis
-//! zéro. Au-delà de l'ancrage, la réaction de la paire le fait redescendre, et
-//! il est **nul au verrou** — il ne reste derrière lui que 14,5 mm de barre où
-//! rien ne s'applique.
+//! **Le diagramme de moment, en deux morceaux.**
 //!
-//! Le maximum est donc à l'**ancrage**. C'est l'inverse de la géométrie
-//! précédente, où le verrou était le premier pion depuis la couronne : les deux
-//! ont échangé leur rang.
+//! - **Côté paire** (verrou → ancrage) : la barre ne voit que l'effort du pion
+//!   de verrou. Le moment part de zéro au verrou — il ne reste rien derrière
+//!   lui — et croît jusqu'à l'ancrage.
+//! - **Côté console** (ancrage → couronne) : elle ne voit que l'effort de
+//!   couronne. Le moment part de zéro à la couronne — articulation simple — et
+//!   croît en redescendant vers l'ancrage.
 //!
-//! **Les sections regardées.** L'ancrage (étroite, percée, trou centré, moment
-//! maximal), l'épaulement (étroite, brute), et les deux trous de couronne
-//! (partie élargie, percés, moment nul — seule la section nette sous traction et
-//! l'arrachement les concernent). Le verrou est vérifié aussi, pour que son
-//! moment nul soit visible plutôt que sous-entendu.
+//! Les deux expressions doivent donner **la même valeur à l'ancrage**. Ce n'est
+//! pas une commodité : c'est l'équilibre de la barre, donc le contrôle que la
+//! paire a été correctement résolue en amont. Un écart y signalerait une erreur
+//! dans la répartition élastique, pas dans ce module.
 
 use crate::speaker::{BarHole, RearBar};
 use crate::vector::Vec2;
 
-/// Une section vérifiée, avec ce qui la sollicite et ce qu'elle vaut.
+/// Pas de balayage. 1 mm sur 430 mm de barre : assez fin pour que le maximum ne
+/// se cache pas entre deux points (la contrainte varie de moins de 1 % sur un
+/// millimètre), assez grossier pour rester gratuit.
+pub const SWEEP_STEP_MM: f64 = 1.0;
+
+/// Pas d'échantillonnage du profil rendu à l'export. Plus large que le balayage :
+/// le profil sert à tracer une courbe, pas à trouver un maximum.
+pub const PROFILE_SAMPLE_MM: f64 = 5.0;
+
+/// Tolérance de raccord des deux branches du diagramme à l'ancrage.
+pub const MOMENT_CONTINUITY_TOLERANCE_NMM: f64 = 1e-6;
+
+/// Une section de la barre, à une abscisse donnée.
 #[derive(Clone, Debug, PartialEq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BarSectionCheck {
-    /// Nom lisible de la section, pour dire *où* ça travaille.
-    pub location: String,
     /// Abscisse depuis le petit bout (côté verrou), mm.
     pub at_mm: f64,
-    /// Largeur de la section. Rendue explicitement pour qu'un balayage
-    /// 40 / 50 / 60 / 70 se lise dans le résultat sans recouper le modèle.
+    /// Nom du trou si la section est percée, sinon `None`.
+    pub hole: Option<String>,
     pub width_mm: f64,
     pub drilled: bool,
-    /// Décalage du perçage par rapport à l'axe de la partie étroite, mm.
+    /// Décalage du perçage par rapport à l'axe des trous, mm.
     pub hole_offset_mm: f64,
-    /// Moment de flexion à cette section, N·mm (par flanc).
+    /// Moment de flexion, N·mm (par flanc).
     pub moment_nmm: f64,
-    /// Effort normal, N (par flanc). Constant le long de la barre.
+    /// Effort normal, N (par flanc).
     pub axial_n: f64,
-    /// Module de flexion net retenu, mm³.
     pub section_modulus_mm3: f64,
-    /// Contrainte de flexion composée, MPa.
+    pub area_mm2: f64,
     pub stress_mpa: f64,
     /// Rapport à `R_m / sf` — le critère, cohérent avec `checks::sandwich`.
     pub utilization: f64,
-    /// Rapport à `f_y`, à titre indicatif : au-delà de 1, la barre a plastifié
-    /// même si elle est loin de rompre. Ce n'est pas le critère retenu.
+    /// Rapport à `f_y`, indicatif : ce n'est pas le critère retenu.
     pub yield_ratio: f64,
+}
+
+/// Un point du profil σ(a), pour tracer la courbe à l'export.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BarProfilePoint {
+    pub at_mm: f64,
+    pub width_mm: f64,
+    pub moment_nmm: f64,
+    pub stress_mpa: f64,
+    pub utilization: f64,
 }
 
 /// Arrachement de bord à un perçage : la goupille chasse devant elle le bloc de
 /// matière qui la sépare du bord libre, cisaillé sur ses deux flancs.
 ///
 /// Distinct du matage (`checks::sandwich`), qui est un écrasement local et ne
-/// regarde pas où est le bord. Ici c'est la **distance au bord** qui gouverne,
-/// et seule compte la composante de l'effort qui pousse vers ce bord : un effort
-/// parallèle au bord ne chasse rien devant lui.
+/// regarde pas où est le bord. Ici c'est la **distance au bord** qui gouverne, et
+/// seule compte la composante dirigée vers ce bord : un effort parallèle au bord
+/// ne chasse rien devant lui.
 #[derive(Clone, Debug, PartialEq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BarTearOutCheck {
     pub location: String,
-    /// Distance du centre du trou au bord le plus proche, mm.
     pub edge_distance_mm: f64,
-    /// Composante de l'effort dirigée vers ce bord, N (par flanc).
     pub force_toward_edge_n: f64,
-    /// Aire cisaillée : deux plans de `(e₂ − d₀/2) × t`.
     pub shear_area_mm2: f64,
     pub stress_mpa: f64,
     pub utilization: f64,
 }
 
-/// Résultat de la vérification : toutes les sections, l'arrachement de chaque
-/// trou, et la pire des deux familles.
+/// Écart géométrique relevé sur la barre montée. Signalé, jamais tu : une barre
+/// qui dépasse derrière le caisson ne se manifeste qu'au moment où elle touche.
+#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BarGeometryWarning {
+    pub what: String,
+    pub expected_mm: f64,
+    pub actual_mm: f64,
+}
+
 #[derive(Clone, Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BarCheck {
-    pub sections: Vec<BarSectionCheck>,
-    /// Index de la section la plus sollicitée dans `sections`.
-    pub worst: usize,
+    /// La section la plus sollicitée du balayage.
+    pub critical: BarSectionCheck,
+    /// σ(a) échantillonné, pour tracer.
+    pub profile: Vec<BarProfilePoint>,
     pub tear_out: Vec<BarTearOutCheck>,
-    /// Index du trou le plus exposé à l'arrachement.
     pub worst_tear_out: usize,
-    /// Largeur de la section critique. C'est le paramètre de dimensionnement de
-    /// la barre : le rendre ici permet de balayer 40 / 50 / 60 / 70 et de lire
-    /// dans le résultat ce qui a servi, sans recouper le modèle.
-    pub critical_width_mm: f64,
+    pub warnings: Vec<BarGeometryWarning>,
+    /// Écart entre les deux branches du diagramme à l'ancrage. Doit être nul :
+    /// c'est le contrôle que la paire est bien résolue.
+    pub moment_continuity_nmm: f64,
 }
 
 impl BarCheck {
-    pub fn worst_section(&self) -> &BarSectionCheck {
-        &self.sections[self.worst]
-    }
-
     pub fn worst_tear_out(&self) -> &BarTearOutCheck {
         &self.tear_out[self.worst_tear_out]
     }
 
     /// Le pire des deux modes : flexion composée et arrachement de bord.
     pub fn utilization(&self) -> f64 {
-        self.worst_section()
+        self.critical
             .utilization
             .max(self.worst_tear_out().utilization)
     }
 }
 
-/// Vérifie la barre sous l'effort de couronne déjà décomposé dans son repère.
+/// Efforts appliqués à la barre, dans son propre repère, **avec leur point
+/// d'application**. Tout est par flanc.
 ///
-/// `shear_n` et `axial_n` sont **par flanc**, comme tout ce que rend
-/// `compute_joint` : la barre est elle-même doublée, un exemplaire par flanc.
+/// Les points viennent de la géométrie réellement calculée sur le caisson, pas
+/// de la cotation déclarée de la barre. Les deux ne coïncident qu'à la
+/// tolérance d'ajustement près (0,05 mm), et mélanger les sources laisserait un
+/// résidu de moment de l'ordre du N·mm à l'ancrage — pas une faute de physique,
+/// mais assez pour rendre le contrôle de raccord inexploitable.
+pub struct BarLoads {
+    /// Effort de couronne, appliqué au trou `up660` ou `up680` selon la parité.
+    pub crown: Vec2,
+    pub crown_at: Vec2,
+    /// Effort que le pion de verrou applique à la barre.
+    pub latch: Vec2,
+    pub latch_at: Vec2,
+    pub anchor_at: Vec2,
+}
+
+/// Vérifie la barre par balayage continu.
 ///
 /// `safety_factor` est celui de `checks::sandwich`, volontairement : deux
-/// coefficients différents sur la même jonction donneraient deux taux de
-/// travail incomparables sur la même ligne de tableau.
+/// coefficients différents sur la même jonction donneraient deux taux de travail
+/// incomparables sur la même ligne de tableau.
 pub fn check_bar(
     bar: &RearBar,
     splay_deg: f64,
-    shear_n: f64,
-    axial_n: f64,
+    loads: &BarLoads,
     safety_factor: f64,
+    rear_face_x: Option<f64>,
+    bar_rear_edge_max_x: Option<f64>,
 ) -> BarCheck {
     let admissible = bar.ultimate_strength / safety_factor;
-    let crown = bar.crown_hole(splay_deg);
-    let anchor = bar.holes.anchor;
-    let latch = bar.holes.latch;
+    let crown = loads.crown_at;
+    let anchor = loads.anchor_at;
+    let latch = loads.latch_at;
 
-    // Effort vu par la barre, repère barre. `axial_n` est compté positif en
-    // compression, donc dirigé vers les abscisses décroissantes : le remettre
-    // sur l'axe demande le signe opposé.
-    let f = Vec2::new(-axial_n, shear_n);
+    // Moment et effort normal à une abscisse, selon le côté de l'ancrage où
+    // elle tombe. Produit vectoriel complet et non `|V| × bras` : `up660` est
+    // déporté de 19,4 mm, et ce bras transversal compte.
+    let at = |a: f64| -> (f64, f64) {
+        let p = Vec2::new(a, 0.0);
+        if a <= anchor.x {
+            // Côté paire : seul le verrou charge ce tronçon.
+            ((p - latch).cross(loads.latch), loads.latch.x)
+        } else {
+            // Côté console : seule la couronne charge ce tronçon.
+            //
+            // Signe opposé : un moment de flexion lu depuis la gauche d'une
+            // coupe et depuis sa droite sortent en sens contraires du produit
+            // vectoriel brut. Sans cette inversion le diagramme sauterait de
+            // signe à l'ancrage — sans que la contrainte s'en aperçoive, elle
+            // qui prend la valeur absolue, mais le contrôle de raccord, lui,
+            // ne verrait plus rien.
+            (-(p - crown).cross(loads.crown), -loads.crown.x)
+        }
+    };
 
-    // Moment exact en une section, vu depuis le côté couronne. Valable entre la
-    // couronne et l'ancrage : c'est le seul tronçon où la barre ne voit qu'un
-    // effort. Produit vectoriel complet et non `|V| × abscisse` — sur les splays
-    // impairs la couronne est déportée de 19,4 mm, et ce bras-là compte.
-    let moment_from_crown = |p: Vec2| (p - crown.as_vec()).cross(f);
+    // Les quatre trous, pour savoir si une abscisse balayée est percée.
+    let holes: [(&str, BarHole); 4] = [
+        ("verrou", bar.holes.latch),
+        ("ancrage", bar.holes.anchor),
+        ("couronne 660", bar.holes.up660),
+        ("couronne 680", bar.holes.up680),
+    ];
+    let hole_at = |a: f64| holes.iter().find(|(_, h)| (h.along() - a).abs() < 0.5);
 
-    let mut sections = Vec::with_capacity(5);
-    let mut push = |location: &str, hole: Option<BarHole>, at: f64, moment: f64| {
-        let width = bar.width_at(at);
-        let (drilled, offset, w_net, a_net) = match hole {
-            Some(h) if h.lateral() == 0.0 => (
-                true,
-                0.0,
-                bar.section_modulus_at(at, true),
-                bar.net_area_at(at, true),
-            ),
-            // Trou déporté : retirer de la matière hors de la fibre neutre
-            // déplace le centroïde, donc les deux fibres extrêmes n'ont plus le
-            // même module. Le moment y est nul dans le modèle en vigueur, mais
-            // la formule est là pour que déplacer un trou ne demande pas
-            // d'écrire le calcul dans l'urgence.
-            Some(h) => (
+    let section = |a: f64| -> BarSectionCheck {
+        let (m, n) = at(a);
+        let width = bar.width_at(a);
+        let (name, drilled, offset, w, area) = match hole_at(a) {
+            Some((name, h)) => (
+                Some((*name).to_string()),
                 true,
                 h.lateral(),
-                bar.eccentric_section_modulus(h),
-                bar.net_area_at(at, true),
+                bar.net_modulus_at(*h),
+                bar.net_area_at(a),
             ),
-            None => (
-                false,
-                0.0,
-                bar.section_modulus_at(at, false),
-                bar.net_area_at(at, false),
-            ),
+            None => (None, false, 0.0, bar.modulus_at(a), bar.area_at(a)),
         };
-        let stress = moment.abs() / w_net + axial_n.abs() / a_net;
-        sections.push(BarSectionCheck {
-            location: location.to_string(),
-            at_mm: at,
+        let stress = m.abs() / w + n.abs() / area;
+        BarSectionCheck {
+            at_mm: a,
+            hole: name,
             width_mm: width,
             drilled,
             hole_offset_mm: offset,
-            moment_nmm: moment.abs(),
-            axial_n,
-            section_modulus_mm3: w_net,
+            moment_nmm: m.abs(),
+            axial_n: n,
+            section_modulus_mm3: w,
+            area_mm2: area,
             stress_mpa: stress,
             utilization: stress / admissible,
             yield_ratio: stress / bar.yield_strength,
-        });
+        }
     };
 
-    // Ancrage : la section critique.
-    push(
-        "ancrage",
-        Some(anchor),
-        anchor.along(),
-        moment_from_crown(anchor.as_vec()),
-    );
-    // Épaulement : encore dans la largeur étroite, non percé. Le moment y est
-    // pris sur le tronçon couronne-ancrage, donc en extrapolant depuis la
-    // couronne — ce qui le majore, et c'est le sens conservatif.
-    if bar.step_position > anchor.along() && bar.step_position < crown.along() {
-        let p = Vec2::new(bar.step_position, 0.0);
-        push("épaulement", None, bar.step_position, moment_from_crown(p));
+    // --- Balayage -----------------------------------------------------------
+    let start = latch.x;
+    let end = crown.x;
+    let mut a = start;
+    let mut critical = section(start);
+    let mut profile = Vec::new();
+    let mut next_sample = start;
+    while a <= end + 1e-9 {
+        let s = section(a);
+        if s.utilization > critical.utilization {
+            critical = s.clone();
+        }
+        if a >= next_sample - 1e-9 {
+            profile.push(BarProfilePoint {
+                at_mm: s.at_mm,
+                width_mm: s.width_mm,
+                moment_nmm: s.moment_nmm,
+                stress_mpa: s.stress_mpa,
+                utilization: s.utilization,
+            });
+            next_sample += PROFILE_SAMPLE_MM;
+        }
+        a += SWEEP_STEP_MM;
     }
-    // Verrou : moment nul, seule la traction le traverse. Vérifié quand même
-    // pour que le zéro soit visible plutôt que sous-entendu.
-    push("verrou", Some(latch), latch.along(), 0.0);
-    // Trous de couronne : articulation, donc moment nul. Ils ne sont là que pour
-    // la section nette sous traction et, surtout, pour l'arrachement.
-    push(
-        "couronne 680",
-        Some(bar.holes.up680),
-        bar.holes.up680.along(),
-        0.0,
-    );
-    push(
-        "couronne 660",
-        Some(bar.holes.up660),
-        bar.holes.up660.along(),
-        0.0,
-    );
+    // Les quatre trous sont regardés explicitement en plus du pas de 1 mm :
+    // leur abscisse n'est pas ronde, et c'est là que la section est nette.
+    for (_, h) in holes {
+        if h.along() >= start - 1e-9 && h.along() <= end + 1e-9 {
+            let s = section(h.along());
+            if s.utilization > critical.utilization {
+                critical = s;
+            }
+        }
+    }
 
-    let worst = sections
-        .iter()
-        .enumerate()
-        .max_by(|(_, a), (_, b)| a.utilization.total_cmp(&b.utilization))
-        .map(|(i, _)| i)
-        .unwrap_or(0);
+    // --- Raccord des deux branches à l'ancrage ------------------------------
+    let m_from_pair = (anchor - latch).cross(loads.latch);
+    let m_from_cantilever = -(anchor - crown).cross(loads.crown);
+    let moment_continuity_nmm = m_from_pair - m_from_cantilever;
 
     // --- Arrachement de bord ------------------------------------------------
-    //
-    // Deux plans de cisaillement de `(e₂ − d₀/2) × t`, comparés à `0,6·Rm/sf`.
-    //
-    // Les efforts sur les pions de la paire ne sont pas connus ici — ils sortent
-    // de `compute_joint`, qui a la répartition élastique. On prend donc la
-    // moitié de la résultante à chaque pion, soit la part directe : c'est une
-    // minoration sur le pion chargé par le couple, et le taux exact est rendu à
-    // côté par `utilization_anchor` / `utilization_latch`. Ce contrôle-ci
-    // répond à une autre question : la barre a-t-elle assez de matière derrière
-    // ses trous.
     let shear_admissible = 0.6 * bar.ultimate_strength / safety_factor;
     let tear_out: Vec<BarTearOutCheck> = [
-        ("ancrage", anchor, f * 0.5),
-        ("verrou", latch, f * 0.5),
-        ("couronne", crown, f),
+        ("verrou", bar.holes.latch, loads.latch),
+        ("ancrage", bar.holes.anchor, -(loads.latch + loads.crown)),
+        ("couronne", bar.crown_hole(splay_deg), loads.crown),
     ]
     .into_iter()
     .map(|(name, hole, force)| {
+        let front = bar.front_edge_at(hole.along());
+        let back = bar.rear_edge_offset;
         let e2 = bar.edge_distance_at(hole);
-        // Le bord le plus proche est devant ou derrière selon le côté où le
-        // trou est décalé ; la composante utile est celle qui va vers lui.
-        let back = bar.narrow_width / 2.0;
-        let front = if hole.along() >= bar.step_position {
-            bar.wide_width - bar.narrow_width / 2.0
-        } else {
-            bar.narrow_width / 2.0
-        };
         let toward_front = (front - hole.lateral()) <= (hole.lateral() + back);
         let component = if toward_front { force.y } else { -force.y };
-        let toward_edge = component.abs();
         let area = 2.0 * (e2 - bar.hole_diameter / 2.0).max(0.0) * bar.thickness;
         let stress = if area > 0.0 {
-            toward_edge / area
+            component.abs() / area
         } else {
             f64::INFINITY
         };
         BarTearOutCheck {
             location: name.to_string(),
             edge_distance_mm: e2,
-            force_toward_edge_n: toward_edge,
+            force_toward_edge_n: component.abs(),
             shear_area_mm2: area,
             stress_mpa: stress,
             utilization: stress / shear_admissible,
         }
     })
     .collect();
-
     let worst_tear_out = tear_out
         .iter()
         .enumerate()
-        .max_by(|(_, a), (_, b)| a.utilization.total_cmp(&b.utilization))
+        .max_by(|(_, x), (_, y)| x.utilization.total_cmp(&y.utilization))
         .map(|(i, _)| i)
         .unwrap_or(0);
 
-    let critical_width_mm = sections[worst].width_mm;
+    // --- Contrôles géométriques ---------------------------------------------
+    let mut warnings = Vec::new();
+    let min_edge = 1.2 * bar.hole_diameter;
+    for (name, h) in holes {
+        // e₂ : perpendiculairement, vers le bord le plus proche.
+        let e2 = bar.edge_distance_at(h);
+        if e2 < min_edge - 1e-9 {
+            warnings.push(BarGeometryWarning {
+                what: format!("e₂ {name}"),
+                expected_mm: min_edge,
+                actual_mm: e2,
+            });
+        }
+    }
+    // e₁ : le long de l'axe, depuis chaque bout.
+    for (name, e1) in [
+        ("e₁ bout verrou", bar.holes.latch.along()),
+        ("e₁ bout couronne", bar.length - bar.holes.up680.along()),
+    ] {
+        if e1 < min_edge - 1e-9 {
+            warnings.push(BarGeometryWarning {
+                what: name.to_string(),
+                expected_mm: min_edge,
+                actual_mm: e1,
+            });
+        }
+    }
+    // Le bord arrière de la barre doit rester devant la face arrière du
+    // caisson. Le maximum est au **petit bout** et non à l'ancrage : le bord
+    // arrière est parallèle à l'axe de barre, qui s'incline vers l'avant en
+    // montant, donc son abscisse recule à mesure qu'on monte.
+    if let (Some(face), Some(edge)) = (rear_face_x, bar_rear_edge_max_x) {
+        if edge > face {
+            warnings.push(BarGeometryWarning {
+                what: "bord arrière de barre au-delà de la face arrière".into(),
+                expected_mm: face,
+                actual_mm: edge,
+            });
+        }
+    }
+
     BarCheck {
-        sections,
-        worst,
+        critical,
+        profile,
         tear_out,
         worst_tear_out,
-        critical_width_mm,
+        warnings,
+        moment_continuity_nmm,
     }
 }
 
@@ -297,158 +363,83 @@ mod tests {
     fn sa303_bar() -> RearBar {
         RearBar {
             thickness: 10.0,
-            length: 458.514,
-            narrow_width: 40.0,
-            wide_width: 55.0,
-            wide_length: 78.514,
-            step_position: 380.0,
+            length: 460.014,
+            width_profile: vec![[0.0, 40.0], [30.0, 40.0], [100.0, 70.0], [460.014, 70.0]],
+            rear_edge_offset: 20.0,
             hole_diameter: 12.08,
             holes: BarHoles {
-                latch: BarHole([14.5, 0.0]),
-                anchor: BarHole([114.5, 0.0]),
-                up660: BarHole([438.675, 19.406]),
-                up680: BarHole([443.514, 0.0]),
+                latch: BarHole([16.0, 0.0]),
+                anchor: BarHole([116.0, 0.0]),
+                up660: BarHole([440.175, 19.406]),
+                up680: BarHole([445.014, 0.0]),
             },
+            mass_kg: 2.32,
             yield_strength: 355.0,
             ultimate_strength: 510.0,
         }
     }
 
-    fn section<'a>(check: &'a BarCheck, name: &str) -> &'a BarSectionCheck {
-        check
-            .sections
-            .iter()
-            .find(|s| s.location == name)
-            .unwrap_or_else(|| panic!("section {name} absente"))
-    }
-
-    /// Le module de flexion net traite le trou centré comme une fente sur la
-    /// fibre neutre : `t(w³ − d0³)/(6w)`. Recoupé à la main : 325 N·m sur la
-    /// section 40×10 percée Ø12,08 donnent 125,3 MPa. La formule
-    /// `t(w − d0)²/6`, qui vaudrait pour un trou en fibre extrême, en donnerait
-    /// 249 — soit un facteur 2 sur le dimensionnement de la barre.
+    /// Le profil de largeur, aux abscisses de contrôle du dessin.
     #[test]
-    fn the_net_section_modulus_matches_the_hand_check() {
+    fn the_width_profile_interpolates_the_slope() {
         let bar = sa303_bar();
-        let w = bar.section_modulus_at(bar.holes.anchor.along(), true);
-        assert!((w - 2593.217).abs() < 1e-3, "W_net = {w}");
-        assert!((325_000.0 / w - 125.33).abs() < 0.01);
-    }
-
-    /// La section critique est l'ancrage, et le moment est nul au verrou comme
-    /// aux trous de couronne : c'est l'inversion par rapport à la géométrie
-    /// précédente, où le verrou était le premier pion depuis la couronne.
-    #[test]
-    fn the_anchor_is_the_critical_section_and_the_latch_carries_no_moment() {
-        let check = check_bar(&sa303_bar(), 0.0, 1000.0, 0.0, 4.0);
-        assert_eq!(section(&check, "verrou").moment_nmm, 0.0);
-        assert_eq!(section(&check, "couronne 680").moment_nmm, 0.0);
-        assert_eq!(section(&check, "couronne 660").moment_nmm, 0.0);
-        assert_eq!(check.worst_section().location, "ancrage");
-        // Bras ancrage -> couronne extérieure = 329,014 mm.
-        assert!((section(&check, "ancrage").moment_nmm - 329_014.0).abs() < 1.0);
-    }
-
-    /// Loi d'échelle : la contrainte est linéaire en effort. Garde-fou contre
-    /// une unité qui se perdrait (N·m contre N·mm) — l'erreur donnerait un
-    /// facteur 1000, invisible sur un ratio.
-    #[test]
-    fn a_kilonewton_of_shear_gives_the_hand_computed_stress() {
-        let bar = sa303_bar();
-        let check = check_bar(&bar, 0.0, 1000.0, 0.0, 4.0);
-        let anchor = check.worst_section();
-        let expected = 329_014.0 / bar.section_modulus_at(bar.holes.anchor.along(), true);
-        assert!(
-            (anchor.stress_mpa - expected).abs() < 0.01,
-            "{} contre {expected}",
-            anchor.stress_mpa
-        );
-        // ~127 MPa sur la section 40×10 percée, pour 1 kN de transverse.
-        assert!(
-            (anchor.stress_mpa - 126.9).abs() < 0.5,
-            "{}",
-            anchor.stress_mpa
-        );
-    }
-
-    /// `up660` est déporté : son module net doit être celui d'une section à trou
-    /// excentré, plus faible que la formule centrée qui suppose le trou sur la
-    /// fibre neutre.
-    #[test]
-    fn the_offset_crown_hole_uses_the_eccentric_section_modulus() {
-        let check = check_bar(&sa303_bar(), 1.0, 1000.0, 0.0, 4.0);
-        let up660 = section(&check, "couronne 660");
-        assert_eq!(up660.hole_offset_mm, 19.406);
-        assert_eq!(up660.width_mm, 55.0);
-        let centred = sa303_bar().section_modulus_at(up660.at_mm, true);
-        assert!(
-            up660.section_modulus_mm3 < centred,
-            "excentré {} devrait être sous le centré {centred}",
-            up660.section_modulus_mm3
-        );
-    }
-
-    /// À déport nul, la formule excentrée doit retomber sur la formule centrée :
-    /// deux écritures du même cas, elles ne peuvent pas diverger.
-    #[test]
-    fn the_eccentric_formula_agrees_with_the_centred_one_at_zero_offset() {
-        let bar = sa303_bar();
-        let centred = bar.section_modulus_at(bar.holes.anchor.along(), true);
-        let eccentric = bar.eccentric_section_modulus(bar.holes.anchor);
-        assert!(
-            (centred - eccentric).abs() < 1e-9,
-            "{centred} contre {eccentric}"
-        );
-    }
-
-    /// L'arrachement de bord est un mode distinct du matage : c'est la distance
-    /// au bord qui gouverne, pas l'épaisseur seule.
-    #[test]
-    fn edge_tear_out_is_driven_by_the_edge_distance() {
-        let bar = sa303_bar();
-        let wide = check_bar(&bar, 0.0, 2000.0, 0.0, 4.0);
-        let mut narrow_bar = bar;
-        narrow_bar.narrow_width = 30.0; // bord deux fois plus proche
-        let narrow = check_bar(&narrow_bar, 0.0, 2000.0, 0.0, 4.0);
-        assert!(
-            narrow.worst_tear_out().utilization > wide.worst_tear_out().utilization,
-            "rapprocher le bord doit aggraver l'arrachement"
-        );
-    }
-
-    /// Un effort purement axial est parallèle aux bords longs : il ne chasse
-    /// rien devant lui, donc aucun arrachement.
-    #[test]
-    fn a_purely_axial_load_tears_out_nothing() {
-        let check = check_bar(&sa303_bar(), 0.0, 0.0, 5000.0, 4.0);
-        for t in &check.tear_out {
-            assert_eq!(t.force_toward_edge_n, 0.0, "{}", t.location);
-            assert_eq!(t.utilization, 0.0);
+        for (x, expected) in [
+            (16.0, 40.0),
+            (30.0, 40.0),
+            (50.0, 48.571_428_6),
+            (70.0, 57.142_857_1),
+            (90.0, 65.714_285_7),
+            (100.0, 70.0),
+            (300.0, 70.0),
+            (460.0, 70.0),
+        ] {
+            let w = bar.width_at(x);
+            assert!(
+                (w - expected).abs() < 1e-6,
+                "w({x}) = {w}, attendu {expected}"
+            );
         }
+        // Le bord avant suit, le bord arrière ne bouge pas.
+        assert!((bar.front_edge_at(16.0) - 20.0).abs() < 1e-9);
+        assert!((bar.front_edge_at(100.0) - 50.0).abs() < 1e-9);
     }
 
-    /// La largeur critique est rendue pour qu'un balayage se lise dans le
-    /// résultat, et élargir doit soulager.
+    /// Là où la section est **symétrique** autour de l'axe des trous — largeur
+    /// 40, donc 20 de chaque côté — le module net doit retomber sur la formule
+    /// de la fente sur fibre neutre. C'est le cas au verrou.
     #[test]
-    fn the_critical_width_is_reported_and_widening_relieves_the_bar() {
-        let stress = |w: f64| {
-            let mut bar = sa303_bar();
-            bar.narrow_width = w;
-            let check = check_bar(&bar, 0.0, 1000.0, 0.0, 4.0);
-            assert_eq!(check.critical_width_mm, w);
-            check.worst_section().stress_mpa
-        };
-        assert!(stress(70.0) < stress(60.0));
-        assert!(stress(60.0) < stress(50.0));
-        assert!(stress(50.0) < stress(40.0));
-    }
-
-    #[test]
-    fn utilization_is_the_ratio_to_ultimate_over_the_safety_factor() {
+    fn the_net_modulus_agrees_with_the_centred_formula_on_a_symmetric_section() {
         let bar = sa303_bar();
-        let check = check_bar(&bar, 0.0, 1000.0, 0.0, 4.0);
-        let w = check.worst_section();
-        assert!((w.utilization - w.stress_mpa / (510.0 / 4.0)).abs() < 1e-9);
-        assert!((w.yield_ratio - w.stress_mpa / 355.0).abs() < 1e-9);
+        let h = bar.holes.latch;
+        let w = bar.width_at(h.along());
+        assert_eq!(w, 40.0);
+        let centred = bar.thickness * (w.powi(3) - bar.hole_diameter.powi(3)) / (6.0 * w);
+        let got = bar.net_modulus_at(h);
+        assert!((got - centred).abs() < 1e-9, "{got} contre {centred}");
+    }
+
+    /// Mais dès que la barre s'élargit, elle le fait **d'un seul côté** : l'axe
+    /// des trous reste à 20 mm du bord arrière, donc il s'écarte de la fibre
+    /// neutre à mesure que le bord avant s'éloigne.
+    ///
+    /// À l'ancrage — largeur 70 — le trou est à 18,1 mm du centroïde. La
+    /// formule centrée y donnerait 8 125 mm³ au lieu de 6 597 : elle
+    /// **sous-estimerait la contrainte de 19 %** à la section critique. C'est
+    /// la raison d'être du calcul excentré, et elle n'existait pas sur le
+    /// profil précédent où les trous étaient au milieu d'une largeur de 40.
+    #[test]
+    fn the_widening_puts_the_holes_off_the_neutral_axis() {
+        let bar = sa303_bar();
+        let h = bar.holes.anchor;
+        let w = bar.width_at(h.along());
+        assert_eq!(w, 70.0);
+        let centred = bar.thickness * (w.powi(3) - bar.hole_diameter.powi(3)) / (6.0 * w);
+        let exact = bar.net_modulus_at(h);
+        assert!((exact - 6596.5).abs() < 0.5, "W_net = {exact}");
+        assert!((centred - 8124.7).abs() < 0.5, "centré = {centred}");
+        assert!(
+            exact < centred * 0.85,
+            "l'excentration doit coûter nettement : {exact} contre {centred}"
+        );
     }
 }

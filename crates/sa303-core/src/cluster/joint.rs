@@ -60,7 +60,7 @@ pub struct JointInput<'a> {
     pub recommended_splay: Option<SplayRange>,
 }
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JointResult {
     pub joint_index: usize,
@@ -156,6 +156,27 @@ pub struct JointResult {
     /// vérification de section n'ait pas à remonter au modèle d'enceinte : dans
     /// une grappe hétérogène, deux jonctions n'ont pas forcément la même barre.
     pub rear_bar: RearBar,
+    /// Les deux efforts que la barre **reçoit**, dans son propre repère et par
+    /// flanc : à la couronne, et au pion de verrou. C'est tout ce dont le
+    /// balayage de section a besoin — le lui donner ici évite que chaque
+    /// appelant les reconstruise, et donc qu'ils divergent.
+    pub bar_load_crown: Vec2,
+    pub bar_load_latch: Vec2,
+    /// Points d'application des deux efforts, et l'ancrage, dans le repère de la
+    /// barre — issus de la géométrie **calculée**, pas de la cotation déclarée.
+    /// Les deux ne coïncident qu'à la tolérance d'ajustement près, et le
+    /// contrôle de raccord du diagramme ne survit pas à ce mélange.
+    pub bar_point_crown: Vec2,
+    pub bar_point_latch: Vec2,
+    pub bar_point_anchor: Vec2,
+    /// Abscisse la plus en arrière du bord arrière de barre, repère enceinte :
+    /// c'est elle qui doit rester devant la face arrière du caisson. Elle est
+    /// au **petit bout**, pas à l'ancrage — le bord est parallèle à l'axe de
+    /// barre, qui s'incline vers l'avant en montant.
+    pub bar_rear_edge_max_x: f64,
+    /// Face arrière du caisson qui porte la paire, pour que la vérification de
+    /// barre puisse comparer sans remonter au modèle d'enceinte.
+    pub rear_face_x: f64,
 
     /// Efforts sur les deux goupilles de la paire, repère du flanc chargé, par
     /// flanc. Répartition élastique à raideurs égales : chaque goupille prend la
@@ -221,6 +242,19 @@ pub struct JointResult {
 }
 
 impl JointResult {
+    /// Les efforts que la barre reçoit, prêts pour `checks::check_bar`. Un seul
+    /// endroit où ils se construisent : les reconstruire chez chaque appelant
+    /// est le meilleur moyen qu'ils finissent par diverger.
+    pub fn bar_loads(&self) -> crate::checks::BarLoads {
+        crate::checks::BarLoads {
+            crown: self.bar_load_crown,
+            crown_at: self.bar_point_crown,
+            latch: self.bar_load_latch,
+            latch_at: self.bar_point_latch,
+            anchor_at: self.bar_point_anchor,
+        }
+    }
+
     pub fn mag_orientation(&self) -> f64 {
         self.f_orientation.norm()
     }
@@ -351,7 +385,7 @@ pub fn compute_joint(input: &JointInput) -> Result<JointResult, JointInconsisten
     };
     // Trous exprimés dans le repère du flanc chargé : c'est donc la géométrie
     // de CETTE enceinte-là (celle du haut en vol, celle du bas en stack).
-    let loaded = input.chain[ti];
+    let loaded = &input.chain[ti];
     let rt_phi = input.speakers[ti].phi;
     let sg = -input.share_per_flank;
 
@@ -451,6 +485,41 @@ pub fn compute_joint(input: &JointInput) -> Result<JointResult, JointInconsisten
     let bar_axial_n = -f_bar.x * sf;
     let bar_shear_n = f_bar.y * sf;
 
+    // Les deux efforts que la barre reçoit, dans son repère et par flanc. Le
+    // pion de verrou lui applique l'opposé de ce qu'il subit.
+    let to_bar = |v: Vec2| Vec2::new(v.dot(e_axis), v.dot(e_front));
+    let bar_load_crown = to_bar(f_on_bar) * sf;
+    let bar_load_latch = to_bar(-f_latch_g) * sf;
+    // Les trois points, mesurés depuis le petit bout de la barre le long de son
+    // axe réel. L'origine est posée à l'abscisse déclarée du verrou : c'est elle
+    // qui cale le profil de largeur sur la pièce.
+    let bar_origin = lt - e_axis * bar.holes.latch.along();
+    let to_bar_point = |p: Vec2| {
+        let v = p - bar_origin;
+        Vec2::new(v.dot(e_axis), v.dot(e_front))
+    };
+    let bar_point_crown = to_bar_point(bo);
+    let bar_point_latch = to_bar_point(lt);
+    let bar_point_anchor = to_bar_point(an);
+    // Point le plus en arrière du bord arrière de barre. Le bord est parallèle
+    // à l'axe et décalé de `rear_edge_offset` vers l'arrière ; son abscisse
+    // maximale est donc au bout le plus bas de la barre, l'abscisse 0.
+    let bar_rear_edge_max_x = {
+        let rear_normal = Vec2::new(e_axis.y, -e_axis.x);
+        let origin = lt - e_axis * bar.holes.latch.along();
+        let tip = origin + rear_normal * bar.rear_edge_offset;
+        let far = origin + e_axis * bar.length + rear_normal * bar.rear_edge_offset;
+        // Exprimé dans le repère du caisson qui porte la paire, pour se
+        // comparer à sa face arrière. Le caisson du bas est calé par son `ht`
+        // sur la goupille basse de bielle **et** tourné du splay entier : sans
+        // cette rotation, l'erreur atteint 26 mm à 5° sur la longueur de barre.
+        let to_pair_frame = |p: Vec2| {
+            let in_upper = (p - input.speakers[i].o).rotate_transpose(input.speakers[i].phi);
+            (in_upper - geo.pv_at(s)).rotate(-s.to_radians()) + geo.ht
+        };
+        to_pair_frame(tip).x.max(to_pair_frame(far).x)
+    };
+
     // Moment exact en une section, vu depuis le côté couronne : entre la
     // couronne et l'ancrage, la barre ne voit que cet effort-là.
     let moment_from_crown = |p: Vec2| (p - p_crown).cross(f_bar) * sf;
@@ -513,7 +582,14 @@ pub fn compute_joint(input: &JointInput) -> Result<JointResult, JointInconsisten
         bar_moment_at_pair_nm,
         bar_moment_max_nm,
         bar_moment_max_at_mm,
-        rear_bar: *bar,
+        rear_bar: bar.clone(),
+        bar_load_crown,
+        bar_load_latch,
+        bar_point_crown,
+        bar_point_latch,
+        bar_point_anchor,
+        bar_rear_edge_max_x,
+        rear_face_x: input.chain[i].rear_face_x,
         f_anchor,
         f_latch,
         f_anchor_n: f_anchor.norm(),

@@ -11,7 +11,7 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
-pub const SPEAKER_SCHEMA_VERSION: u32 = 6;
+pub const SPEAKER_SCHEMA_VERSION: u32 = 7;
 pub const CLUSTER_SCHEMA_VERSION: u32 = 2;
 pub const BUMPER_SCHEMA_VERSION: u32 = 1;
 pub const BUMPER_BAR_SCHEMA_VERSION: u32 = 1;
@@ -212,21 +212,24 @@ const SA303_LATCH_OFFSET_MM: f64 = 100.0;
 
 const SA303_REAR_BAR: &str = r#"{
     "thickness": 10.0,
-    "length": 458.514,
-    "narrowWidth": 40.0,
-    "wideWidth": 55.0,
-    "wideLength": 78.514,
-    "stepPosition": 380.0,
+    "length": 460.014,
+    "widthProfile": [[0, 40], [30, 40], [100, 70], [460.014, 70]],
+    "rearEdgeOffset": 20.0,
     "holeDiameter": 12.08,
     "holes": {
-        "latch":  [ 14.500,  0.000],
-        "anchor": [114.500,  0.000],
-        "up660":  [438.675, 19.406],
-        "up680":  [443.514,  0.000]
+        "latch":  [ 16.000,  0.000],
+        "anchor": [116.000,  0.000],
+        "up660":  [440.175, 19.406],
+        "up680":  [445.014,  0.000]
     },
+    "massKg": 2.32,
     "yieldStrength": 355.0,
     "ultimateStrength": 510.0
 }"#;
+
+/// Face arrière du caisson SA303. 351 et non `depth/2` = 350 : c'est la cote du
+/// modèle, et c'est elle que le bord arrière de la barre ne doit pas franchir.
+const SA303_REAR_FACE_X: f64 = 351.0;
 
 fn same_grid(grid: &[f64], reference: &[f64]) -> bool {
     grid.len() == reference.len()
@@ -296,10 +299,18 @@ fn migrate_legacy_speaker_json(mut value: serde_json::Value) -> serde_json::Valu
     // La substitution est donc franche et signalée comme telle : toute fiche
     // antérieure à la v6 repart avec la barre de référence SA303.
     if let Some(obj) = value.as_object_mut() {
+        // v6 → v7 : le profil de largeur remplace les deux paliers et la
+        // marche. Une barre v6 se reconnaît à `narrowWidth` — ou à l'absence de
+        // `widthProfile`, ce qui couvre aussi les v5 et antérieures.
         let legacy_bar = obj
             .get("rearBar")
             .and_then(|b| b.as_object())
-            .is_some_and(|b| b.contains_key("anchorHoleAt") || !b.contains_key("holes"));
+            .is_some_and(|b| {
+                b.contains_key("anchorHoleAt")
+                    || b.contains_key("narrowWidth")
+                    || !b.contains_key("holes")
+                    || !b.contains_key("widthProfile")
+            });
         if !obj.contains_key("rearBar") || legacy_bar {
             obj.insert(
                 "rearBar".into(),
@@ -322,6 +333,8 @@ fn migrate_legacy_speaker_json(mut value: serde_json::Value) -> serde_json::Valu
         }
         obj.entry("latchOffset")
             .or_insert_with(|| SA303_LATCH_OFFSET_MM.into());
+        obj.entry("rearFaceX")
+            .or_insert_with(|| SA303_REAR_FACE_X.into());
     }
     // Les angles de l'ancien modèle sont retirés : les laisser ferait croire
     // qu'ils décrivent encore quelque chose.
@@ -911,9 +924,13 @@ mod tests {
             serde_json::from_value(migrate_legacy_speaker_json(raw)).unwrap();
 
         let bar = &speaker.mechanical.rear_bar;
-        assert_eq!(bar.length, 458.514);
-        assert_eq!(bar.holes.latch.along(), 14.5);
-        assert_eq!(bar.holes.anchor.along(), 114.5);
+        assert_eq!(bar.length, 460.014);
+        assert_eq!(bar.holes.latch.along(), 16.0);
+        assert_eq!(bar.holes.anchor.along(), 116.0);
+        // Profil de largeur, pas deux paliers et une marche.
+        assert_eq!(bar.width_profile.len(), 4);
+        assert_eq!(bar.rear_edge_offset, 20.0);
+        assert_eq!(speaker.mechanical.rear_face_x, SA303_REAR_FACE_X);
         assert_eq!(bar.holes.up660.lateral(), 19.406);
         // Et le verrou repart sur son vrai rayon, pas sur celui de la couronne.
         assert_eq!(speaker.mechanical.latch.radius, 710.845);

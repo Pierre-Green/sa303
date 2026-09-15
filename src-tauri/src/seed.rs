@@ -160,8 +160,11 @@ fn dump_catalogue_load_table() {
     // Les quatre grappes demandées, repérées par un fragment de leur nom.
     let wanted = ["40d-88d", "-20d-46d", "0-150m", "0-60m"];
 
-    for width in [40.0_f64, 70.0] {
-        println!("=== largeur de barre {width} mm ===");
+    // Le profil v3 tel quel, puis un élargissement du palier large. Balayer la
+    // largeur **sous** 70 n'aurait pas de sens : `up660` vit à 19,4 mm de l'axe
+    // des trous, il ne rentre pas dans une barre plus étroite.
+    for width in [70.0_f64, 80.0] {
+        println!("=== largeur du palier large : {width} mm ===");
         println!("grappe|J|splay|N|V|Mmax|sigma|ou|larg|Fverrou|Fancrage|couronne|bielle|verrou|ancrage|barre|arrach|pire");
         for cluster in &clusters {
             if !wanted.iter().any(|w| cluster.name.contains(w)) {
@@ -170,19 +173,18 @@ fn dump_catalogue_load_table() {
             // Le balayage se fait sur le modèle, pas dans le code de calcul :
             // c'est bien la cote de la pièce qu'on fait varier.
             //
-            // Élargir la partie courante sans bouger la partie élargie
-            // produirait une pièce absurde — un « large » plus étroit que
-            // l'« étroit » — et surtout ramènerait le bord avant sur `up660`,
-            // qui vit à 19,4 mm de l'axe. Le bord avant est donc tenu fixe :
-            // l'élargissement se fait d'un seul côté, vers l'arrière, et
-            // `e₂ up660` reste à ses 15,6 mm.
-            let front_edge = 55.0 - 40.0 / 2.0;
+            // Le balayage porte sur la largeur du palier large, celle qui
+            // couvre l'ancrage — donc la section critique. Le bord arrière ne
+            // bouge pas : tout l'élargissement va vers l'avant, comme sur la
+            // pièce.
             let swept: Vec<_> = speakers
                 .iter()
                 .cloned()
                 .map(|mut s| {
-                    s.mechanical.rear_bar.narrow_width = width;
-                    s.mechanical.rear_bar.wide_width = front_edge + width / 2.0;
+                    let p = &mut s.mechanical.rear_bar.width_profile;
+                    let n = p.len();
+                    p[n - 2][1] = width;
+                    p[n - 1][1] = width;
                     s
                 })
                 .collect();
@@ -193,15 +195,54 @@ fn dump_catalogue_load_table() {
             match compute_cluster(&swept, cluster, &settings, bumper, &bars) {
                 Err(e) => println!("{}|IMPOSSIBLE|{}", cluster.name, e.reason),
                 Ok(r) => {
+                    // Jonction la plus chargée, repérée d'abord pour n'imprimer
+                    // que son profil.
+                    let worst_joint = r
+                        .joints
+                        .iter()
+                        .max_by(|a, b| {
+                            let f = |j: &sa303_core::cluster::JointResult| {
+                                check_bar(
+                                    &j.rear_bar,
+                                    j.splay_deg,
+                                    &j.bar_loads(),
+                                    settings.safety_factor,
+                                    None,
+                                    None,
+                                )
+                                .utilization()
+                                .max(utilization(j.f_anchor_n, &spec))
+                                .max(utilization(j.f_orientation_n, &spec))
+                            };
+                            f(a).total_cmp(&f(b))
+                        })
+                        .map(|j| j.joint_index + 1)
+                        .unwrap_or(0);
                     for j in &r.joints {
                         let b = check_bar(
                             &j.rear_bar,
                             j.splay_deg,
-                            j.bar_shear_n,
-                            j.bar_axial_n,
+                            &j.bar_loads(),
                             settings.safety_factor,
+                            Some(j.rear_face_x),
+                            Some(j.bar_rear_edge_max_x),
                         );
-                        let w = b.worst_section();
+                        let w = &b.critical;
+                        // Profil σ(a) de la jonction la plus chargée, pour lire
+                        // ce que la pente tient le long de la barre.
+                        if j.joint_index + 1 == worst_joint {
+                            for pt in &b.profile {
+                                println!(
+                                    "PROFIL|{}|{:.0}|{:.2}|{:.0}|{:.1}|{:.3}",
+                                    cluster.name,
+                                    pt.at_mm,
+                                    pt.width_mm,
+                                    pt.moment_nmm,
+                                    pt.stress_mpa,
+                                    pt.utilization
+                                );
+                            }
+                        }
                         let uo = utilization(j.f_orientation_n, &spec);
                         let up = utilization(j.f_pivot_n, &spec);
                         let ua = utilization(j.f_anchor_n, &spec);
@@ -209,10 +250,10 @@ fn dump_catalogue_load_table() {
                         let ub = w.utilization;
                         let ut = b.worst_tear_out().utilization;
                         println!(
-                            "{}|{}|{}|{:.0}|{:.0}|{:.1}|{:.1}|{}|{:.0}|{:.0}|{:.0}|{:.3}|{:.3}|{:.3}|{:.3}|{:.3}|{:.3}|{:.3}",
+                            "{}|{}|{}|{:.0}|{:.0}|{:.1}|{:.1}|{:.0}|{:.0}|{:.0}|{:.0}|{:.3}|{:.3}|{:.3}|{:.3}|{:.3}|{:.3}|{:.3}",
                             cluster.name, j.joint_index + 1, j.splay_deg,
                             j.bar_axial_n, j.bar_shear_n, j.bar_moment_max_nm,
-                            w.stress_mpa, w.location, b.critical_width_mm,
+                            w.stress_mpa, w.at_mm, w.width_mm,
                             j.f_latch_n, j.f_anchor_n,
                             uo, up, ul, ua, ub, ut,
                             uo.max(up).max(ua).max(ul).max(ub).max(ut)

@@ -25,8 +25,8 @@ fn default_speaker() -> SpeakerModel {
             mass_kg: 83.695,
             cg: [10.84, 11.91],
             hinge: Hinge {
-                x: -338.431,
-                y: 257.122,
+                x: -338.433,
+                y: 257.127,
                 joint_separation: 552.379,
                 edge_perp: 12.569,
             },
@@ -46,20 +46,20 @@ fn default_speaker() -> SpeakerModel {
             latch_offset: 100.0,
             splay_grid: vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 20.0],
             frame_hole_splay: 0.0,
+            rear_face_x: 351.0,
             rear_bar: RearBar {
                 thickness: 10.0,
-                length: 458.514,
-                narrow_width: 40.0,
-                wide_width: 55.0,
-                wide_length: 78.514,
-                step_position: 380.0,
+                length: 460.014,
+                width_profile: vec![[0.0, 40.0], [30.0, 40.0], [100.0, 70.0], [460.014, 70.0]],
+                rear_edge_offset: 20.0,
                 hole_diameter: 12.08,
                 holes: BarHoles {
-                    latch: BarHole([14.5, 0.0]),
-                    anchor: BarHole([114.5, 0.0]),
-                    up660: BarHole([438.675, 19.406]),
-                    up680: BarHole([443.514, 0.0]),
+                    latch: BarHole([16.0, 0.0]),
+                    anchor: BarHole([116.0, 0.0]),
+                    up660: BarHole([440.175, 19.406]),
+                    up680: BarHole([445.014, 0.0]),
                 },
+                mass_kg: 2.32,
                 yield_strength: 355.0,
                 ultimate_strength: 510.0,
             },
@@ -1838,19 +1838,20 @@ fn dump_joint_load_table() {
             let b = check_bar(
                 &j.rear_bar,
                 j.splay_deg,
-                j.bar_shear_n,
-                j.bar_axial_n,
+                &j.bar_loads(),
                 settings.safety_factor,
+                Some(j.rear_face_x),
+                Some(j.bar_rear_edge_max_x),
             );
-            let w = b.worst_section();
+            let w = &b.critical;
             let uo = utilization(j.f_orientation_n, &spec);
             let up = utilization(j.f_pivot_n, &spec);
             let ua = utilization(j.f_anchor_n, &spec);
             let ul = utilization(j.f_latch_n, &spec);
             let ub = b.utilization();
-            println!("{}|{}|{}|{:.0}|{:.0}|{:.1}|{:.1}|{}|{:.0}|{:.0}|{:.3}|{:.3}|{:.3}|{:.3}|{:.3}|{:.3}",
+            println!("{}|{}|{}|{:.0}|{:.0}|{:.1}|{:.1}|{:.0}|{:.0}|{:.0}|{:.3}|{:.3}|{:.3}|{:.3}|{:.3}|{:.3}",
                 cluster.name, j.joint_index+1, j.splay_deg, j.bar_axial_n, j.bar_shear_n,
-                j.bar_moment_max_nm, w.stress_mpa, w.location, j.f_latch_n, j.f_anchor_n,
+                j.bar_moment_max_nm, w.stress_mpa, w.at_mm, j.f_latch_n, j.f_anchor_n,
                 uo, up, ul, ua, ub, uo.max(up).max(ua).max(ul).max(ub));
         }
     }
@@ -2034,7 +2035,8 @@ fn the_audit_export_round_trips_through_json() {
     // Et le détail attendu est bien là, jusqu'aux sections de barre.
     let joint = &parsed["clusters"][0]["jointChecks"][0];
     assert!(joint["governingPath"].is_string());
-    assert!(joint["bar"]["sections"][0]["stressMpa"].is_number());
+    assert!(joint["bar"]["critical"]["stressMpa"].is_number());
+    assert!(joint["bar"]["profile"][0]["stressMpa"].is_number());
     assert!(parsed["clusters"][0]["result"]["joints"][0]["fAnchorN"].is_number());
     assert!(parsed["definitions"]["speakers"][0]["rearBar"]["length"].is_number());
 }
@@ -2149,11 +2151,18 @@ fn the_reported_utilization_covers_the_pair_and_the_bar() {
         }
     }
     assert!(seen > 0);
-    // Si l'ancien taux n'avait jamais été loin du compte, la distinction serait
-    // cosmétique. Elle ne l'est pas.
+    // La distinction n'est pas cosmétique : il reste des cas où ne regarder que
+    // la couronne et la bielle sous-estime de moitié.
+    //
+    // Le seuil a été abaissé avec la barre v3. Sur la v2 — 40 mm de large,
+    // paire à 23,7 mm d'entraxe — la flexion gouvernait presque partout et plus
+    // de la moitié des cas étaient concernés. La v3 élargit à 70 et porte
+    // l'entraxe à 100 : la contrainte de barre s'effondre et les chemins
+    // couronne/bielle redeviennent souvent les plus chargés. Moins de cas
+    // sous-estimés, donc — mais ceux qui restent le sont toujours autant.
     assert!(
-        understated * 2 >= seen,
-        "seulement {understated} cas sur {seen} où l'ancien taux sous-estimait de moitié"
+        understated > 0,
+        "aucun cas où l'ancien taux sous-estimait de moitié sur {seen}"
     );
 }
 

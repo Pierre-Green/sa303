@@ -55,9 +55,10 @@ impl JointChecks {
         let bar = check_bar(
             &joint.rear_bar,
             joint.splay_deg,
-            joint.bar_shear_n,
-            joint.bar_axial_n,
+            &joint.bar_loads(),
             spec.safety_factor,
+            Some(joint.rear_face_x),
+            Some(joint.bar_rear_edge_max_x),
         );
         let utilization_crown = utilization(joint.f_orientation_n, spec);
         let utilization_bielle = utilization(joint.f_pivot_n, spec);

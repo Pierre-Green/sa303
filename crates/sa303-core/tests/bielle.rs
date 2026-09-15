@@ -22,8 +22,8 @@ fn sa303() -> SpeakerModel {
             mass_kg: 83.695,
             cg: [10.84, 11.91],
             hinge: Hinge {
-                x: -338.431,
-                y: 257.122,
+                x: -338.433,
+                y: 257.127,
                 joint_separation: 552.379,
                 edge_perp: 12.569,
             },
@@ -43,20 +43,20 @@ fn sa303() -> SpeakerModel {
             latch_offset: 100.0,
             splay_grid: vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 20.0],
             frame_hole_splay: 0.0,
+            rear_face_x: 351.0,
             rear_bar: RearBar {
                 thickness: 10.0,
-                length: 458.514,
-                narrow_width: 40.0,
-                wide_width: 55.0,
-                wide_length: 78.514,
-                step_position: 380.0,
+                length: 460.014,
+                width_profile: vec![[0.0, 40.0], [30.0, 40.0], [100.0, 70.0], [460.014, 70.0]],
+                rear_edge_offset: 20.0,
                 hole_diameter: 12.08,
                 holes: BarHoles {
-                    latch: BarHole([14.5, 0.0]),
-                    anchor: BarHole([114.5, 0.0]),
-                    up660: BarHole([438.675, 19.406]),
-                    up680: BarHole([443.514, 0.0]),
+                    latch: BarHole([16.0, 0.0]),
+                    anchor: BarHole([116.0, 0.0]),
+                    up660: BarHole([440.175, 19.406]),
+                    up680: BarHole([445.014, 0.0]),
                 },
+                mass_kg: 2.32,
                 yield_strength: 355.0,
                 ultimate_strength: 510.0,
             },
@@ -224,9 +224,11 @@ fn an_edge_distance_below_the_minimum_is_reported() {
     let mut sm = sa303();
     // La barre est rallongée côté couronne sans que le trou suive : les
     // entraxes ne bougent pas, seule la distance au bord se referme.
-    sm.mechanical.rear_bar.length = sm.mechanical.rear_bar.holes.up680.along() + 5.0;
-    sm.mechanical.rear_bar.step_position =
-        sm.mechanical.rear_bar.length - sm.mechanical.rear_bar.wide_length;
+    let short = sm.mechanical.rear_bar.holes.up680.along() + 5.0;
+    sm.mechanical.rear_bar.length = short;
+    // Le profil suit la nouvelle longueur, sinon il ne couvrirait plus la barre.
+    let last = sm.mechanical.rear_bar.width_profile.len() - 1;
+    sm.mechanical.rear_bar.width_profile[last][0] = short;
     let warnings = sa303_core::speaker::check_rear_bar(&sm).expect("pas bloquant");
     assert!(
         warnings
@@ -367,21 +369,73 @@ fn golden_bar_loads_on_the_reference_joint() {
         j.f_latch_n
     );
 
-    // Le moment au verrou est nul : il ne reste que 14,5 mm de barre derrière
-    // lui, et rien ne s'y applique. C'est l'ancrage qui est la section critique.
+    // Les deux branches du diagramme se raccordent à l'ancrage : c'est
+    // l'équilibre de la barre, donc le contrôle que la paire est bien résolue.
     let check = sa303_core::checks::check_bar(
         &sm.mechanical.rear_bar,
         j.splay_deg,
-        j.bar_shear_n,
-        j.bar_axial_n,
+        &j.bar_loads(),
         4.0,
+        Some(j.rear_face_x),
+        Some(j.bar_rear_edge_max_x),
     );
-    let latch = check
-        .sections
-        .iter()
-        .find(|x| x.location == "verrou")
-        .expect("le verrou doit être vérifié");
-    assert_eq!(latch.moment_nmm, 0.0);
-    assert_eq!(check.worst_section().location, "ancrage");
-    assert_eq!(check.critical_width_mm, 40.0);
+    assert!(
+        check.moment_continuity_nmm.abs() < sa303_core::checks::MOMENT_CONTINUITY_TOLERANCE_NMM,
+        "raccord à l'ancrage : {} N·mm",
+        check.moment_continuity_nmm
+    );
+    println!(
+        "critique @{:.1} larg {:.2} percé {} M {:.0} σ {:.2} taux {:.3}",
+        check.critical.at_mm,
+        check.critical.width_mm,
+        check.critical.drilled,
+        check.critical.moment_nmm,
+        check.critical.stress_mpa,
+        check.critical.utilization
+    );
+    println!("avertissements : {:?}", check.warnings);
+}
+
+/// §4 — le bord arrière de la barre doit rester devant la face arrière du
+/// caisson. La marge se mesure au **petit bout** et non à l'ancrage : le bord
+/// arrière est parallèle à l'axe de barre, qui s'incline vers l'avant en
+/// montant, donc son abscisse recule à mesure qu'on s'éloigne de la paire.
+#[test]
+fn the_bar_rear_edge_stays_inside_the_cabinet() {
+    use sa303_core::cluster::{
+        build_cluster, compute_joint, ChainSpeaker, Compartment, JointInput,
+    };
+    let sm = sa303();
+    let chain = vec![ChainSpeaker::from_model(&sm); 2];
+
+    for splay in [0.0, 5.0, 20.0] {
+        let splays = [splay];
+        let speakers = build_cluster(&chain, &splays, 0.0);
+        let j = compute_joint(&JointInput {
+            chain: &chain,
+            speakers: &speakers,
+            splays_deg: &splays,
+            joint_index: 0,
+            compartment: Compartment::Flown,
+            g: 9.80665,
+            k_dyn: 1.3,
+            share_per_flank: 0.5,
+            tie: None,
+            recommended_splay: None,
+        })
+        .expect("jonction résoluble");
+
+        let margin = j.rear_face_x - j.bar_rear_edge_max_x;
+        assert!(
+            margin > 0.0,
+            "splay {splay}° : la barre dépasse de {:.3} mm derrière le caisson",
+            -margin
+        );
+        // Le splay ne fait pas bouger la barre par rapport au caisson qui la
+        // porte : elle est goupillée dessus, elle tourne avec lui.
+        assert!(
+            (margin - 4.84).abs() < 0.02,
+            "splay {splay}° : marge {margin:.3} mm, attendue 4,84"
+        );
+    }
 }

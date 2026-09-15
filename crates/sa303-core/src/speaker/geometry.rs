@@ -288,21 +288,22 @@ pub fn check_rear_bar(speaker: &SpeakerModel) -> Result<Vec<BarWarning>, BarInco
     };
 
     // --- 1. Cohérence interne du dessin -------------------------------------
-    // `step_position` et `wide_length` cotent le même épaulement depuis les deux
-    // bouts : un écart entre les deux est une faute de saisie, pas une tolérance.
+    // Le profil de largeur doit être croissant en abscisse et couvrir la barre :
+    // une ligne brisée qui revient en arrière ne décrit aucune pièce.
+    for w in bar.width_profile.windows(2) {
+        if w[1][0] < w[0][0] {
+            return Err(BarInconsistency {
+                reason: format!(
+                    "profil de largeur non monotone : abscisse {} après {}",
+                    w[1][0], w[0][0]
+                ),
+            });
+        }
+    }
     hard(
-        "épaulement coté depuis les deux bouts",
-        bar.length - bar.wide_length,
-        bar.step_position,
-    )?;
-    // La longueur est pilotée par l'entraxe de la paire.
-    hard(
-        "longueur pilotée par l'entraxe de paire",
-        bar.holes.up680.along() + (bar.length - bar.holes.up680.along()),
-        bar.holes.latch.along()
-            + m.latch_offset
-            + (bar.holes.up680.along() - bar.holes.anchor.along())
-            + (bar.length - bar.holes.up680.along()),
+        "profil de largeur couvrant toute la barre",
+        bar.length,
+        bar.width_profile.last().map(|p| p[0]).unwrap_or(0.0),
     )?;
 
     // --- 2. La paire, dans le repère caisson --------------------------------

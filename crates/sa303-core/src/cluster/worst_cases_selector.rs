@@ -40,7 +40,7 @@ pub struct BlockBCase {
 /// dénominateur commun sans avoir les réglages sous la main.
 fn severity(c: &LoadCase) -> f64 {
     let r = &c.result;
-    let bar = crate::checks::check_bar(&r.rear_bar, r.splay_deg, r.bar_shear_n, r.bar_axial_n, 1.0);
+    let bar = crate::checks::check_bar(&r.rear_bar, r.splay_deg, &r.bar_loads(), 1.0, None, None);
     let force_paths = r
         .mag_orientation()
         .max(r.mag_pivot())
@@ -50,7 +50,7 @@ fn severity(c: &LoadCase) -> f64 {
     // directement : on rapporte chacun à sa propre résistance, ce que fait déjà
     // `checks` par ailleurs.
     let f_ratio = force_paths / (r.rear_bar.ultimate_strength * 100.0);
-    let s_ratio = bar.worst_section().stress_mpa / r.rear_bar.ultimate_strength;
+    let s_ratio = bar.critical.stress_mpa / r.rear_bar.ultimate_strength;
     f_ratio.max(s_ratio)
 }
 
@@ -142,11 +142,12 @@ pub fn select_block_a(cases: &[LoadCase]) -> Vec<BlockACase> {
                     let check = crate::checks::check_bar(
                         bar,
                         c.result.splay_deg,
-                        c.result.bar_shear_n,
-                        c.result.bar_axial_n,
+                        &c.result.bar_loads(),
                         1.0,
+                        None,
+                        None,
                     );
-                    check.worst_section().stress_mpa
+                    check.critical.stress_mpa
                 },
             ),
         ),
@@ -228,6 +229,10 @@ mod tests {
         j.bar_moment_max_nm = shear_n.abs() * 0.3;
         j.f_anchor_n = anchor_n;
         j.f_latch_n = latch_n;
+        // Les efforts que la barre reçoit : c'est eux que le balayage de section
+        // consomme, donc sans eux le critère de flexion ne départagerait rien.
+        j.bar_load_crown = Vec2::new(0.0, shear_n);
+        j.bar_load_latch = Vec2::new(0.0, -shear_n);
         j
     }
 
@@ -282,20 +287,26 @@ mod tests {
             bar_moment_at_pair_nm: 0.0,
             bar_moment_max_nm: 0.0,
             bar_moment_max_at_mm: 0.0,
+            rear_face_x: 351.0,
+            bar_load_crown: Vec2::ZERO,
+            bar_load_latch: Vec2::ZERO,
+            bar_point_crown: Vec2::new(445.014, 0.0),
+            bar_point_latch: Vec2::new(16.0, 0.0),
+            bar_point_anchor: Vec2::new(116.0, 0.0),
+            bar_rear_edge_max_x: 0.0,
             rear_bar: RearBar {
                 thickness: 10.0,
-                length: 458.514,
-                narrow_width: 40.0,
-                wide_width: 55.0,
-                wide_length: 78.514,
-                step_position: 380.0,
+                length: 460.014,
+                width_profile: vec![[0.0, 40.0], [30.0, 40.0], [100.0, 70.0], [460.014, 70.0]],
+                rear_edge_offset: 20.0,
                 hole_diameter: 12.08,
                 holes: BarHoles {
-                    latch: BarHole([14.5, 0.0]),
-                    anchor: BarHole([114.5, 0.0]),
-                    up660: BarHole([438.675, 19.406]),
-                    up680: BarHole([443.514, 0.0]),
+                    latch: BarHole([16.0, 0.0]),
+                    anchor: BarHole([116.0, 0.0]),
+                    up660: BarHole([440.175, 19.406]),
+                    up680: BarHole([445.014, 0.0]),
                 },
+                mass_kg: 2.32,
                 yield_strength: 355.0,
                 ultimate_strength: 510.0,
             },

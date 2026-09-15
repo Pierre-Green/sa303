@@ -1,7 +1,7 @@
 {
   "id": "sa303-isophase",
   "name": "SA303-ISOPHASE",
-  "schemaVersion": 6,
+  "schemaVersion": 7,
   "depth": 700.0,
   "height": 550.0,
   "totalVerticalAngle": 20.0,
@@ -11,8 +11,8 @@
     11.91
   ],
   "hinge": {
-    "x": -338.431,
-    "y": 257.122,
+    "x": -338.433,
+    "y": 257.127,
     "jointSeparation": 552.379,
     "edgePerp": 12.569
   },
@@ -41,6 +41,7 @@
     20.0
   ],
   "frameHoleSplay": 0.0,
+  "rearFaceX": 351.0,
   "acoustics": {
     "fs": 60.0,
     "directivityHorizontal": 90.0,
@@ -71,30 +72,46 @@
   ],
   "rearBar": {
     "thickness": 10.0,
-    "length": 458.514,
-    "narrowWidth": 40.0,
-    "wideWidth": 55.0,
-    "wideLength": 78.514,
-    "stepPosition": 380.0,
+    "length": 460.014,
+    "widthProfile": [
+      [
+        0,
+        40
+      ],
+      [
+        30,
+        40
+      ],
+      [
+        100,
+        70
+      ],
+      [
+        460.014,
+        70
+      ]
+    ],
+    "rearEdgeOffset": 20.0,
     "holeDiameter": 12.08,
     "holes": {
       "latch": [
-        14.5,
+        16.0,
         0.0
       ],
       "anchor": [
-        114.5,
+        116.0,
         0.0
       ],
       "up660": [
-        438.675,
+        440.175,
         19.406
       ],
       "up680": [
-        443.514,
+        445.014,
         0.0
       ]
     },
+    "massKg": 2.32,
     "yieldStrength": 355.0,
     "ultimateStrength": 510.0
   }

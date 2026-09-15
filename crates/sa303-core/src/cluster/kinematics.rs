@@ -7,7 +7,7 @@
 //! Une grappe est **hétérogène** : chaque position porte son propre modèle
 //! d'enceinte (SA303-ISOPHASE, SA303-CCA, renfort de grave, ...), donc sa
 //! propre géométrie, masse et CG. Tout le calcul travaille sur une chaîne de
-//! `ChainSpeaker` — un bundle `Copy` dérivé une seule fois par position — au
+//! `ChainSpeaker` — un bundle dérivé une seule fois par position — au
 //! lieu d'une géométrie unique partagée : c'est ce qui évite de trimballer des
 //! tableaux parallèles (masses, CG, silhouettes) dans chaque signature.
 
@@ -18,13 +18,15 @@ use serde::Serialize;
 /// Une enceinte de la chaîne, entièrement dérivée de son `SpeakerModel` :
 /// géométrie (trous, couronne), masse, CG local et silhouette. Tout ce dont la
 /// physique a besoin pour une position donnée, calculé une fois pour toutes.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct ChainSpeaker {
     pub geo: SpeakerGeometry,
-    /// Cotation de la barre arrière portée par cette position. `Copy` oblige à
-    /// la recopier plutôt qu'à l'emprunter, mais elle reste petite et c'est ce
-    /// qui permet à toute la physique de travailler sur un bundle unique.
+    /// Cotation de la barre arrière portée par cette position. Son profil de
+    /// largeur est de longueur variable, donc `ChainSpeaker` n'est plus `Copy` :
+    /// il se clone là où il était recopié, ce qui ne change rien au sens.
     pub rear_bar: RearBar,
+    /// Face arrière du caisson, repère enceinte.
+    pub rear_face_x: f64,
     pub cg_local: Vec2,
     pub mass_kg: f64,
     pub frame_hole_splay: f64,
@@ -38,7 +40,8 @@ impl ChainSpeaker {
         let m = &model.mechanical;
         Self {
             geo: SpeakerGeometry::compute(model),
-            rear_bar: m.rear_bar,
+            rear_bar: m.rear_bar.clone(),
+            rear_face_x: m.rear_face_x,
             cg_local: Vec2::new(m.cg[0], m.cg[1]),
             mass_kg: m.mass_kg,
             frame_hole_splay: m.frame_hole_splay,
