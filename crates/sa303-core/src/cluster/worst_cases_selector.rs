@@ -40,13 +40,7 @@ pub struct BlockBCase {
 /// dénominateur commun sans avoir les réglages sous la main.
 fn severity(c: &LoadCase) -> f64 {
     let r = &c.result;
-    let bar = crate::checks::check_bar(
-        &r.rear_bar,
-        r.splay_deg,
-        r.bar_shear_n,
-        r.bar_axial_n,
-        1.0,
-    );
+    let bar = crate::checks::check_bar(&r.rear_bar, r.splay_deg, r.bar_shear_n, r.bar_axial_n, 1.0);
     let force_paths = r
         .mag_orientation()
         .max(r.mag_pivot())
@@ -119,20 +113,24 @@ pub fn select_block_a(cases: &[LoadCase]) -> Vec<BlockACase> {
         ),
         (
             "flexion de barre max",
-            max_by(cases, |_| true, |c| {
-                // Le taux de travail exact demanderait le coefficient de
-                // sécurité, qui n'est pas ici. La contrainte lui est
-                // proportionnelle, donc classer sur elle donne le même gagnant.
-                let bar = &c.result.rear_bar;
-                let check = crate::checks::check_bar(
-                    bar,
-                    c.result.splay_deg,
-                    c.result.bar_shear_n,
-                    c.result.bar_axial_n,
-                    1.0,
-                );
-                check.worst_section().stress_mpa
-            }),
+            max_by(
+                cases,
+                |_| true,
+                |c| {
+                    // Le taux de travail exact demanderait le coefficient de
+                    // sécurité, qui n'est pas ici. La contrainte lui est
+                    // proportionnelle, donc classer sur elle donne le même gagnant.
+                    let bar = &c.result.rear_bar;
+                    let check = crate::checks::check_bar(
+                        bar,
+                        c.result.splay_deg,
+                        c.result.bar_shear_n,
+                        c.result.bar_axial_n,
+                        1.0,
+                    );
+                    check.worst_section().stress_mpa
+                },
+            ),
         ),
         (
             "inclinaison extrême",
@@ -198,7 +196,7 @@ pub fn select_block_b(cases: &[LoadCase], block_a: &[BlockACase]) -> Vec<BlockBC
 mod tests {
     use super::*;
     use crate::cluster::model::Compartment;
-    use crate::speaker::{CrownRow, JointOffset, RearBar};
+    use crate::speaker::{BarHole, BarHoles, CrownRow, JointOffset, RearBar};
     use crate::vector::Vec2;
 
     /// Un `JointResult` synthétique : seuls les champs pertinents pour la sélection
@@ -267,15 +265,18 @@ mod tests {
             bar_moment_max_at_mm: 0.0,
             rear_bar: RearBar {
                 thickness: 10.0,
-                length: 360.739,
-                wide_width: 64.0,
-                wide_length: 150.739,
+                length: 458.514,
                 narrow_width: 40.0,
+                wide_width: 55.0,
+                wide_length: 78.514,
+                step_position: 380.0,
                 hole_diameter: 12.08,
-                crown_hole_outer_at: 15.863,
-                crown_hole_inner_at: 20.121,
-                latch_hole_at: 321.93,
-                anchor_hole_at: 344.877,
+                holes: BarHoles {
+                    latch: BarHole([14.5, 0.0]),
+                    anchor: BarHole([114.5, 0.0]),
+                    up660: BarHole([438.675, 19.406]),
+                    up680: BarHole([443.514, 0.0]),
+                },
                 yield_strength: 355.0,
                 ultimate_strength: 510.0,
             },
@@ -317,7 +318,11 @@ mod tests {
         let cases = vec![
             load_case(
                 1,
-                with_bar(fake_joint(100.0, 10.0, false, true, 1.0, -5.0), 900.0, 1500.0),
+                with_bar(
+                    fake_joint(100.0, 10.0, false, true, 1.0, -5.0),
+                    900.0,
+                    1500.0,
+                ),
             ),
             load_case(
                 2,
@@ -406,7 +411,11 @@ mod tests {
         let cases = vec![
             load_case(
                 1,
-                with_bar(fake_joint(100.0, 10.0, false, true, 1.0, -5.0), 900.0, 1500.0),
+                with_bar(
+                    fake_joint(100.0, 10.0, false, true, 1.0, -5.0),
+                    900.0,
+                    1500.0,
+                ),
             ), // idx0 : gagne tous les critères applicables
             load_case(
                 2,

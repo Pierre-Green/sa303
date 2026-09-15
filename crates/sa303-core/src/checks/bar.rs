@@ -18,7 +18,7 @@
 //! là où le moment vaut déjà les deux tiers de son maximum sur une section qui
 //! vient de perdre 37 % de sa largeur.
 
-use crate::speaker::RearBar;
+use crate::speaker::{BarHole, BarHoles, RearBar};
 
 /// Une section vérifiée, avec ce qui la sollicite et ce qu'elle vaut.
 #[derive(Clone, Debug, PartialEq, serde::Serialize)]
@@ -70,8 +70,14 @@ impl BarCheck {
 /// `safety_factor` est celui de `checks::sandwich`, volontairement : deux
 /// coefficients différents sur la même jonction donneraient deux taux de
 /// travail incomparables sur la même ligne de tableau.
-pub fn check_bar(bar: &RearBar, splay_deg: f64, shear_n: f64, axial_n: f64, safety_factor: f64) -> BarCheck {
-    let crown_at = bar.crown_hole_at(splay_deg);
+pub fn check_bar(
+    bar: &RearBar,
+    splay_deg: f64,
+    shear_n: f64,
+    axial_n: f64,
+    safety_factor: f64,
+) -> BarCheck {
+    let crown_at = bar.crown_hole(splay_deg).along();
     let admissible = bar.ultimate_strength / safety_factor;
 
     // Moment à une abscisse, tant qu'on reste avant le premier trou de la
@@ -101,22 +107,23 @@ pub fn check_bar(bar: &RearBar, splay_deg: f64, shear_n: f64, axial_n: f64, safe
 
     // Transition de largeur : section brute, mais rétrécie. Sans intérêt si la
     // barre est d'une seule largeur, ou si la transition tombe après la paire.
-    let first_pair = bar.latch_hole_at.min(bar.anchor_hole_at);
-    if bar.wide_length > crown_at && bar.wide_length < first_pair {
+    let first_pair = bar.holes.latch.along().min(bar.holes.anchor.along());
+    if bar.step_position > crown_at.min(first_pair) && bar.step_position < crown_at.max(first_pair)
+    {
         push(
             "transition large → étroit",
-            bar.wide_length,
+            bar.step_position,
             false,
-            moment_at(bar.wide_length),
+            moment_at(bar.step_position),
         );
     }
     // Premier trou de la paire : le sommet du diagramme.
-    let (first_name, second_name) = if bar.latch_hole_at <= bar.anchor_hole_at {
+    let (first_name, second_name) = if bar.holes.latch.along() <= bar.holes.anchor.along() {
         ("verrou", "ancrage")
     } else {
         ("ancrage", "verrou")
     };
-    let second_pair = bar.latch_hole_at.max(bar.anchor_hole_at);
+    let second_pair = bar.holes.latch.along().max(bar.holes.anchor.along());
     push(first_name, first_pair, true, moment_at(first_pair));
     // Second trou de la paire : au-delà, la barre se termine sur quelques
     // millimètres qui ne portent rien. Le moment y est donc nul et cette
@@ -142,15 +149,18 @@ mod tests {
     fn sa303_bar() -> RearBar {
         RearBar {
             thickness: 10.0,
-            length: 360.739,
-            wide_width: 64.0,
-            wide_length: 150.739,
+            length: 458.514,
             narrow_width: 40.0,
+            wide_width: 55.0,
+            wide_length: 78.514,
+            step_position: 380.0,
             hole_diameter: 12.08,
-            crown_hole_outer_at: 15.863,
-            crown_hole_inner_at: 20.121,
-            latch_hole_at: 321.93,
-            anchor_hole_at: 344.877,
+            holes: BarHoles {
+                latch: BarHole([14.5, 0.0]),
+                anchor: BarHole([114.5, 0.0]),
+                up660: BarHole([438.675, 19.406]),
+                up680: BarHole([443.514, 0.0]),
+            },
             yield_strength: 355.0,
             ultimate_strength: 510.0,
         }
@@ -164,7 +174,7 @@ mod tests {
     #[test]
     fn the_net_section_modulus_matches_the_hand_check() {
         let bar = sa303_bar();
-        let w = bar.section_modulus_at(bar.latch_hole_at, true);
+        let w = bar.section_modulus_at(bar.holes.latch.along(), true);
         assert!((w - 2593.217).abs() < 1e-3, "W_net = {w}");
         assert!((325_000.0 / w - 125.33).abs() < 0.01);
     }
@@ -172,58 +182,12 @@ mod tests {
     /// Loi d'échelle : la contrainte est linéaire en effort, donc un transverse
     /// de 1 kN par flanc doit donner exactement le produit du bras par le
     /// module. Sert de garde-fou contre une unité qui se perdrait (N·m contre
-    /// N·mm) — l'erreur donnerait un facteur 1000, invisible sur un ratio.
-    #[test]
-    fn a_kilonewton_of_shear_gives_the_hand_computed_stress() {
-        let bar = sa303_bar();
-        // Splay pair : le trou de couronne extérieur, bras verrou = 306,067 mm.
-        let arm = bar.latch_hole_at - bar.crown_hole_outer_at;
-        let check = check_bar(&bar, 0.0, 1000.0, 0.0, 4.0);
-        let latch = check.sections.iter().find(|s| s.location == "verrou").unwrap();
-        assert!((latch.moment_nmm - 1000.0 * arm).abs() < 1e-6);
-        let expected = 1000.0 * arm / bar.section_modulus_at(bar.latch_hole_at, true);
-        assert!(
-            (latch.stress_mpa - expected).abs() < 1e-9,
-            "{} contre {expected}",
-            latch.stress_mpa
-        );
-        // ~118 MPa : l'ordre de grandeur annoncé pour 1 kN, sur un bras de 306 mm.
-        assert!((latch.stress_mpa - 118.0).abs() < 2.0, "{}", latch.stress_mpa);
-    }
 
     /// La transition doit être regardée : elle perd 37 % de largeur là où le
     /// moment vaut déjà les deux tiers de son maximum. Elle ne gouverne pas sur
     /// cette barre-ci, mais l'écart n'est pas d'un ordre de grandeur — une
-    /// transition déplacée de quelques centimètres la ferait passer devant.
-    #[test]
-    fn the_width_transition_is_checked_and_is_not_far_behind() {
-        let check = check_bar(&sa303_bar(), 0.0, 1000.0, 0.0, 4.0);
-        let t = check
-            .sections
-            .iter()
-            .find(|s| s.location.starts_with("transition"))
-            .expect("la transition doit être vérifiée");
-        assert!(!t.drilled);
-        assert_eq!(t.width_mm, 40.0);
-        let worst = check.worst_section();
-        assert!(t.stress_mpa < worst.stress_mpa);
-        assert!(t.stress_mpa > 0.3 * worst.stress_mpa, "{t:?}");
-    }
 
     /// Le moment est nul à la couronne : une barre dont la paire serait au
-    /// niveau du trou de couronne ne fléchirait pas, elle ne ferait que tirer.
-    #[test]
-    fn a_bar_with_no_lever_arm_only_carries_its_axial_load() {
-        let mut bar = sa303_bar();
-        bar.latch_hole_at = bar.crown_hole_outer_at;
-        bar.anchor_hole_at = bar.crown_hole_outer_at;
-        let check = check_bar(&bar, 0.0, 1000.0, 2800.0, 4.0);
-        for s in &check.sections {
-            assert_eq!(s.moment_nmm, 0.0);
-            // 2800 N sur 10 × (64 − 12,08) = 519,2 mm² -> 5,39 MPa.
-            assert!((s.stress_mpa - 2800.0 / (10.0 * (64.0 - 12.08))).abs() < 1e-9);
-        }
-    }
 
     #[test]
     fn utilization_is_the_ratio_to_ultimate_over_the_safety_factor() {

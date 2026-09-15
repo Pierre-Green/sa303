@@ -39,11 +39,6 @@ pub struct Hinge {
 pub struct Crown {
     pub radius: f64,
     pub delta: f64,
-    pub anchor_angle: f64,
-    /// Second point de fixation de la barre arrière dans le caisson du bas.
-    /// Avec l'ancrage, il encastre la barre sur ce caisson : elle lui transmet
-    /// donc une force **et** un moment (brief §3).
-    pub latch_angle: f64,
     pub splay0_angle: f64,
 }
 
@@ -167,46 +162,104 @@ pub struct BelowCompatibility {
     pub recommended_splay: Option<SplayRange>,
 }
 
+/// Position d'un trou de la paire dans le repère du caisson qui la porte,
+/// donnée en polaire depuis `ht` (le trou de charnière avant-haut).
+///
+/// Polaire et non cartésien parce que c'est ainsi que le perçage est coté :
+/// l'ancrage et la couronne sont sur des arcs, et c'est leur rayon qui est la
+/// grandeur de fabrication. Le verrou, lui, n'est **plus** sur le cercle de
+/// 680 — il est au bout de l'axe de barre, à 710,845 — donc chaque trou porte
+/// son propre rayon et il n'existe plus de rayon commun à supposer.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolarHole {
+    pub radius: f64,
+    pub angle_deg: f64,
+}
+
+/// Un trou de la barre, dans le repère de la barre : abscisse depuis le petit
+/// bout (côté verrou) et déport latéral, positif vers l'**avant** du caisson.
+///
+/// Deux coordonnées et non une seule : `up660` est déporté de 19,4 mm de l'axe.
+/// Une abscisse seule le placerait sur l'axe et perdrait le bras de levier
+/// transversal — donc le moment qu'il introduit sur les splays impairs.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct BarHole(pub [f64; 2]);
+
+impl BarHole {
+    pub fn along(&self) -> f64 {
+        self.0[0]
+    }
+    pub fn lateral(&self) -> f64 {
+        self.0[1]
+    }
+    pub fn as_vec(&self) -> crate::vector::Vec2 {
+        crate::vector::Vec2::new(self.0[0], self.0[1])
+    }
+}
+
+/// Les quatre trous de la barre arrière, repère barre.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BarHoles {
+    /// Petit bout de la barre. C'est le trou le **plus loin** de la couronne,
+    /// donc celui où le moment de flexion est nul.
+    pub latch: BarHole,
+    /// Premier pion rencontré depuis la couronne : c'est lui qui voit le
+    /// moment maximal.
+    pub anchor: BarHole,
+    /// Trou de couronne des splays **impairs** (couronne intérieure, 660).
+    /// Déporté latéralement : l'effort de couronne n'y est pas sur l'axe.
+    pub up660: BarHole,
+    /// Trou de couronne des splays **pairs** (couronne extérieure, 680), sur
+    /// l'axe. C'est lui qui définit l'axe de la barre avec l'ancrage.
+    pub up680: BarHole,
+}
+
 /// Barre arrière, la pièce qui relie la couronne du caisson du haut à la paire
 /// ancrage/verrou du caisson du bas. Goupillée en un point en haut
 /// (articulation, moment nul) et en **deux** points en bas (encastrement) :
 /// elle travaille donc en flexion, ce qu'aucun élément à deux forces ne fait.
 ///
-/// **Orientation.** Toutes les abscisses sont mesurées depuis l'**extrémité
-/// couronne**, et c'est ce bout-là qui est **large** (`wide_width`), sur
-/// `wide_length`. Le reste de la barre est étroit (`narrow_width`) et c'est lui
-/// qui porte la paire ancrage/verrou — donc la section la plus sollicitée est
-/// la plus petite. Inverser les deux diviserait la contrainte calculée par
-/// environ 2,6 et rendrait la vérification non conservative.
+/// **Orientation.** Toutes les abscisses sont mesurées depuis le **petit bout**,
+/// celui du verrou. La couronne est à l'autre extrémité. L'ordre le long de la
+/// barre est donc : verrou, ancrage, épaulement, couronne.
 ///
-/// **Deux trous de couronne.** L'entraxe couronne-ancrage ne vaut pas la même
-/// chose sur les deux couronnes (329,01 mm sur l'extérieure, 324,76 sur
-/// l'intérieure) : une barre à un seul trou de couronne ne pourrait pas
-/// desservir les deux. D'où `crown_hole_outer_at` (splays pairs) et
-/// `crown_hole_inner_at` (impairs).
+/// **L'élargissement est d'un seul côté.** Le bord arrière est une droite sur
+/// toute la longueur ; c'est le bord avant qui s'écarte à partir de
+/// `step_position` pour passer de `narrow_width` à `wide_width`. Le trou
+/// `up660` vit dans cette partie élargie, et son déport latéral est ce qui
+/// justifie l'élargissement.
+///
+/// **Section critique : l'ancrage.** Le moment est nul à la couronne
+/// (articulation) et nul au verrou (bout libre au-delà), et il culmine à
+/// l'ancrage, premier pion depuis la couronne. Ce n'est plus le verrou comme
+/// dans la géométrie précédente : les deux pions ont échangé leur rang le long
+/// de la barre.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RearBar {
     pub thickness: f64,
-    /// Longueur totale, bout couronne -> bout paire.
+    /// Longueur totale. Pilotée par `latch_offset` :
+    /// `length = 443.514 + latch_offset − 85`.
     pub length: f64,
-    /// Largeur de la section large, côté couronne.
-    pub wide_width: f64,
-    /// Longueur de la section large, depuis l'extrémité couronne.
-    pub wide_length: f64,
-    /// Largeur de la section étroite, celle qui porte la paire.
+    /// Largeur courante, celle de la partie qui porte la paire — donc celle de
+    /// la section critique. C'est le paramètre à balayer pour dimensionner.
     pub narrow_width: f64,
+    /// Largeur après l'épaulement, côté couronne.
+    pub wide_width: f64,
+    /// Longueur de la partie élargie, depuis le **gros** bout.
+    pub wide_length: f64,
+    /// Abscisse de l'épaulement depuis le petit bout. Redondant avec
+    /// `length − wide_length`, et c'est voulu : la cote de fabrication est
+    /// donnée des deux côtés sur le plan, un écart entre les deux est une
+    /// faute de saisie qu'un contrôle doit attraper.
+    pub step_position: f64,
     /// Diamètre de perçage `d0` (goupille + jeu), pas le diamètre de goupille :
     /// c'est lui qui retire de la matière au calcul de section nette.
     pub hole_diameter: f64,
-    /// Trou de couronne utilisé sur la couronne extérieure (splays pairs).
-    pub crown_hole_outer_at: f64,
-    /// Trou de couronne utilisé sur la couronne intérieure (splays impairs).
-    pub crown_hole_inner_at: f64,
-    /// Verrou, la goupille de la paire la plus proche de la couronne : c'est
-    /// donc **elle** qui voit le moment de flexion maximal.
-    pub latch_hole_at: f64,
-    pub anchor_hole_at: f64,
+    pub holes: BarHoles,
     /// Limite d'élasticité, MPa.
     pub yield_strength: f64,
     /// Résistance à la rupture, MPa.
@@ -215,22 +268,38 @@ pub struct RearBar {
 
 impl RearBar {
     /// Largeur de la barre à l'abscisse donnée. La transition est franche dans
-    /// le modèle : c'est la section juste après qui est vérifiée.
+    /// le modèle : c'est la section juste avant l'épaulement, la plus étroite,
+    /// qui est vérifiée.
     pub fn width_at(&self, x: f64) -> f64 {
-        if x < self.wide_length {
+        if x >= self.step_position {
             self.wide_width
         } else {
             self.narrow_width
         }
     }
 
-    /// Trou de couronne utilisé pour ce splay, selon la parité.
-    pub fn crown_hole_at(&self, splay_deg: f64) -> f64 {
+    /// Trou de couronne utilisé pour ce splay, selon la parité de la couronne.
+    pub fn crown_hole(&self, splay_deg: f64) -> BarHole {
         if super::geometry::is_odd_splay(splay_deg) {
-            self.crown_hole_inner_at
+            self.holes.up660
         } else {
-            self.crown_hole_outer_at
+            self.holes.up680
         }
+    }
+
+    /// Distance du centre d'un trou au bord le plus proche, perpendiculairement
+    /// à l'axe. Le bord arrière est à `−narrow_width/2` sur toute la longueur ;
+    /// le bord avant est à `+narrow_width/2` avant l'épaulement et s'écarte
+    /// ensuite — l'élargissement se faisant d'un seul côté, le demi-axe avant
+    /// vaut `wide_width − narrow_width/2`.
+    pub fn edge_distance_at(&self, hole: BarHole) -> f64 {
+        let back = self.narrow_width / 2.0;
+        let front = if hole.along() >= self.step_position {
+            self.wide_width - self.narrow_width / 2.0
+        } else {
+            self.narrow_width / 2.0
+        };
+        (front - hole.lateral()).min(hole.lateral() + back)
     }
 
     /// Aire nette : la largeur locale moins le perçage.
@@ -239,14 +308,50 @@ impl RearBar {
         self.thickness * if drilled { w - self.hole_diameter } else { w }
     }
 
-    /// Module de flexion net. Le trou est sur la fibre neutre, donc il se
-    /// retranche en cube : `t(w³ − d0³)/(6w)`, et **pas** `t(w − d0)²/6` qui
-    /// vaudrait pour un trou en fibre extrême et surestimerait la contrainte
-    /// d'un facteur 2.
+    /// Module de flexion net à un trou **centré** : le perçage étant sur la
+    /// fibre neutre, il se retranche en cube — `t(w³ − d0³)/(6w)`, et **pas**
+    /// `t(w − d0)²/6` qui vaudrait pour un trou en fibre extrême et
+    /// surestimerait la contrainte d'un facteur 2.
     pub fn section_modulus_at(&self, x: f64, drilled: bool) -> f64 {
         let w = self.width_at(x);
         let d = if drilled { self.hole_diameter } else { 0.0 };
         self.thickness * (w.powi(3) - d.powi(3)) / (6.0 * w)
+    }
+
+    /// Module de flexion net à un trou **excentré**. Retirer de la matière hors
+    /// de la fibre neutre déplace le centroïde, donc les deux fibres extrêmes
+    /// n'ont plus le même module : c'est la plus petite qui gouverne.
+    ///
+    /// `up660` a un moment nul dans le modèle en vigueur, mais la formule est
+    /// là pour que déplacer un trou ne demande pas d'écrire le calcul dans
+    /// l'urgence.
+    pub fn eccentric_section_modulus(&self, hole: BarHole) -> f64 {
+        let w = self.width_at(hole.along());
+        let t = self.thickness;
+        let d = self.hole_diameter;
+        // Demi-largeurs depuis l'axe, asymétriques après l'épaulement.
+        let back = self.narrow_width / 2.0;
+        let front = if hole.along() >= self.step_position {
+            self.wide_width - self.narrow_width / 2.0
+        } else {
+            self.narrow_width / 2.0
+        };
+        // Section pleine, repérée depuis l'axe de la partie étroite.
+        let a_full = t * w;
+        let c_full = (front - back) / 2.0;
+        let i_full = t * w.powi(3) / 12.0 + a_full * c_full.powi(2);
+        // Le trou, assimilé à une fente de largeur `d` — même convention que
+        // le cas centré, pour que les deux formules coïncident à déport nul.
+        let a_hole = t * d;
+        let c_hole = hole.lateral();
+        let i_hole = t * d.powi(3) / 12.0 + a_hole * c_hole.powi(2);
+
+        let a_net = a_full - a_hole;
+        let c_net = (a_full * c_full - a_hole * c_hole) / a_net;
+        let i_net = (i_full - i_hole) - a_net * c_net.powi(2);
+        // Fibres extrêmes depuis le centroïde net : la plus éloignée gouverne.
+        let v = (front - c_net).abs().max((c_net + back).abs());
+        i_net / v
     }
 }
 
@@ -263,6 +368,15 @@ pub struct SpeakerMechanicalModel {
     pub cg: [f64; 2],
     pub hinge: Hinge,
     pub crown: Crown,
+    /// Verrou et ancrage, en polaire depuis `ht`. Ils remplacent les
+    /// `crown.anchor_angle` / `crown.latch_angle` de l'ancien modèle, qui
+    /// supposaient les deux trous sur le même cercle de 680 — ce n'est plus le
+    /// cas du verrou.
+    pub latch: PolarHole,
+    pub anchor: PolarHole,
+    /// Entraxe ancrage-verrou, mm. Paramètre pilote du dessin : c'est lui qui
+    /// fixe la longueur de barre et le bras du couple qui reprend le moment.
+    pub latch_offset: f64,
     pub splay_grid: Vec<f64>,
     pub frame_hole_splay: f64,
     pub rear_bar: RearBar,

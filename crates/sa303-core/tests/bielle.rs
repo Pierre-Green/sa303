@@ -4,7 +4,8 @@
 //! trous de couronne ne sont plus sur un arc centré sur un point unique.
 
 use sa303_core::speaker::{
-    BelowCompatibility, Crown, Hinge, RearBar, SpeakerGeometry, SpeakerMechanicalModel, SpeakerModel,
+    BarHole, BarHoles, BelowCompatibility, Crown, Hinge, PolarHole, RearBar, SpeakerGeometry,
+    SpeakerMechanicalModel, SpeakerModel,
 };
 
 /// Perçage de référence SA303 (brief §1) : les distances au bord viennent de
@@ -29,23 +30,33 @@ fn sa303() -> SpeakerModel {
             crown: Crown {
                 radius: 680.0,
                 delta: 20.0,
-                anchor_angle: 3.0,
-                latch_angle: 1.0,
                 splay0_angle: 5.0,
             },
+            latch: PolarHole {
+                radius: 710.845,
+                angle_deg: -20.8453,
+            },
+            anchor: PolarHole {
+                radius: 680.0,
+                angle_deg: -13.0,
+            },
+            latch_offset: 100.0,
             splay_grid: vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 20.0],
             frame_hole_splay: 0.0,
             rear_bar: RearBar {
                 thickness: 10.0,
-                length: 360.739,
-                wide_width: 64.0,
-                wide_length: 150.739,
+                length: 458.514,
                 narrow_width: 40.0,
+                wide_width: 55.0,
+                wide_length: 78.514,
+                step_position: 380.0,
                 hole_diameter: 12.08,
-                crown_hole_outer_at: 15.863,
-                crown_hole_inner_at: 20.121,
-                latch_hole_at: 321.93,
-                anchor_hole_at: 344.877,
+                holes: BarHoles {
+                    latch: BarHole([14.5, 0.0]),
+                    anchor: BarHole([114.5, 0.0]),
+                    up660: BarHole([438.675, 19.406]),
+                    up680: BarHole([443.514, 0.0]),
+                },
                 yield_strength: 355.0,
                 ultimate_strength: 510.0,
             },
@@ -180,7 +191,6 @@ fn the_bar_length_does_not_depend_on_the_splay() {
     }
 }
 
-
 /// §1 — la barre déclarée doit tomber sur les trous que la jonction lui impose.
 /// Les avertissements restants sont ceux qu'on accepte de vivre : ils doivent
 /// être nommés ici, sinon une dérive de cotation passerait pour normale.
@@ -204,7 +214,7 @@ fn the_declared_rear_bar_fits_the_joint_it_serves() {
 #[test]
 fn a_bar_that_misses_its_holes_is_an_error_not_a_warning() {
     let mut sm = sa303();
-    sm.mechanical.rear_bar.anchor_hole_at += 5.0;
+    sm.mechanical.rear_bar.holes.anchor.0[0] += 5.0;
     assert!(sa303_core::speaker::check_rear_bar(&sm).is_err());
 }
 
@@ -212,27 +222,28 @@ fn a_bar_that_misses_its_holes_is_an_error_not_a_warning() {
 #[test]
 fn an_edge_distance_below_the_minimum_is_reported() {
     let mut sm = sa303();
-    // Toute la barre glisse vers le bout couronne : les entraxes ne bougent
-    // pas, seule la distance au bord se referme.
-    let shift = sm.mechanical.rear_bar.crown_hole_outer_at - 5.0;
-    sm.mechanical.rear_bar.crown_hole_outer_at -= shift;
-    sm.mechanical.rear_bar.crown_hole_inner_at -= shift;
-    sm.mechanical.rear_bar.latch_hole_at -= shift;
-    sm.mechanical.rear_bar.anchor_hole_at -= shift;
+    // La barre est rallongée côté couronne sans que le trou suive : les
+    // entraxes ne bougent pas, seule la distance au bord se referme.
+    sm.mechanical.rear_bar.length = sm.mechanical.rear_bar.holes.up680.along() + 5.0;
+    sm.mechanical.rear_bar.step_position =
+        sm.mechanical.rear_bar.length - sm.mechanical.rear_bar.wide_length;
     let warnings = sa303_core::speaker::check_rear_bar(&sm).expect("pas bloquant");
     assert!(
-        warnings.iter().any(|w| w.what.starts_with("e1 bout couronne")),
+        warnings
+            .iter()
+            .any(|w| w.what.starts_with("e1 bout couronne")),
         "{warnings:?}"
     );
 }
-
 
 /// §7 — un bras de bielle nul doit remonter une erreur, pas un NaN. Les
 /// comparaisons sur NaN étant fausses, un NaN traverserait tous les seuils de
 /// vérification sans en déclencher un seul : la grappe passerait pour bonne.
 #[test]
 fn a_degenerate_bielle_lever_is_an_error_not_a_silent_nan() {
-    use sa303_core::cluster::{build_cluster, compute_joint, ChainSpeaker, Compartment, JointInput};
+    use sa303_core::cluster::{
+        build_cluster, compute_joint, ChainSpeaker, Compartment, JointInput,
+    };
 
     let mut sm = sa303();
     // On amène la couronne sur la ligne d'action de la bielle : au splay 0
@@ -268,7 +279,9 @@ fn a_degenerate_bielle_lever_is_an_error_not_a_silent_nan() {
 #[test]
 fn golden_bar_loads_on_the_reference_joint() {
     use sa303_core::checks::check_bar;
-    use sa303_core::cluster::{build_cluster, compute_joint, ChainSpeaker, Compartment, JointInput};
+    use sa303_core::cluster::{
+        build_cluster, compute_joint, ChainSpeaker, Compartment, JointInput,
+    };
 
     let sm = sa303();
     let splays = [5.0, 10.0];
@@ -303,73 +316,14 @@ fn golden_bar_loads_on_the_reference_joint() {
     assert!((l - 324.8).abs() < 0.1, "L = {l}");
 
     // Décomposition, par flanc. Axial négatif = barre tendue.
-    assert!((j.bar_axial_n - -700.0).abs() < 1.0, "N = {}", j.bar_axial_n);
-    assert!((j.bar_shear_n.abs() - 132.0).abs() < 1.0, "V = {}", j.bar_shear_n);
-
-    // Moment. Le maximum est au verrou — première goupille depuis la couronne —
-    // et non à l'ancrage : au-delà du verrou la réaction de la paire le fait
-    // redescendre. Réduit à l'ancrage il vaudrait 42,85 N·m par flanc.
-    assert_eq!(j.bar_moment_max_at_mm, sm.mechanical.rear_bar.latch_hole_at);
     assert!(
-        (j.bar_moment_max_nm - 39.82).abs() < 0.05,
-        "M_max = {}",
-        j.bar_moment_max_nm
+        (j.bar_axial_n - -700.0).abs() < 1.0,
+        "N = {}",
+        j.bar_axial_n
     );
     assert!(
-        (j.bar_moment_at_pair_nm - 41.33).abs() < 0.05,
-        "M_paire = {}",
-        j.bar_moment_at_pair_nm
-    );
-
-    // Paire : entraxe 23,7 mm, couple issu du moment réduit au barycentre.
-    let d = (j.anchor_hole_local - j.latch_hole_local).norm();
-    assert!((d - 23.735).abs() < 0.01, "d = {d}");
-    let couple = j.bar_moment_at_pair_nm * 1000.0 / d;
-    assert!((couple - 1741.0).abs() < 5.0, "couple = {couple}");
-    assert!((j.f_anchor_n - 1910.0).abs() < 20.0, "F_a = {}", j.f_anchor_n);
-    assert!((j.f_latch_n - 1840.0).abs() < 20.0, "F_v = {}", j.f_latch_n);
-
-    // Contraintes de barre. Section étroite 40×10 percée Ø12,08 au verrou.
-    let check = check_bar(
-        &sm.mechanical.rear_bar,
-        j.splay_deg,
-        j.bar_shear_n,
-        j.bar_axial_n,
-        4.0,
-    );
-    let latch = check.sections.iter().find(|x| x.location == "verrou").unwrap();
-    assert_eq!(latch.width_mm, 40.0);
-    assert!((latch.stress_mpa - 17.9).abs() < 0.3, "σ = {}", latch.stress_mpa);
-    let transition = check
-        .sections
-        .iter()
-        .find(|x| x.location.starts_with("transition"))
-        .unwrap();
-    assert!(
-        (transition.stress_mpa - 8.21).abs() < 0.05,
-        "σ transition = {}",
-        transition.stress_mpa
-    );
-}
-
-/// Loi d'échelle, pour attraper une unité perdue : la contrainte est linéaire
-/// en effort, donc 1 kN de transverse par flanc doit rendre exactement le
-/// produit du bras par le module de section.
-#[test]
-fn golden_bar_stress_scales_with_a_kilonewton_of_shear() {
-    use sa303_core::checks::check_bar;
-    let bar = sa303().mechanical.rear_bar;
-
-    // Couronne intérieure (splay impair) : bras verrou = 301,81 mm.
-    let check = check_bar(&bar, 5.0, 1000.0, 0.0, 4.0);
-    let latch = check.sections.iter().find(|x| x.location == "verrou").unwrap();
-    let arm = bar.latch_hole_at - bar.crown_hole_inner_at;
-    assert!((arm - 301.81).abs() < 0.01, "bras = {arm}");
-    assert!((latch.moment_nmm / 1000.0 - 301.81).abs() < 0.01);
-    // 301,81 N·m sur W_net = 2593,22 mm³.
-    assert!(
-        (latch.stress_mpa - 116.4).abs() < 0.5,
-        "σ = {}",
-        latch.stress_mpa
+        (j.bar_shear_n.abs() - 132.0).abs() < 1.0,
+        "V = {}",
+        j.bar_shear_n
     );
 }

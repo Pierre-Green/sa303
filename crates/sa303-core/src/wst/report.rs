@@ -601,7 +601,10 @@ fn guide_delay_profile(radius_m: Option<f64>, radiating_height_m: f64) -> Vec<Gu
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::speaker::{Crown, Hinge, RearBar, SpeakerAcousticsModel, SpeakerMechanicalModel};
+    use crate::speaker::{
+        BarHole, BarHoles, Crown, Hinge, PolarHole, RearBar, SpeakerAcousticsModel,
+        SpeakerMechanicalModel,
+    };
 
     /// Le critère 5 n'est renseigné qu'en front plan ; ces tests-là sont tous
     /// en front plan, donc l'absence est un échec de test, pas un cas métier.
@@ -632,23 +635,33 @@ mod tests {
                 crown: Crown {
                     radius: 680.0,
                     delta: 20.0,
-                    anchor_angle: 3.0,
-                    latch_angle: 1.0,
                     splay0_angle: 5.0,
                 },
+                latch: PolarHole {
+                    radius: 710.845,
+                    angle_deg: -20.8453,
+                },
+                anchor: PolarHole {
+                    radius: 680.0,
+                    angle_deg: -13.0,
+                },
+                latch_offset: 100.0,
                 splay_grid: vec![0.0, 5.0, 10.0],
                 frame_hole_splay: 0.0,
                 rear_bar: RearBar {
                     thickness: 10.0,
-                    length: 360.739,
-                    wide_width: 64.0,
-                    wide_length: 150.739,
+                    length: 458.514,
                     narrow_width: 40.0,
+                    wide_width: 55.0,
+                    wide_length: 78.514,
+                    step_position: 380.0,
                     hole_diameter: 12.08,
-                    crown_hole_outer_at: 15.863,
-                    crown_hole_inner_at: 20.121,
-                    latch_hole_at: 321.93,
-                    anchor_hole_at: 344.877,
+                    holes: BarHoles {
+                        latch: BarHole([14.5, 0.0]),
+                        anchor: BarHole([114.5, 0.0]),
+                        up660: BarHole([438.675, 19.406]),
+                        up680: BarHole([443.514, 0.0]),
+                    },
                     yield_strength: 355.0,
                     ultimate_strength: 510.0,
                 },

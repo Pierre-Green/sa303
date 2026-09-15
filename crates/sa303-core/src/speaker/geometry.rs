@@ -64,8 +64,6 @@ pub struct SpeakerGeometry {
     pub front_edge: Vec2,
     crown_radius: f64,
     crown_delta: f64,
-    anchor_angle: f64,
-    latch_angle: f64,
     splay0_angle: f64,
 }
 
@@ -79,8 +77,11 @@ impl SpeakerGeometry {
         // centre à centre au splay 0, donc l'entraxe est ce qui reste une fois
         // retirées les deux demi-hauteurs de charnière.
         let bielle_entraxe = m.hinge.joint_separation - 2.0 * m.hinge.y;
-        let anchor_local = polar(ht, m.crown.radius, -(ha + m.crown.anchor_angle));
-        let latch_local = polar(ht, m.crown.radius, -(ha + m.crown.latch_angle));
+        // Chaque trou porte son propre rayon : le verrou n'est plus sur le
+        // cercle de 680 mm, il est au bout de l'axe de barre, plus loin. Aucune
+        // formule ne doit donc supposer un rayon commun aux deux.
+        let anchor_local = polar(ht, m.anchor.radius, m.anchor.angle_deg);
+        let latch_local = polar(ht, m.latch.radius, m.latch.angle_deg);
         // Recul `edge_perp` depuis la face avant, et demi-entraxe de bielle
         // vers le bas : c'est la construction EN 1993-1-8 du trou de charnière,
         // prise à l'envers (brief §1).
@@ -98,8 +99,6 @@ impl SpeakerGeometry {
             front_edge,
             crown_radius: m.crown.radius,
             crown_delta: m.crown.delta,
-            anchor_angle: m.crown.anchor_angle,
-            latch_angle: m.crown.latch_angle,
             splay0_angle: m.crown.splay0_angle,
         }
     }
@@ -144,23 +143,28 @@ impl SpeakerGeometry {
         )
     }
 
-    /// Ancrage de l'enceinte inférieure vue depuis l'enceinte supérieure, au splay donné.
-    /// Piège (brief §3) : l'angle est `-(ha + anchor_angle) + s`, pas `ha - anchor_angle + s`.
+    /// Porte un trou du caisson du **bas** dans le repère du caisson du haut,
+    /// au splay donné.
+    ///
+    /// Le caisson du bas est positionné en faisant coïncider son `ht` avec la
+    /// goupille basse de bielle, puis en le tournant du splay entier. Un point
+    /// quelconque de ce caisson suit donc `pv_at(k) + (P − ht).rotate(k)`.
+    ///
+    /// Formulation générale, valable quel que soit le rayon du trou : l'ancienne
+    /// écriture polaire supposait ancrage et verrou sur le même cercle de 680,
+    /// ce que le verrou ne respecte plus.
+    fn carry(&self, local: Vec2, splay_deg: f64) -> Vec2 {
+        self.pv_at(splay_deg) + (local - self.ht).rotate(splay_deg.to_radians())
+    }
+
+    /// Ancrage de l'enceinte inférieure vu depuis l'enceinte supérieure.
     pub fn anchor_at(&self, splay_deg: f64) -> Vec2 {
-        polar(
-            self.pv_at(splay_deg),
-            self.crown_radius,
-            -(self.ha + self.anchor_angle) + splay_deg,
-        )
+        self.carry(self.anchor_local, splay_deg)
     }
 
     /// Verrou de l'enceinte inférieure vu depuis l'enceinte supérieure.
     pub fn latch_at(&self, splay_deg: f64) -> Vec2 {
-        polar(
-            self.pv_at(splay_deg),
-            self.crown_radius,
-            -(self.ha + self.latch_angle) + splay_deg,
-        )
+        self.carry(self.latch_local, splay_deg)
     }
 
     /// Écartement des coins avant au splay donné (brief §5). L'algorithme suit
@@ -191,11 +195,18 @@ impl SpeakerGeometry {
         (a - self.pv_at(splay_deg)).cross(u).abs()
     }
 
-    /// Recoupement trigonométrique du bras de levier (brief §3), pour contrôle.
+    /// Recoupement trigonométrique du bras de levier, pour contrôle de perçage.
+    ///
+    /// Couronne et ancrage sont tous deux radiaux depuis `pv_at`, mais sur des
+    /// rayons différents : l'angle entre eux se lit donc sur la géométrie plutôt
+    /// que sur une somme d'angles déclarés — c'est ce qui rend ce recoupement
+    /// indépendant du chemin qui a servi à placer les trous.
     pub fn lever_check(&self, splay_deg: f64) -> f64 {
-        let a = self.crown_radius;
-        let b = self.crown_radius_at(splay_deg);
-        let theta = (2.0 * self.ha + self.anchor_angle + self.splay0_angle).to_radians();
+        let pv = self.pv_at(splay_deg);
+        let a = (self.anchor_at(splay_deg) - pv).norm();
+        let b = (self.crown(splay_deg) - pv).norm();
+        let theta = ((self.anchor_at(splay_deg) - pv).cross(self.crown(splay_deg) - pv))
+            .atan2((self.anchor_at(splay_deg) - pv).dot(self.crown(splay_deg) - pv));
         a * b * theta.sin() / (a * a + b * b - 2.0 * a * b * theta.cos()).sqrt()
     }
 }
@@ -231,6 +242,10 @@ pub const BAR_FIT_TOLERANCE_MM: f64 = 0.05;
 /// n'a rien à faire sur cette jonction.
 const BAR_FIT_HARD_LIMIT_MM: f64 = 2.0;
 
+/// Écart au-delà duquel les trois trous ne sont plus alignés : une barre droite
+/// ne peut alors pas passer par les trois, quelle que soit sa cotation.
+pub const BAR_AXIS_TOLERANCE_MM: f64 = 0.01;
+
 /// Minimum EN 1993-1-8 pour les distances au bord, exprimé en diamètres de perçage.
 const MIN_EDGE_DISTANCE_IN_D0: f64 = 1.2;
 
@@ -251,79 +266,116 @@ pub fn check_rear_bar(speaker: &SpeakerModel) -> Result<Vec<BarWarning>, BarInco
     let geo = SpeakerGeometry::compute(speaker);
     let mut warnings = Vec::new();
 
-    for (label, odd) in [("extérieure", false), ("intérieure", true)] {
-        let splays: Vec<f64> = m
-            .splay_grid
-            .iter()
-            .copied()
-            .filter(|&s| is_odd_splay(s) == odd)
-            .collect();
-        let Some(&first) = splays.first() else {
-            continue;
-        };
-
-        // Constance sur la couronne : c'est la condition d'existence d'une barre
-        // rigide, avant toute question de cotation.
-        let spacing = |s: f64| {
-            (
-                (geo.crown(s) - geo.anchor_at(s)).norm(),
-                (geo.crown(s) - geo.latch_at(s)).norm(),
-            )
-        };
-        let (ref_anchor, ref_latch) = spacing(first);
-        for &s in &splays {
-            let (a, l) = spacing(s);
-            for (what, got, want) in [("ancrage", a, ref_anchor), ("verrou", l, ref_latch)] {
-                if (got - want).abs() > BAR_FIT_TOLERANCE_MM {
-                    return Err(BarInconsistency {
-                        reason: format!(
-                            "couronne {label} : entraxe couronne-{what} {got:.3} mm à {s}° \
-                             contre {want:.3} mm à {first}° — aucune barre rigide ne \
-                             dessert cette couronne"
-                        ),
-                    });
-                }
-            }
+    let mut hard = |what: &str, expected: f64, declared: f64| -> Result<(), BarInconsistency> {
+        let delta = declared - expected;
+        if delta.abs() > BAR_FIT_HARD_LIMIT_MM {
+            return Err(BarInconsistency {
+                reason: format!(
+                    "{what} : déclaré {declared:.3} mm contre {expected:.3} mm sur la \
+                     jonction, écart {delta:.3} mm"
+                ),
+            });
         }
-
-        // Concordance avec la cotation déclarée. Le verrou est comparé sur son
-        // abscisse le long de l'axe couronne-ancrage, pas sur sa distance à la
-        // couronne : les trois trous ne sont pas alignés (le verrou est déporté
-        // latéralement), donc les deux ne sont pas la même grandeur.
-        let crown_at = bar.crown_hole_at(first);
-        let latch_abscissa = (ref_latch * ref_latch - (bar.anchor_hole_at - bar.latch_hole_at)
-            * (bar.anchor_hole_at - bar.latch_hole_at)
-            + ref_anchor * ref_anchor)
-            / (2.0 * ref_anchor);
-        for (what, expected, declared) in [
-            ("entraxe couronne-ancrage", ref_anchor, bar.anchor_hole_at - crown_at),
-            ("abscisse du verrou", latch_abscissa, bar.latch_hole_at - crown_at),
-        ] {
-            let delta = declared - expected;
-            if delta.abs() > BAR_FIT_HARD_LIMIT_MM {
-                return Err(BarInconsistency {
-                    reason: format!(
-                        "couronne {label} : {what} déclaré {declared:.3} mm contre \
-                         {expected:.3} mm sur la jonction, écart {delta:.3} mm"
-                    ),
-                });
-            }
-            if delta.abs() > BAR_FIT_TOLERANCE_MM {
-                warnings.push(BarWarning {
-                    what: format!("couronne {label} : {what}"),
-                    expected_mm: expected,
-                    declared_mm: declared,
-                    delta_mm: delta,
-                });
-            }
+        if delta.abs() > BAR_FIT_TOLERANCE_MM {
+            warnings.push(BarWarning {
+                what: what.to_string(),
+                expected_mm: expected,
+                declared_mm: declared,
+                delta_mm: delta,
+            });
         }
+        Ok(())
+    };
+
+    // --- 1. Cohérence interne du dessin -------------------------------------
+    // `step_position` et `wide_length` cotent le même épaulement depuis les deux
+    // bouts : un écart entre les deux est une faute de saisie, pas une tolérance.
+    hard(
+        "épaulement coté depuis les deux bouts",
+        bar.length - bar.wide_length,
+        bar.step_position,
+    )?;
+    // La longueur est pilotée par l'entraxe de la paire.
+    hard(
+        "longueur pilotée par l'entraxe de paire",
+        bar.holes.up680.along() + (bar.length - bar.holes.up680.along()),
+        bar.holes.latch.along()
+            + m.latch_offset
+            + (bar.holes.up680.along() - bar.holes.anchor.along())
+            + (bar.length - bar.holes.up680.along()),
+    )?;
+
+    // --- 2. La paire, dans le repère caisson --------------------------------
+    // L'entraxe déclaré doit être celui que les deux polaires produisent. Les
+    // deux trous n'étant plus sur le même cercle, c'est la seule façon de le
+    // vérifier — aucune différence d'angles ne le donne.
+    let pair_span = (geo.anchor_local - geo.latch_local).norm();
+    hard("entraxe ancrage-verrou", m.latch_offset, pair_span)?;
+    hard(
+        "entraxe ancrage-verrou, repère barre",
+        pair_span,
+        bar.holes.anchor.along() - bar.holes.latch.along(),
+    )?;
+
+    // --- 3. L'axe de la barre -----------------------------------------------
+    // Le verrou doit être sur la droite ancrage -> couronne extérieure : c'est
+    // la définition même de l'axe, et une barre droite ne se monte pas
+    // autrement. Vu depuis le caisson qui porte la paire, la couronne est à une
+    // place fixe — indépendante du splay, puisque le caisson du bas tourne avec
+    // elle.
+    let crown_from_pair = |radius: f64| polar(geo.ht, radius, geo.ha + geo.splay0_angle);
+    let up680_local = crown_from_pair(geo.crown_radius);
+    let axis = (up680_local - geo.anchor_local).normalize();
+    // Normale « vers l'avant » du caisson, celle qui donne son signe au déport
+    // latéral. L'axe monte vers la couronne ; le tourner d'un quart de tour
+    // direct pointe vers −x, donc vers l'avant (repère caisson : x va vers
+    // l'arrière). Nommée plutôt que laissée à un ordre de produit vectoriel :
+    // l'inverser mettrait `up660` du mauvais côté de la barre sans rien casser
+    // d'autre.
+    let front_normal = Vec2::new(-axis.y, axis.x);
+    let off_axis = (geo.latch_local - geo.anchor_local).dot(front_normal).abs();
+    if off_axis > BAR_AXIS_TOLERANCE_MM {
+        return Err(BarInconsistency {
+            reason: format!(
+                "le verrou est à {off_axis:.4} mm de la droite ancrage-couronne : \
+                 aucune barre droite ne passe par les trois trous"
+            ),
+        });
     }
 
-    // Distances au bord (EN 1993-1-8) : e1 le long de l'axe depuis chaque bout,
-    // e2 perpendiculairement depuis le flanc de la barre.
+    // --- 4. Les trous de couronne, repère barre -----------------------------
+    // Chaque couronne a son entraxe et son déport. `up680` est sur l'axe,
+    // `up660` en est écarté : c'est ce déport qui met l'effort de couronne hors
+    // de l'axe sur les splays impairs, donc qui crée du moment là où une
+    // abscisse seule n'en verrait aucun.
+    for (label, radius, hole) in [
+        ("extérieure", geo.crown_radius, bar.holes.up680),
+        (
+            "intérieure",
+            geo.crown_radius - geo.crown_delta,
+            bar.holes.up660,
+        ),
+    ] {
+        let local = crown_from_pair(radius);
+        let from_anchor = local - geo.anchor_local;
+        hard(
+            &format!("couronne {label} : entraxe depuis l'ancrage"),
+            from_anchor.norm(),
+            (hole.as_vec() - bar.holes.anchor.as_vec()).norm(),
+        )?;
+        // Déport latéral, compté positif vers l'avant du caisson comme la
+        // convention du repère barre l'impose.
+        hard(
+            &format!("couronne {label} : déport latéral"),
+            from_anchor.dot(front_normal),
+            hole.lateral(),
+        )?;
+    }
+
+    // --- 5. Distances au bord (EN 1993-1-8) ---------------------------------
     let min_edge = MIN_EDGE_DISTANCE_IN_D0 * bar.hole_diameter;
     let mut edge = |what: &str, value: f64| {
-        if value < min_edge {
+        if value < min_edge - 1e-9 {
             warnings.push(BarWarning {
                 what: what.to_string(),
                 expected_mm: min_edge,
@@ -332,15 +384,14 @@ pub fn check_rear_bar(speaker: &SpeakerModel) -> Result<Vec<BarWarning>, BarInco
             });
         }
     };
-    edge("e1 bout couronne (extérieure)", bar.crown_hole_outer_at);
-    edge("e1 bout couronne (intérieure)", bar.crown_hole_inner_at);
-    edge("e1 bout paire", bar.length - bar.anchor_hole_at);
-    edge(
-        "e2 trou de couronne",
-        bar.width_at(bar.crown_hole_outer_at) / 2.0,
-    );
-    edge("e2 verrou", bar.width_at(bar.latch_hole_at) / 2.0);
-    edge("e2 ancrage", bar.width_at(bar.anchor_hole_at) / 2.0);
+    // e1 : le long de l'axe, depuis chaque bout.
+    edge("e1 bout verrou", bar.holes.latch.along());
+    edge("e1 bout couronne", bar.length - bar.holes.up680.along());
+    // e2 : perpendiculairement, vers le bord le plus proche.
+    edge("e2 verrou", bar.edge_distance_at(bar.holes.latch));
+    edge("e2 ancrage", bar.edge_distance_at(bar.holes.anchor));
+    edge("e2 up660", bar.edge_distance_at(bar.holes.up660));
+    edge("e2 up680", bar.edge_distance_at(bar.holes.up680));
 
     Ok(warnings)
 }

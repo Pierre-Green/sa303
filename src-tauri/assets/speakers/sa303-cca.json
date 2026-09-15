@@ -1,7 +1,7 @@
 {
   "id": "sa303-cca",
   "name": "SA303-CCA",
-  "schemaVersion": 5,
+  "schemaVersion": 6,
   "depth": 700.0,
   "height": 550.0,
   "totalVerticalAngle": 20.0,
@@ -19,10 +19,17 @@
   "crown": {
     "radius": 680.0,
     "delta": 20.0,
-    "anchorAngle": 3.0,
-    "splay0Angle": 5.0,
-    "latchAngle": 1.0
+    "splay0Angle": 5.0
   },
+  "latch": {
+    "radius": 710.845,
+    "angleDeg": -20.8453
+  },
+  "anchor": {
+    "radius": 680.0,
+    "angleDeg": -13.0
+  },
+  "latchOffset": 100.0,
   "splayGrid": [
     0.0,
     1.0,
@@ -64,15 +71,30 @@
   ],
   "rearBar": {
     "thickness": 10.0,
-    "length": 360.739,
-    "wideWidth": 64.0,
-    "wideLength": 150.739,
+    "length": 458.514,
     "narrowWidth": 40.0,
+    "wideWidth": 55.0,
+    "wideLength": 78.514,
+    "stepPosition": 380.0,
     "holeDiameter": 12.08,
-    "crownHoleOuterAt": 15.863,
-    "crownHoleInnerAt": 20.121,
-    "latchHoleAt": 321.93,
-    "anchorHoleAt": 344.877,
+    "holes": {
+      "latch": [
+        14.5,
+        0.0
+      ],
+      "anchor": [
+        114.5,
+        0.0
+      ],
+      "up660": [
+        438.675,
+        19.406
+      ],
+      "up680": [
+        443.514,
+        0.0
+      ]
+    },
     "yieldStrength": 355.0,
     "ultimateStrength": 510.0
   }

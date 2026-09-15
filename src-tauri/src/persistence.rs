@@ -11,7 +11,7 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
-pub const SPEAKER_SCHEMA_VERSION: u32 = 5;
+pub const SPEAKER_SCHEMA_VERSION: u32 = 6;
 pub const CLUSTER_SCHEMA_VERSION: u32 = 2;
 pub const BUMPER_SCHEMA_VERSION: u32 = 1;
 pub const BUMPER_BAR_SCHEMA_VERSION: u32 = 1;
@@ -198,23 +198,32 @@ const SA303_SPLAY_GRID_V4: [f64; 8] = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 20.0]
 /// enregistrée avant ne les porte pas. Dérivés de la table 3.9 EN 1993-1-8
 /// appliquée à la charge réelle (brief §1), donc pas des forfaits.
 const SA303_EDGE_PERP_MM: f64 = 12.569;
-const SA303_ANCHOR_ANGLE_DEG: f64 = 3.0;
-const SA303_LATCH_ANGLE_DEG: f64 = 1.0;
 
 /// Barre arrière SA303 de référence, pour les fiches enregistrées avant que la
 /// barre soit modélisée. Deux trous de couronne : l'entraxe couronne-ancrage
 /// n'est pas le même sur les deux couronnes.
+/// Verrou et ancrage SA303 après le passage à la géométrie Fusion, en polaire
+/// depuis `ht`. Le verrou n'est plus sur le cercle de 680 : il est au bout de
+/// l'axe de barre, à 710,845 mm. Un fichier v5 le décrivait par un angle sur
+/// 680 — le convertir tel quel le placerait 30 mm trop court.
+const SA303_LATCH_POLAR: &str = r#"{"radius": 710.845, "angleDeg": -20.8453}"#;
+const SA303_ANCHOR_POLAR: &str = r#"{"radius": 680.0, "angleDeg": -13.0}"#;
+const SA303_LATCH_OFFSET_MM: f64 = 100.0;
+
 const SA303_REAR_BAR: &str = r#"{
     "thickness": 10.0,
-    "length": 360.739,
-    "wideWidth": 64.0,
-    "wideLength": 150.739,
+    "length": 458.514,
     "narrowWidth": 40.0,
+    "wideWidth": 55.0,
+    "wideLength": 78.514,
+    "stepPosition": 380.0,
     "holeDiameter": 12.08,
-    "crownHoleOuterAt": 15.863,
-    "crownHoleInnerAt": 20.121,
-    "latchHoleAt": 321.93,
-    "anchorHoleAt": 344.877,
+    "holes": {
+        "latch":  [ 14.500,  0.000],
+        "anchor": [114.500,  0.000],
+        "up660":  [438.675, 19.406],
+        "up680":  [443.514,  0.000]
+    },
     "yieldStrength": 355.0,
     "ultimateStrength": 510.0
 }"#;
@@ -273,21 +282,52 @@ fn migrate_legacy_speaker_json(mut value: serde_json::Value) -> serde_json::Valu
             .entry("edgePerp")
             .or_insert_with(|| SA303_EDGE_PERP_MM.into());
     }
-    if let Some(crown) = value.get_mut("crown").and_then(|c| c.as_object_mut()) {
-        if !crown.contains_key("latchAngle") {
-            crown.insert("latchAngle".into(), SA303_LATCH_ANGLE_DEG.into());
-            crown.insert("anchorAngle".into(), SA303_ANCHOR_ANGLE_DEG.into());
-        }
-    }
-    // v4 → v5 : la barre arrière n'était pas modélisée. Elle est requise à la
-    // désérialisation, donc elle se remplit ici comme les champs de la v4.
+    // v4 → v5 : la barre arrière n'était pas modélisée.
+    //
+    // v5 → v6 : elle l'était, mais avec une implantation de trous qui n'est plus
+    // celle du modèle Fusion — quatre abscisses sur un axe, verrou supposé sur
+    // le cercle de 680. Les deux se remplacent en bloc plutôt que de se
+    // convertir champ à champ : une v5 décrit un verrou à 23,7 mm de l'ancrage
+    // sur le cercle de 680, la v6 un verrou à 100 mm sur un rayon de 710,845.
+    // Aucune transformation ne mène de l'un à l'autre — ce sont deux pièces
+    // différentes, et prétendre les convertir produirait une barre qui ne monte
+    // sur rien.
+    //
+    // La substitution est donc franche et signalée comme telle : toute fiche
+    // antérieure à la v6 repart avec la barre de référence SA303.
     if let Some(obj) = value.as_object_mut() {
-        if !obj.contains_key("rearBar") {
+        let legacy_bar = obj
+            .get("rearBar")
+            .and_then(|b| b.as_object())
+            .is_some_and(|b| b.contains_key("anchorHoleAt") || !b.contains_key("holes"));
+        if !obj.contains_key("rearBar") || legacy_bar {
             obj.insert(
                 "rearBar".into(),
                 serde_json::from_str(SA303_REAR_BAR).expect("barre de référence valide"),
             );
         }
+        // Verrou et ancrage passent de `crown.{latchAngle, anchorAngle}` — deux
+        // angles sur un rayon commun — à deux polaires indépendantes.
+        if !obj.contains_key("anchor") {
+            obj.insert(
+                "anchor".into(),
+                serde_json::from_str(SA303_ANCHOR_POLAR).expect("ancrage de référence valide"),
+            );
+        }
+        if !obj.contains_key("latch") {
+            obj.insert(
+                "latch".into(),
+                serde_json::from_str(SA303_LATCH_POLAR).expect("verrou de référence valide"),
+            );
+        }
+        obj.entry("latchOffset")
+            .or_insert_with(|| SA303_LATCH_OFFSET_MM.into());
+    }
+    // Les angles de l'ancien modèle sont retirés : les laisser ferait croire
+    // qu'ils décrivent encore quelque chose.
+    if let Some(crown) = value.get_mut("crown").and_then(|c| c.as_object_mut()) {
+        crown.remove("anchorAngle");
+        crown.remove("latchAngle");
     }
     let Some(acoustics) = value.get_mut("acoustics").and_then(|a| a.as_object_mut()) else {
         return value;
@@ -831,32 +871,54 @@ mod tests {
     }
 
     /// Les champs apparus en v4 sont **requis** : une fiche v3 ne se
-    /// désérialiserait même pas sans la reprise sur le JSON brut. Et
-    /// `anchorAngle` doit bouger avec, sinon toute la couronne se décale en
-    /// silence (brief §1).
+    /// désérialiserait même pas sans la reprise sur le JSON brut.
     #[test]
     fn a_speaker_saved_before_the_bielle_gets_the_holes_that_appeared_with_it() {
         let speaker: SpeakerModel =
             serde_json::from_value(migrate_legacy_speaker_json(legacy_speaker_json(20.0))).unwrap();
         assert_eq!(speaker.mechanical.hinge.edge_perp, SA303_EDGE_PERP_MM);
-        assert_eq!(speaker.mechanical.crown.latch_angle, SA303_LATCH_ANGLE_DEG);
-        assert_eq!(speaker.mechanical.crown.anchor_angle, SA303_ANCHOR_ANGLE_DEG);
     }
 
-    /// À l'inverse, une fiche qui porte déjà ces champs n'est pas réécrite :
-    /// la migration comble un manque, elle n'impose pas le perçage SA303 à une
-    /// enceinte percée autrement.
+    /// Une fiche qui porte déjà `edgePerp` n'est pas réécrite : la migration
+    /// comble un manque, elle n'impose pas le perçage SA303 à une enceinte
+    /// percée autrement.
     #[test]
     fn a_speaker_that_already_declares_them_keeps_its_own_values() {
         let mut raw = legacy_speaker_json(20.0);
         raw["hinge"]["edgePerp"] = 9.5.into();
-        raw["crown"]["latchAngle"] = 2.0.into();
-        raw["crown"]["anchorAngle"] = 2.5.into();
         let speaker: SpeakerModel =
             serde_json::from_value(migrate_legacy_speaker_json(raw)).unwrap();
         assert_eq!(speaker.mechanical.hinge.edge_perp, 9.5);
-        assert_eq!(speaker.mechanical.crown.latch_angle, 2.0);
-        assert_eq!(speaker.mechanical.crown.anchor_angle, 2.5);
+    }
+
+    /// v5 → v6 : la barre arrière change de pièce, elle ne se convertit pas.
+    /// Une v5 décrit un verrou à 23,7 mm de l'ancrage sur le cercle de 680 ; la
+    /// v6 un verrou à 100 mm sur un rayon de 710,845. Prétendre passer de l'un
+    /// à l'autre par transformation produirait une barre qui ne monte sur rien,
+    /// donc la substitution est franche.
+    #[test]
+    fn a_speaker_carrying_the_old_rear_bar_gets_the_fusion_one_instead() {
+        let mut raw = legacy_speaker_json(20.0);
+        raw["rearBar"] = serde_json::json!({
+            "thickness": 10.0, "length": 360.739,
+            "wideWidth": 64.0, "wideLength": 150.739, "narrowWidth": 40.0,
+            "holeDiameter": 12.08,
+            "crownHoleOuterAt": 15.863, "crownHoleInnerAt": 20.121,
+            "latchHoleAt": 321.93, "anchorHoleAt": 344.877,
+            "yieldStrength": 355.0, "ultimateStrength": 510.0
+        });
+        let speaker: SpeakerModel =
+            serde_json::from_value(migrate_legacy_speaker_json(raw)).unwrap();
+
+        let bar = &speaker.mechanical.rear_bar;
+        assert_eq!(bar.length, 458.514);
+        assert_eq!(bar.holes.latch.along(), 14.5);
+        assert_eq!(bar.holes.anchor.along(), 114.5);
+        assert_eq!(bar.holes.up660.lateral(), 19.406);
+        // Et le verrou repart sur son vrai rayon, pas sur celui de la couronne.
+        assert_eq!(speaker.mechanical.latch.radius, 710.845);
+        assert_eq!(speaker.mechanical.anchor.radius, 680.0);
+        assert_eq!(speaker.mechanical.latch_offset, 100.0);
     }
 
     #[test]

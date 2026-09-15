@@ -420,16 +420,16 @@ pub fn compute_joint(input: &JointInput) -> Result<JointResult, JointInconsisten
     let axial = f_ori.dot(e);
     let shear = f_ori.cross(e);
 
-    let crown_at = bar.crown_hole_at(s);
-    let latch_arm = (bar.latch_hole_at - crown_at).abs();
-    let anchor_arm = (bar.anchor_hole_at - crown_at).abs();
+    let crown_at = bar.crown_hole(s).along();
+    let latch_arm = (bar.holes.latch.along() - crown_at).abs();
+    let anchor_arm = (bar.holes.anchor.along() - crown_at).abs();
     // La goupille de la paire la plus proche de la couronne : c'est là que le
     // moment culmine. Le verrou par construction, mais lu sur la cotation
     // plutôt que supposé — une barre cotée autrement inverserait les deux.
     let (first_arm, first_at) = if latch_arm <= anchor_arm {
-        (latch_arm, bar.latch_hole_at)
+        (latch_arm, bar.holes.latch.along())
     } else {
-        (anchor_arm, bar.anchor_hole_at)
+        (anchor_arm, bar.holes.anchor.along())
     };
     let pair_centroid_arm = (latch_arm + anchor_arm) / 2.0;
 
