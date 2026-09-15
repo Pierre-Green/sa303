@@ -384,16 +384,37 @@ fn golden_bar_loads_on_the_reference_joint() {
         "raccord à l'ancrage : {} N·mm",
         check.moment_continuity_nmm
     );
-    println!(
-        "critique @{:.1} larg {:.2} percé {} M {:.0} σ {:.2} taux {:.3}",
-        check.critical.at_mm,
-        check.critical.width_mm,
-        check.critical.drilled,
-        check.critical.moment_nmm,
-        check.critical.stress_mpa,
-        check.critical.utilization
+    // La section critique est l'ancrage : percé, dans la largeur 70.
+    // L'abscisse critique est celle de l'ancrage calculé, à quelques microns de
+    // la cotation déclarée — c'est l'écart d'ajustement, pas une dérive.
+    assert!((check.critical.at_mm - 116.0).abs() < 0.001);
+    assert!(check.critical.drilled);
+    assert!((check.critical.width_mm - 70.0).abs() < 1e-9);
+    assert!(
+        (check.critical.moment_nmm / 1000.0 - 42.85).abs() < 0.01,
+        "M ancrage = {}",
+        check.critical.moment_nmm / 1000.0
     );
-    println!("avertissements : {:?}", check.warnings);
+
+    // Moment nul au verrou, et à mi-paire il vaut la moitié : le tronçon
+    // verrou-ancrage ne porte qu'un effort, donc le diagramme y est droit.
+    let m_at = |a: f64| {
+        check
+            .profile
+            .iter()
+            .min_by(|x, y| (x.at_mm - a).abs().total_cmp(&(y.at_mm - a).abs()))
+            .unwrap()
+            .moment_nmm
+    };
+    assert!(m_at(16.0) < 1.0, "M verrou = {}", m_at(16.0));
+    assert!(
+        (m_at(66.0) / 1000.0 - 21.4).abs() < 0.3,
+        "M à mi-paire = {}",
+        m_at(66.0) / 1000.0
+    );
+
+    // Aucun avertissement géométrique sur la pièce livrée.
+    assert!(check.warnings.is_empty(), "{:?}", check.warnings);
 }
 
 /// §4 — le bord arrière de la barre doit rester devant la face arrière du
