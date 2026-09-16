@@ -146,6 +146,24 @@ pub struct BumperView {
     pub support_point_global: Vec2,
     /// Direction de `support_force_global` (convention §2), pré-calculée.
     pub support_angle_deg: f64,
+
+    /// Moment que la structure du bumper doit transférer **entre ses deux
+    /// pions**, réduit à leur milieu (N·m, par flanc). C'est l'équivalent, pour
+    /// le bumper, du moment de barre d'une jonction : deux points d'accroche
+    /// sur un même corps rigide, donc un couple à passer de l'un à l'autre.
+    pub pin_pair_moment_nm: f64,
+    /// Entraxe des deux pions, mm — le bras de ce couple.
+    pub pin_span_mm: f64,
+}
+
+/// Moment que deux efforts de pion imposent à la pièce qui les relie, réduit au
+/// milieu des deux. Sert au bumper dans les deux compartiments : le schéma
+/// diffère (bras à deux forces en vol, répartition élastique en stack) mais la
+/// question posée est la même — que doit encaisser la structure entre ses deux
+/// points d'accroche.
+fn pin_pair_moment_nm(p1: Vec2, f1: Vec2, p2: Vec2, f2: Vec2) -> f64 {
+    let g = (p1 + p2) * 0.5;
+    ((p1 - g).cross(f1) + (p2 - g).cross(f2)) / 1000.0
 }
 
 /// Ce que `compute_bumper_loads` rend : les deux efforts transmis à l'enceinte
@@ -725,6 +743,13 @@ pub fn compute_cluster(
                 support_force_global: loads.support_force,
                 support_point_global: pickup_g,
                 support_angle_deg: angle_of(loads.support_force),
+                pin_pair_moment_nm: pin_pair_moment_nm(
+                    loads.orientation_point,
+                    loads.orientation_force,
+                    loads.pivot_point,
+                    loads.pivot_force,
+                ),
+                pin_span_mm: (loads.orientation_point - loads.pivot_point).norm(),
             }
         }
         Compartment::Stacked => {
@@ -787,6 +812,8 @@ pub fn compute_cluster(
                 support_force_global: support,
                 support_point_global: support_point,
                 support_angle_deg: angle_of(support),
+                pin_pair_moment_nm: pin_pair_moment_nm(rear_pt, rear_f, front_pt, front_f),
+                pin_span_mm: (rear_pt - front_pt).norm(),
             }
         }
     };

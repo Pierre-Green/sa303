@@ -385,6 +385,8 @@ const speakerPopupData = computed(() => {
       bumperBarExceeded: bv.bumperBarExceeded,
       supportForceN: bv.supportForceN,
       supportAngleDeg: bv.supportAngleDeg,
+      pinPairMomentNm: bv.pinPairMomentNm,
+      pinSpanMm: bv.pinSpanMm,
       orientationForceN: bv.orientationForceN,
       orientationAngleDeg: bv.orientationAngleDeg,
       pivotForceN: bv.pivotForceN,
@@ -602,19 +604,46 @@ const bumperSupportArrow = computed(() => {
 // Les deux efforts que le bumper transmet à l'enceinte de référence, à leur
 // point d'application réel. Même schéma qu'une jonction : un bras à deux forces
 // au trou de splay 0, un pivot à la charnière haute.
-const bumperJointArrows = computed(() => {
+/// Les deux pions du bumper — avant et arrière — avec leurs efforts.
+///
+/// Leurs points d'application ne sont **pas** sur le rectangle du bumper : le
+/// bumper se goupille dans la charnière avant et le trou de splay 0 de
+/// l'enceinte de référence, tous deux à l'intérieur du caisson. Le rectangle
+/// dessiné n'est qu'un schéma de son encombrement, pas son emprise réelle.
+///
+/// D'où le trait de rattachement : sans lui les deux flèches se confondent avec
+/// celles des jonctions, et le bumper a l'air de ne rien porter.
+const bumperPins = computed(() => {
   const bv = props.result.bumperView;
   if (!bv.orientationPointGlobal || !bv.orientationForceGlobal) return null;
   if (!bv.pivotPointGlobal || !bv.pivotForceGlobal) return null;
+  // Milieu de la face du bumper qui regarde l'enceinte : le trait part de là.
+  const face = {
+    x: (bv.outlineGlobal[2].x + bv.outlineGlobal[3].x) / 2,
+    y: (bv.outlineGlobal[2].y + bv.outlineGlobal[3].y) / 2,
+  };
+  const tether = (p: Vec2) => {
+    const a = toLocal(face);
+    const b = toLocal(p);
+    return {
+      points: [a.x, a.y, b.x, b.y],
+      stroke: colors.value.lift,
+      strokeWidth: px(1),
+      dash: [px(3), px(3)],
+      opacity: 0.6,
+    };
+  };
   return {
-    orientation: arrowConfig(
+    rear: arrowConfig(
       bv.orientationPointGlobal,
       bv.orientationForceGlobal,
       colors.value.orientation,
     ),
-    pivot: arrowConfig(bv.pivotPointGlobal, bv.pivotForceGlobal, colors.value.pivot),
-    orientationHole: holeMarkerConfig(bv.orientationPointGlobal, colors.value.orientation),
-    pivotHole: holeMarkerConfig(bv.pivotPointGlobal, colors.value.pivot),
+    front: arrowConfig(bv.pivotPointGlobal, bv.pivotForceGlobal, colors.value.pivot),
+    rearHole: holeMarkerConfig(bv.orientationPointGlobal, colors.value.orientation),
+    frontHole: holeMarkerConfig(bv.pivotPointGlobal, colors.value.pivot),
+    rearTether: tether(bv.orientationPointGlobal),
+    frontTether: tether(bv.pivotPointGlobal),
   };
 });
 
@@ -637,6 +666,30 @@ function arrowConfig(from: Vec2, force: Vec2, color: string) {
 
 // Trait fin entre les deux goupilles de la paire : il matérialise l'entraxe,
 // bras du couple qui reprend le moment de barre.
+/// La paire de la jonction `j` est portée par l'enceinte `j + 1` : c'est elle
+/// qu'il faut survoler pour en voir le détail.
+function pairDetailed(j: ClusterResult["joints"][number]): boolean {
+  const owner = j.jointIndex + 1;
+  return anchor.value?.idx === owner || pinnedIdx.value === owner;
+}
+
+function pairMidpoint(j: ClusterResult["joints"][number]): Vec2 {
+  return {
+    x: (j.anchorHoleGlobal.x + j.latchHoleGlobal.x) / 2,
+    y: (j.anchorHoleGlobal.y + j.latchHoleGlobal.y) / 2,
+  };
+}
+
+/// Résultante de la paire, au milieu des deux goupilles. La somme des deux
+/// efforts : le couple s'y annule, il ne reste que ce que la barre déverse.
+function pairResultantConfig(j: ClusterResult["joints"][number]) {
+  const sum = {
+    x: j.fAnchorGlobal.x + j.fLatchGlobal.x,
+    y: j.fAnchorGlobal.y + j.fLatchGlobal.y,
+  };
+  return arrowConfig(pairMidpoint(j), sum, colors.value.orientation);
+}
+
 function pairSpanConfig(j: ClusterResult["joints"][number]) {
   const a = toLocal(j.anchorHoleGlobal);
   const b = toLocal(j.latchHoleGlobal);
@@ -782,14 +835,16 @@ function handleWheel(e: { evt: WheelEvent }) {
               <v-text :config="bumperSupportArrow!.label" />
             </template>
 
-            <!-- Efforts que le bumper transmet à l'enceinte n°1, à leur point
-                 d'application : la jonction bumper est la seule dont les
-                 charges n'étaient jusqu'ici lisibles qu'au survol. -->
-            <template v-if="bumperJointArrows">
-              <v-arrow :config="bumperJointArrows!.orientation" />
-              <v-arrow :config="bumperJointArrows!.pivot" />
-              <v-circle :config="bumperJointArrows!.orientationHole" />
-              <v-circle :config="bumperJointArrows!.pivotHole" />
+            <!-- Les deux pions du bumper, avant et arrière, à leur point
+                 d'application réel — dans le caisson, pas sur le rectangle du
+                 bumper. Le trait pointillé dit à quelle pièce ils appartiennent. -->
+            <template v-if="bumperPins">
+              <v-line :config="bumperPins!.frontTether" />
+              <v-line :config="bumperPins!.rearTether" />
+              <v-arrow :config="bumperPins!.front" />
+              <v-arrow :config="bumperPins!.rear" />
+              <v-circle :config="bumperPins!.frontHole" />
+              <v-circle :config="bumperPins!.rearHole" />
             </template>
 
             <template v-if="compartment === 'flown' && tieArrowConfig">
@@ -799,20 +854,31 @@ function handleWheel(e: { evt: WheelEvent }) {
             </template>
 
             <template v-for="(j, idx) in result.joints" :key="'joint-' + idx">
-              <!-- Les DEUX perçages d'orientation. La barre est encastrée sur
-                   la paire : elle y déverse une force et un moment, repris en
-                   couple, donc les deux goupilles sont chargées différemment et
-                   n'en montrer qu'une donne une image fausse de la jonction. -->
-              <v-arrow :config="arrowConfig(j.anchorHoleGlobal, j.fAnchorGlobal, colors.orientation)" />
-              <v-arrow :config="arrowConfig(j.latchHoleGlobal, j.fLatchGlobal, colors.orientation)" />
+              <!-- La paire ancrage/verrou : une seule flèche résultante par
+                   défaut, les deux détaillées quand l'enceinte qui la porte est
+                   survolée ou épinglée.
+
+                   Trois flèches à l'arrière d'un même caisson — ancrage, verrou
+                   et trou de splay — se chevauchent dès qu'une grappe dépasse
+                   quelques enceintes. La résultante dit ce que la barre déverse
+                   dans le caisson ; le détail du couple ne se lit de toute façon
+                   qu'en regardant une jonction en particulier. -->
+              <template v-if="pairDetailed(j)">
+                <v-arrow :config="arrowConfig(j.anchorHoleGlobal, j.fAnchorGlobal, colors.orientation)" />
+                <v-arrow :config="arrowConfig(j.latchHoleGlobal, j.fLatchGlobal, colors.orientation)" />
+                <!-- L'entraxe, bras du couple : c'est lui qui explique l'écart
+                     entre les deux flèches. -->
+                <v-line :config="pairSpanConfig(j)" />
+                <v-circle :config="holeMarkerConfig(j.anchorHoleGlobal, colors.orientation)" />
+                <v-circle :config="holeMarkerConfig(j.latchHoleGlobal, colors.orientation)" />
+              </template>
+              <template v-else>
+                <v-arrow :config="pairResultantConfig(j)" />
+                <v-circle :config="holeMarkerConfig(pairMidpoint(j), colors.orientation)" />
+              </template>
+
               <v-arrow :config="arrowConfig(j.loadedOrientationHoleGlobal, j.fOrientationGlobal, colors.orientation)" />
               <v-arrow :config="arrowConfig(j.loadedPivotHoleGlobal, j.fPivotGlobal, colors.pivot)" />
-              <!-- Segment ancrage-verrou : c'est l'entraxe qui fixe le bras du
-                   couple, donc la grandeur qui explique l'écart entre les deux
-                   flèches ci-dessus. -->
-              <v-line :config="pairSpanConfig(j)" />
-              <v-circle :config="holeMarkerConfig(j.anchorHoleGlobal, colors.orientation)" />
-              <v-circle :config="holeMarkerConfig(j.latchHoleGlobal, colors.orientation)" />
               <v-circle :config="holeMarkerConfig(j.loadedOrientationHoleGlobal, colors.orientation)" />
               <v-circle :config="holeMarkerConfig(j.loadedPivotHoleGlobal, colors.pivot)" />
               <v-circle v-if="j.hingeReversed" :config="reversedRingConfig(j.loadedPivotHoleGlobal)" />
@@ -856,30 +922,25 @@ function handleWheel(e: { evt: WheelEvent }) {
           <dt class="text-muted-foreground">Bas de caisse</dt>
           <dd>{{ speakerPopupData.bottomElevationMm.toFixed(0) }} mm</dd>
         </div>
+        <!-- Uniquement ce que CETTE enceinte subit. Les deux jonctions qui
+             l'encadrent y contribuent : celle du dessous lui prend son trou de
+             splay et sa bielle, celle du dessus sa paire ancrage/verrou. Les
+             quatre trous sont donc bien les siens — c'est le nom du trou qui
+             compte, pas celui de la jonction. -->
+        <template v-if="speakerPopupData.joint || speakerPopupData.pairJoint">
+          <div class="mt-1 text-xs text-muted-foreground">Efforts sur ses perçages</div>
+        </template>
+
         <template v-if="speakerPopupData.joint">
-          <div class="mt-1 flex justify-between text-zone-orientation">
-            <dt>F couronne</dt>
+          <div class="flex justify-between text-zone-orientation">
+            <dt>Trou de splay</dt>
             <dd>
               {{ speakerPopupData.joint.fOrientationN.toFixed(0) }} N @
               {{ speakerPopupData.joint.fOrientationAngleDeg.toFixed(1) }}°
             </dd>
           </div>
-          <div class="flex justify-between text-zone-orientation">
-            <dt>F ancrage</dt>
-            <dd>
-              {{ speakerPopupData.joint.fAnchorN.toFixed(0) }} N @
-              {{ speakerPopupData.joint.fAnchorAngleDeg.toFixed(1) }}°
-            </dd>
-          </div>
-          <div class="flex justify-between text-zone-orientation">
-            <dt>F verrou</dt>
-            <dd>
-              {{ speakerPopupData.joint.fLatchN.toFixed(0) }} N @
-              {{ speakerPopupData.joint.fLatchAngleDeg.toFixed(1) }}°
-            </dd>
-          </div>
           <div class="flex justify-between text-zone-pivot">
-            <dt>F pivot</dt>
+            <dt>Bielle</dt>
             <dd>
               {{ speakerPopupData.joint.fPivotN.toFixed(0) }} N @
               {{ speakerPopupData.joint.fPivotAngleDeg.toFixed(1) }}°
@@ -887,29 +948,25 @@ function handleWheel(e: { evt: WheelEvent }) {
           </div>
         </template>
 
-        <!-- Ce que cette enceinte porte en tant que caisson du BAS de la
-             jonction au-dessus d'elle : la paire ancrage/verrou. C'est la seule
-             charge de la dernière enceinte d'une grappe suspendue. -->
         <template v-if="speakerPopupData.pairJoint">
-          <div class="mt-1 text-xs text-muted-foreground">
-            Paire (jonction J{{ speakerPopupData.pairJoint.jointIndex + 1 }}, au-dessus)
-          </div>
           <div class="flex justify-between text-zone-orientation">
-            <dt>F ancrage</dt>
+            <dt>Ancrage</dt>
             <dd>
               {{ speakerPopupData.pairJoint.fAnchorN.toFixed(0) }} N @
               {{ speakerPopupData.pairJoint.fAnchorAngleDeg.toFixed(1) }}°
             </dd>
           </div>
           <div class="flex justify-between text-zone-orientation">
-            <dt>F verrou</dt>
+            <dt>Verrou</dt>
             <dd>
               {{ speakerPopupData.pairJoint.fLatchN.toFixed(0) }} N @
               {{ speakerPopupData.pairJoint.fLatchAngleDeg.toFixed(1) }}°
             </dd>
           </div>
-          <div class="flex justify-between text-muted-foreground">
-            <dt>M barre</dt>
+          <!-- La barre est encastrée sur la paire de CETTE enceinte : c'est ici
+               que son moment atterrit, pas sur celle d'au-dessus. -->
+          <div class="flex justify-between">
+            <dt class="text-muted-foreground">M barre (ancrage)</dt>
             <dd>{{ speakerPopupData.pairJoint.barMomentMaxNm.toFixed(1) }} N·m</dd>
           </div>
         </template>
@@ -959,6 +1016,13 @@ function handleWheel(e: { evt: WheelEvent }) {
         <div v-if="speakerPopupData.orientationForceN !== null" class="flex justify-between text-zone-orientation">
           <dt>Pion arrière</dt>
           <dd>{{ speakerPopupData.orientationForceN.toFixed(0) }} N @ {{ speakerPopupData.orientationAngleDeg!.toFixed(1) }}°</dd>
+        </div>
+        <div class="flex justify-between">
+          <dt class="text-muted-foreground">M entre pions</dt>
+          <dd>
+            {{ speakerPopupData.pinPairMomentNm.toFixed(1) }} N·m
+            <span class="text-xs">sur {{ speakerPopupData.pinSpanMm.toFixed(0) }} mm</span>
+          </dd>
         </div>
         <p v-if="speakerPopupData.pivotForceN !== null" class="text-xs text-muted-foreground">
           Charges de pion par flanc : elles traversent les flancs, elles sont doublées.

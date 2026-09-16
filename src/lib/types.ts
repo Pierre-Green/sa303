@@ -402,6 +402,12 @@ export interface BumperView {
   supportForceGlobal: Vec2;
   supportPointGlobal: Vec2;
   supportAngleDeg: number;
+  /** Moment que la structure du bumper transfère entre ses deux pions, réduit à
+   * leur milieu (N·m, par flanc). L'équivalent, pour le bumper, du moment de
+   * barre d'une jonction. */
+  pinPairMomentNm: number;
+  /** Entraxe des deux pions, le bras de ce couple. */
+  pinSpanMm: number;
 }
 
 export interface JointOffset {
