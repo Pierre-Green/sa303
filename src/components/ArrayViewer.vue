@@ -50,8 +50,30 @@ const dashTopY = ref<number | null>(null);
  * définis à une taille écran constante en la divisant : sinon un grand stack
  * qui doit beaucoup rétrécir pour tenir dans le cadre rendrait tout illisible. */
 const fitScale = ref(1);
+/// Zoom molette du stage, tenu à part de `fitScale` : le premier est choisi par
+/// l'utilisateur, le second par le cadrage automatique.
+const stageScale = ref(1);
+/// Convertit une taille voulue **en pixels écran** vers les unités du modèle.
+///
+/// Divise par les deux échelles qui séparent le modèle de l'écran : le cadrage
+/// automatique (`fitScale`) et le zoom molette (`stageScale`). Sans le second,
+/// flèches et étiquettes grossissaient avec le zoom — en entrant dans un détail,
+/// les libellés finissaient par couvrir ce qu'ils annotaient. Avec, elles gardent
+/// une taille constante à l'écran, donc elles rapetissent par rapport au modèle
+/// à mesure qu'on zoome, ce qui est le comportement attendu d'une annotation.
 function px(sizeAtScale1: number): number {
-  return sizeAtScale1 / Math.max(fitScale.value, 1e-6);
+  const scale = Math.max(fitScale.value, 1e-6) * Math.max(stageScale.value, 1e-6);
+  return sizeAtScale1 / scale;
+}
+
+/// Longueur d'annotation exprimée en unités modèle **à l'échelle de cadrage**,
+/// ramenée à une taille d'écran constante sous le zoom.
+///
+/// Les flèches d'effort sont des annotations, pas des objets : leur longueur
+/// code une intensité, pas une dimension. Les laisser suivre le modèle ferait
+/// qu'en zoomant sur une jonction, sa flèche traverserait tout le cadre.
+function annotation(lengthAtFit: number): number {
+  return lengthAtFit / Math.max(stageScale.value, 1e-6);
 }
 
 let resizeObserver: ResizeObserver | null = null;
@@ -161,12 +183,18 @@ const stageConfig = computed(() => ({
   draggable: true,
 }));
 
-const groundLineConfig = computed(() => ({
-  points: [0, groundLineY.value ?? 0, size.value.width, groundLineY.value ?? 0],
-  stroke: colors.value.border,
-  strokeWidth: 2,
-  dash: [2, 6],
-}));
+// Tracée hors du groupe cadré, donc en unités de stage : seul le zoom molette
+// l'affecte, pas le cadrage. D'où la division par `stageScale` seule et non par
+// `px`, qui compenserait aussi un cadrage qui ne s'applique pas ici.
+const groundLineConfig = computed(() => {
+  const k = Math.max(stageScale.value, 1e-6);
+  return {
+    points: [0, groundLineY.value ?? 0, size.value.width, groundLineY.value ?? 0],
+    stroke: colors.value.border,
+    strokeWidth: 2 / k,
+    dash: [2 / k, 6 / k],
+  };
+});
 
 function speakerGroupConfig(speaker: ClusterResult["speakers"][number]) {
   const p = toLocal(speaker.o);
@@ -425,8 +453,8 @@ const tiePointLocal = computed(() =>
 const tieEndLocal = computed(() => {
   if (!props.result.tiePointGlobal || !props.result.tieDirectionGlobal) return null;
   const end = {
-    x: props.result.tiePointGlobal.x + props.result.tieDirectionGlobal.x * referenceDepth.value,
-    y: props.result.tiePointGlobal.y + props.result.tieDirectionGlobal.y * referenceDepth.value,
+    x: props.result.tiePointGlobal.x + props.result.tieDirectionGlobal.x * annotation(referenceDepth.value),
+    y: props.result.tiePointGlobal.y + props.result.tieDirectionGlobal.y * annotation(referenceDepth.value),
   };
   return toLocal(end);
 });
@@ -508,10 +536,15 @@ const tieLabelConfig = computed(() => {
 
 const tiePointMarkerConfig = computed(() => {
   if (!tiePointLocal.value) return null;
-  return { x: tiePointLocal.value.x, y: tiePointLocal.value.y, radius: 4, fill: colors.value.lift };
+  return {
+    x: tiePointLocal.value.x,
+    y: tiePointLocal.value.y,
+    radius: px(4),
+    fill: colors.value.lift,
+  };
 });
 
-const FORCE_REF_LENGTH_MM = computed(() => referenceDepth.value * 0.85);
+const FORCE_REF_LENGTH_MM = computed(() => annotation(referenceDepth.value * 0.85));
 // Échelle commune à toutes les flèches. Les efforts de paire y entrent : ils
 // dépassent souvent celui de couronne, et les laisser hors de l'échelle les
 // ferait sortir du cadre — ou, pire, ferait paraître la couronne dominante.
@@ -532,7 +565,7 @@ const maxForceN = computed(() =>
 // jonction. La mettre à la même échelle écraserait toutes les autres flèches à
 // quelques pixels. Elle a donc sa propre longueur, fixe, et son intensité se lit
 // sur son étiquette — pas sur sa taille.
-const SUPPORT_ARROW_LENGTH_MM = computed(() => referenceDepth.value * 0.9);
+const SUPPORT_ARROW_LENGTH_MM = computed(() => annotation(referenceDepth.value * 0.9));
 
 const bumperSupportArrow = computed(() => {
   const bv = props.result.bumperView;
@@ -679,6 +712,9 @@ function handleWheel(e: { evt: WheelEvent }) {
     x: pointer.x - mousePointTo.x * newScale,
     y: pointer.y - mousePointTo.y * newScale,
   });
+  // Réactif, pas seulement posé sur le nœud Konva : c'est lui qui pilote `px`,
+  // donc les tailles d'annotation doivent se recalculer au même instant.
+  stageScale.value = newScale;
   stage.batchDraw();
   updateCursorPos();
 }
