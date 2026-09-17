@@ -987,6 +987,7 @@ mod tests {
                     radius: 680.0,
                     delta: 20.0,
                     splay0_angle: 5.0,
+                    inner_splays: vec![1.0, 3.0, 5.0],
                 },
                 latch: PolarHole {
                     radius: 710.845,

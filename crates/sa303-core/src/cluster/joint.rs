@@ -271,7 +271,7 @@ pub fn compute_joint(input: &JointInput) -> Result<JointResult, JointInconsisten
     let s = input.splays_deg[i];
 
     // Quincaillerie de la jonction : elle appartient à l'enceinte du haut.
-    let geo = input.chain[i].geo;
+    let geo = &input.chain[i].geo;
 
     // Les quatre points de la jonction, repère global. `pa`/`pb` sont les deux
     // goupilles de la bielle avant, `bo` la goupille de couronne (articulation
@@ -404,6 +404,9 @@ pub fn compute_joint(input: &JointInput) -> Result<JointResult, JointInconsisten
         .map(|o| ((bo - o).cross(f_ori) + (pb - o).cross(f_piv) + (cm - o).cross(rext)).abs())
         .fold(0.0_f64, f64::max);
 
+    // Rangée de couronne : déclarée par l'enceinte, pas déduite du splay.
+    let crown_row = loaded.geo.crown_row_at(s);
+
     let (loaded_orientation_hole, constrained_crown_splay) = match input.compartment {
         Compartment::Flown => (loaded.geo.crown(s), None),
         Compartment::Stacked => {
@@ -429,7 +432,7 @@ pub fn compute_joint(input: &JointInput) -> Result<JointResult, JointInconsisten
     let constrained_is_frame =
         matches!(input.compartment, Compartment::Stacked) && ti >= input.splays_deg.len();
     let constrained_crown_hole = constrained_crown_splay.map(|cs| loaded.geo.crown(cs));
-    let constrained_crown_row = constrained_crown_splay.map(CrownRow::of);
+    let constrained_crown_row = constrained_crown_splay.map(|cs| loaded.geo.crown_row_at(cs));
     let constrained_crown_radius = constrained_crown_splay.map(|cs| loaded.geo.crown_radius_at(cs));
 
     let tg = input.speakers[ti];
@@ -467,7 +470,7 @@ pub fn compute_joint(input: &JointInput) -> Result<JointResult, JointInconsisten
 
     // Effort vu par la barre, exprimé dans son repère.
     let f_bar = Vec2::new(f_on_bar.dot(e_axis), f_on_bar.dot(e_front));
-    let p_crown = bar.crown_hole(s).as_vec();
+    let p_crown = bar.crown_hole(crown_row).as_vec();
     let p_anchor = bar.holes.anchor.as_vec();
 
     let sf = input.share_per_flank;
@@ -541,7 +544,7 @@ pub fn compute_joint(input: &JointInput) -> Result<JointResult, JointInconsisten
         loaded_flank: ti,
         inclination_deg: rt_phi.to_degrees(),
         splay_deg: s,
-        row: CrownRow::of(s),
+        row: crown_row,
         crown_radius: geo.crown_radius_at(s),
         lever_mm: geo.lever(s),
         bielle_lever_mm: bielle_lever.abs(),

@@ -190,9 +190,14 @@ const SA303_SPLAY_GRID_V3: [f64; 17] = [
     0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 8.0, 9.0, 10.0, 11.0, 12.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0,
 ];
 
-/// Grille de trous après le passage à la liaison par bielle : huit crans, les
-/// pairs sur la couronne extérieure, les impairs sur l'intérieure. Figée.
-const SA303_SPLAY_GRID_V4: [f64; 8] = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 20.0];
+/// Grille de trous après le passage à la liaison par bielle : huit crans. Quelle
+/// couronne porte lequel n'est plus une affaire de parité — c'est la fiche de
+/// l'enceinte qui le déclare (`crown.innerSplays`).
+///
+/// Le cran à 10,5° était percé à 10° jusqu'au déplacement du trou : une fiche
+/// migrée depuis la v3 doit atterrir sur le perçage réel, pas sur un trou qui
+/// n'existe plus.
+const SA303_SPLAY_GRID_V4: [f64; 8] = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 10.5, 20.0];
 
 /// Perçage de référence SA303 pour les champs apparus en v4, quand une fiche
 /// enregistrée avant ne les porte pas. Dérivés de la table 3.9 EN 1993-1-8
@@ -960,18 +965,43 @@ mod tests {
         );
     }
 
+    /// Le perçage de couronne est déclaré par l'enceinte, plus déduit d'une
+    /// parité. Ce qu'il faut vérifier n'est donc plus « chaque trou est-il du
+    /// bon côté de la parité », mais « la fiche livrée déclare-t-elle bien le
+    /// perçage relevé » : c'est elle qui fait foi au calcul.
     #[test]
-    fn every_hole_sits_on_the_arc_its_parity_implies() {
-        // La géométrie choisit le rayon de couronne sur la parité du splay. Si
-        // un trou de l'arc court devenait pair, elle irait chercher le mauvais
-        // rayon sans rien signaler.
-        use sa303_core::speaker::is_odd_splay;
-        assert!(crate::seed::SA303_SHORT_ARC_SPLAYS
-            .iter()
-            .all(|&s| is_odd_splay(s)));
-        assert!(crate::seed::SA303_LONG_ARC_SPLAYS
-            .iter()
-            .all(|&s| !is_odd_splay(s)));
+    fn every_shipped_speaker_declares_the_arc_each_hole_is_drilled_on() {
+        use sa303_core::speaker::CrownRow;
+
+        let speakers: Vec<_> = crate::seed::builtin_speakers()
+            .into_iter()
+            .map(|b| b.model)
+            .collect();
+        assert!(!speakers.is_empty(), "aucune enceinte livrée");
+
+        for model in &speakers {
+            let id = &model.id;
+            let crown = &model.mechanical.crown;
+
+            for &s in &crate::seed::SA303_SHORT_ARC_SPLAYS {
+                assert_eq!(crown.row_at(s), CrownRow::Int, "{id} : {s}° hors arc court");
+            }
+            for &s in &crate::seed::SA303_LONG_ARC_SPLAYS {
+                assert_eq!(crown.row_at(s), CrownRow::Ext, "{id} : {s}° hors arc long");
+            }
+            // Et la déclaration ne contient rien d'autre que l'arc court : un
+            // splay en trop y serait silencieusement mis sur le petit rayon.
+            assert_eq!(
+                crown.inner_splays.len(),
+                crate::seed::SA303_SHORT_ARC_SPLAYS.len(),
+                "{id} : arc court déclaré différent du perçage relevé"
+            );
+            // Les deux arcs réunis sont exactement la grille de splay percée :
+            // un trou absent des deux n'aurait aucune rangée déclarée.
+            let mut declared = model.mechanical.splay_grid.clone();
+            declared.sort_by(f64::total_cmp);
+            assert_eq!(declared, crate::seed::sa303_splay_grid(), "{id} : grille");
+        }
     }
 
     /// Les grappes d'exemple sont des fichiers déposés à la main : rien ne les

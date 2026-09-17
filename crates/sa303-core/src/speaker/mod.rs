@@ -9,8 +9,8 @@ mod model;
 mod report;
 
 pub use geometry::{
-    check_rear_bar, is_odd_splay, speaker_outline, BarInconsistency, BarWarning, CrownRow,
-    JointOffset, SpeakerGeometry, BAR_FIT_TOLERANCE_MM,
+    check_rear_bar, speaker_outline, BarInconsistency, BarWarning, CrownRow, JointOffset,
+    SpeakerGeometry, BAR_FIT_TOLERANCE_MM,
 };
 pub use model::{
     BarHole, BarHoles, BelowCompatibility, Crown, GuideMeasurement, Hinge, PolarHole, RearBar,

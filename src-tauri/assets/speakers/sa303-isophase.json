@@ -19,7 +19,12 @@
   "crown": {
     "radius": 680.0,
     "delta": 20.0,
-    "splay0Angle": 5.0
+    "splay0Angle": 5.0,
+    "innerSplays": [
+      1.0,
+      3.0,
+      5.0
+    ]
   },
   "latch": {
     "radius": 710.845,

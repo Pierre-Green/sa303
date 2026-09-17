@@ -34,6 +34,8 @@ fn default_speaker() -> SpeakerModel {
                 radius: 680.0,
                 delta: 20.0,
                 splay0_angle: 5.0,
+                // Perçage relevé : rangée intérieure sur 1, 3 et 5°.
+                inner_splays: vec![1.0, 3.0, 5.0],
             },
             latch: PolarHole {
                 radius: 710.845,
@@ -1890,7 +1892,7 @@ fn dump_joint_load_table() {
         for j in &r.joints {
             let b = check_bar(
                 &j.rear_bar,
-                j.splay_deg,
+                j.row,
                 &j.bar_loads(),
                 settings.safety_factor,
                 Some(j.rear_face_x),
@@ -2594,4 +2596,48 @@ fn the_bumper_attachment_can_govern_the_cluster_safety_factor() {
         (c.safety_factor - settings.safety_factor / c.utilization_worst).abs() < 1e-9,
         "coefficient déconnecté du pire taux"
     );
+}
+
+/// La rangée de couronne est déclarée par l'enceinte, plus déduite du splay.
+/// Ce test tient les deux bouts : la déclaration fait foi, et un splay non
+/// entier n'est plus rangé par un arrondi que personne n'a choisi.
+#[test]
+fn the_crown_row_comes_from_the_declaration_not_from_the_splay() {
+    use sa303_core::speaker::{CrownRow, SpeakerGeometry};
+
+    let sm = default_speaker();
+    let crown = &sm.mechanical.crown;
+    let geo = SpeakerGeometry::compute(&sm);
+
+    // Le perçage relevé : arc court sur 1, 3, 5 ; arc long sur le reste.
+    for s in [1.0, 3.0, 5.0] {
+        assert_eq!(
+            crown.row_at(s),
+            CrownRow::Int,
+            "{s}° devrait être intérieur"
+        );
+        assert!((geo.crown_radius_at(s) - (crown.radius - crown.delta)).abs() < 1e-12);
+    }
+    for s in [0.0, 2.0, 4.0, 10.5, 20.0] {
+        assert_eq!(
+            crown.row_at(s),
+            CrownRow::Ext,
+            "{s}° devrait être extérieur"
+        );
+        assert!((geo.crown_radius_at(s) - crown.radius).abs() < 1e-12);
+    }
+
+    // 10,5° : l'ancienne règle l'arrondissait à 10 pour en lire la parité. Il
+    // est extérieur parce que la fiche le dit, pas parce qu'un arrondi tombe
+    // sur un nombre pair — et 11,5°, qui s'arrondirait à un impair, l'est aussi
+    // faute d'être déclaré intérieur.
+    assert_eq!(crown.row_at(10.5), CrownRow::Ext);
+    assert_eq!(crown.row_at(11.5), CrownRow::Ext);
+
+    // Déplacer la déclaration déplace le rayon : elle pilote vraiment.
+    let mut moved = sm.clone();
+    moved.mechanical.crown.inner_splays = vec![20.0];
+    let moved_geo = SpeakerGeometry::compute(&moved);
+    assert!((moved_geo.crown_radius_at(20.0) - (crown.radius - crown.delta)).abs() < 1e-12);
+    assert!((moved_geo.crown_radius_at(1.0) - crown.radius).abs() < 1e-12);
 }

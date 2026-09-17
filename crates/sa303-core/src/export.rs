@@ -54,7 +54,7 @@ impl JointChecks {
     fn of(joint: &JointResult, spec: &SandwichSpec) -> Self {
         let bar = check_bar(
             &joint.rear_bar,
-            joint.splay_deg,
+            joint.row,
             &joint.bar_loads(),
             spec.safety_factor,
             Some(joint.rear_face_x),

@@ -24,7 +24,7 @@
 //! paire a été correctement résolue en amont. Un écart y signalerait une erreur
 //! dans la répartition élastique, pas dans ce module.
 
-use crate::speaker::{BarHole, RearBar};
+use crate::speaker::{BarHole, CrownRow, RearBar};
 use crate::vector::Vec2;
 
 /// Pas de balayage. 1 mm sur 430 mm de barre : assez fin pour que le maximum ne
@@ -156,7 +156,7 @@ pub struct BarLoads {
 /// incomparables sur la même ligne de tableau.
 pub fn check_bar(
     bar: &RearBar,
-    splay_deg: f64,
+    crown_row: CrownRow,
     loads: &BarLoads,
     safety_factor: f64,
     rear_face_x: Option<f64>,
@@ -272,7 +272,7 @@ pub fn check_bar(
     let tear_out: Vec<BarTearOutCheck> = [
         ("verrou", bar.holes.latch, loads.latch),
         ("ancrage", bar.holes.anchor, -(loads.latch + loads.crown)),
-        ("couronne", bar.crown_hole(splay_deg), loads.crown),
+        ("couronne", bar.crown_hole(crown_row), loads.crown),
     ]
     .into_iter()
     .map(|(name, hole, force)| {

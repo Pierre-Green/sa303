@@ -45,6 +45,13 @@ export interface Crown {
    * sur le caisson du bas, donc lui transmet un moment en plus d'une force. */
   latchAngle: number;
   splay0Angle: number;
+  /** Splays percés sur la rangée **intérieure**, en retrait de `delta`. Tout
+   * splay absent de cette liste est sur la rangée extérieure.
+   *
+   * Déclaré, jamais déduit : la règle précédente lisait la parité du splay
+   * arrondi, ce qui rangeait un 10,5° par un arrondi que personne n'avait
+   * choisi. Le perçage est une donnée du plan de l'enceinte. */
+  innerSplays: number[];
 }
 
 /**

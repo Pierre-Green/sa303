@@ -40,7 +40,7 @@ pub struct BlockBCase {
 /// dénominateur commun sans avoir les réglages sous la main.
 fn severity(c: &LoadCase) -> f64 {
     let r = &c.result;
-    let bar = crate::checks::check_bar(&r.rear_bar, r.splay_deg, &r.bar_loads(), 1.0, None, None);
+    let bar = crate::checks::check_bar(&r.rear_bar, r.row, &r.bar_loads(), 1.0, None, None);
     let force_paths = r
         .mag_orientation()
         .max(r.mag_pivot())
@@ -141,7 +141,7 @@ pub fn select_block_a(cases: &[LoadCase]) -> Vec<BlockACase> {
                     let bar = &c.result.rear_bar;
                     let check = crate::checks::check_bar(
                         bar,
-                        c.result.splay_deg,
+                        c.result.row,
                         &c.result.bar_loads(),
                         1.0,
                         None,
@@ -251,7 +251,7 @@ mod tests {
             loaded_flank: 0,
             inclination_deg,
             splay_deg,
-            row: CrownRow::of(splay_deg),
+            row: CrownRow::Ext,
             crown_radius: 680.0,
             lever_mm: 660.0,
             bielle_lever_mm: 660.0,

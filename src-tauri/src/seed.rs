@@ -87,16 +87,15 @@ pub fn builtin_clusters() -> Vec<Builtin<Cluster>> {
 // confronte la grille livrée à ces deux arcs, donc une faute de frappe dans le
 // JSON ne peut pas passer.
 /// Trous de réglage d'orientation percés sur l'arc court, c'est-à-dire la
-/// couronne intérieure (rayon `radius − delta`). Ce sont les splays impairs :
-/// c'est la convention que `speaker::geometry::is_odd_splay` applique pour
-/// choisir le rayon, donc les deux doivent rester d'accord.
+/// couronne intérieure (rayon `radius − delta`). C'est cette liste que la
+/// fiche de l'enceinte déclare dans `crown.innerSplays` : le perçage est une
+/// donnée du plan, pas une parité qu'on redevine.
 #[cfg(test)]
 pub const SA303_SHORT_ARC_SPLAYS: [f64; 3] = [1.0, 3.0, 5.0];
 
-/// Trous percés sur l'arc long, la couronne extérieure (rayon `radius`) : les
-/// splays pairs.
+/// Trous percés sur l'arc long, la couronne extérieure (rayon `radius`).
 #[cfg(test)]
-pub const SA303_LONG_ARC_SPLAYS: [f64; 5] = [0.0, 2.0, 4.0, 10.0, 20.0];
+pub const SA303_LONG_ARC_SPLAYS: [f64; 5] = [0.0, 2.0, 4.0, 10.5, 20.0];
 
 /// Les angles réellement disponibles sur l'accastillage, les deux arcs réunis
 /// et triés. Un angle absent de cette liste n'a pas de trou : la jonction est
@@ -204,7 +203,7 @@ fn dump_catalogue_load_table() {
                             let f = |j: &sa303_core::cluster::JointResult| {
                                 check_bar(
                                     &j.rear_bar,
-                                    j.splay_deg,
+                                    j.row,
                                     &j.bar_loads(),
                                     settings.safety_factor,
                                     None,
@@ -221,7 +220,7 @@ fn dump_catalogue_load_table() {
                     for j in &r.joints {
                         let b = check_bar(
                             &j.rear_bar,
-                            j.splay_deg,
+                            j.row,
                             &j.bar_loads(),
                             settings.safety_factor,
                             Some(j.rear_face_x),

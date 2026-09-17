@@ -31,6 +31,8 @@ fn sa303() -> SpeakerModel {
                 radius: 680.0,
                 delta: 20.0,
                 splay0_angle: 5.0,
+                // Perçage relevé : rangée intérieure sur 1, 3 et 5°.
+                inner_splays: vec![1.0, 3.0, 5.0],
             },
             latch: PolarHole {
                 radius: 710.845,
@@ -373,7 +375,7 @@ fn golden_bar_loads_on_the_reference_joint() {
     // l'équilibre de la barre, donc le contrôle que la paire est bien résolue.
     let check = sa303_core::checks::check_bar(
         &sm.mechanical.rear_bar,
-        j.splay_deg,
+        j.row,
         &j.bar_loads(),
         4.0,
         Some(j.rear_face_x),

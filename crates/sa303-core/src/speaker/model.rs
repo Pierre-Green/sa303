@@ -16,6 +16,7 @@
 //! enregistré continue de se lire sans modification (brief §8). `acoustics` et
 //! `compatible_below` sont `#[serde(default)]` pour la même raison.
 
+use super::geometry::CrownRow;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -40,6 +41,40 @@ pub struct Crown {
     pub radius: f64,
     pub delta: f64,
     pub splay0_angle: f64,
+    /// Splays percés sur la rangée **intérieure**, en retrait de `delta`.
+    /// Tout splay absent de cette liste est sur la rangée extérieure.
+    ///
+    /// Déclaré, jamais déduit. La règle précédente lisait la parité du splay
+    /// arrondi : elle tombait juste sur la SA303 par coïncidence, mais rien ne
+    /// garantissait qu'un perçage suive la parité, et un splay non entier —
+    /// 10,5° par exemple — y était rangé par un arrondi que personne n'avait
+    /// choisi. Le perçage est une donnée de l'enceinte, il se lit sur son plan.
+    #[serde(default = "default_inner_splays")]
+    pub inner_splays: Vec<f64>,
+}
+
+/// Rangée intérieure de la SA303 : 1, 3 et 5°. Repli pour les fichiers écrits
+/// avant que ce perçage ne soit déclaré (brief §8) — ce sont exactement les
+/// splays que l'ancienne règle de parité y rangeait.
+fn default_inner_splays() -> Vec<f64> {
+    vec![1.0, 3.0, 5.0]
+}
+
+impl Crown {
+    /// Rangée percée pour ce splay. Tolérance de comparaison : les splays sont
+    /// des trous percés, pas des réels libres — un 10,5 saisi ne doit jamais
+    /// rater un 10,5 déclaré pour cause d'arrondi de représentation.
+    pub fn row_at(&self, splay_deg: f64) -> CrownRow {
+        if self
+            .inner_splays
+            .iter()
+            .any(|s| (s - splay_deg).abs() < 1e-9)
+        {
+            CrownRow::Int
+        } else {
+            CrownRow::Ext
+        }
+    }
 }
 
 /// Nature du front rayonné par le guide d'onde. Ce n'est pas un détail de
@@ -334,12 +369,11 @@ impl RearBar {
         self.width_at(x) - self.rear_edge_offset
     }
 
-    /// Trou de couronne utilisé pour ce splay, selon la parité de la couronne.
-    pub fn crown_hole(&self, splay_deg: f64) -> BarHole {
-        if super::geometry::is_odd_splay(splay_deg) {
-            self.holes.up660
-        } else {
-            self.holes.up680
+    /// Trou de barre correspondant à la rangée de couronne utilisée.
+    pub fn crown_hole(&self, row: CrownRow) -> BarHole {
+        match row {
+            CrownRow::Int => self.holes.up660,
+            CrownRow::Ext => self.holes.up680,
         }
     }
 

@@ -104,7 +104,7 @@ pub fn geometry_report(
         }
         holes.push(CrownHoleReport {
             splay_deg: s,
-            row: CrownRow::of(s),
+            row: geo.crown_row_at(s),
             radius: geo.crown_radius_at(s),
             position: geo.crown(s),
             pv: geo.pv_at(s),

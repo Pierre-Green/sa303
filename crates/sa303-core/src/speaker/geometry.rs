@@ -3,31 +3,18 @@
 //! et silhouette (trapèze) de l'enceinte. Ne dépend jamais d'une jonction ou
 //! d'une grappe — uniquement des dimensions de l'enceinte elle-même.
 
-use super::model::SpeakerModel;
+use super::model::{Crown, SpeakerModel};
 use crate::vector::{polar, Vec2};
 use serde::Serialize;
 
-/// Couronne extérieure sur les splays pairs, intérieure (en retrait de `delta`) sur les impairs.
-pub fn is_odd_splay(splay_deg: f64) -> bool {
-    (splay_deg.abs().round() as i64).rem_euclid(2) == 1
-}
-
-/// Trou de couronne utilisé : extérieur (splay pair) ou intérieur (splay impair).
+/// Rangée de couronne percée : extérieure, ou intérieure en retrait de
+/// `Crown::delta`. Laquelle sert à quel splay est **déclaré** par l'enceinte
+/// (`Crown::inner_splays`), jamais déduit du splay lui-même.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CrownRow {
     Ext,
     Int,
-}
-
-impl CrownRow {
-    pub fn of(splay_deg: f64) -> Self {
-        if is_odd_splay(splay_deg) {
-            CrownRow::Int
-        } else {
-            CrownRow::Ext
-        }
-    }
 }
 
 /// Géométrie dérivée d'un `SpeakerModel` (brief §3) : trous fixes et fonctions de couronne/ancrage.
@@ -46,7 +33,10 @@ pub struct JointOffset {
     pub vertical_mm: f64,
 }
 
-#[derive(Clone, Copy, Debug)]
+/// N'est plus `Copy` : la couronne porte la liste déclarée de ses splays
+/// intérieurs, donc une allocation. Elle se clone là où elle était recopiée, ce
+/// qui ne change rien au sens.
+#[derive(Clone, Debug)]
 pub struct SpeakerGeometry {
     pub ha: f64,
     pub ht: Vec2,
@@ -65,6 +55,9 @@ pub struct SpeakerGeometry {
     crown_radius: f64,
     crown_delta: f64,
     splay0_angle: f64,
+    /// Perçage de couronne déclaré par l'enceinte : c'est lui qui dit quelle
+    /// rangée sert à quel splay.
+    crown: Crown,
 }
 
 impl SpeakerGeometry {
@@ -100,6 +93,7 @@ impl SpeakerGeometry {
             crown_radius: m.crown.radius,
             crown_delta: m.crown.delta,
             splay0_angle: m.crown.splay0_angle,
+            crown: m.crown.clone(),
         }
     }
 
@@ -124,11 +118,15 @@ impl SpeakerGeometry {
         splay_deg / 2.0
     }
 
+    /// Rangée percée pour ce splay, d'après la déclaration de l'enceinte.
+    pub fn crown_row_at(&self, splay_deg: f64) -> CrownRow {
+        self.crown.row_at(splay_deg)
+    }
+
     pub fn crown_radius_at(&self, splay_deg: f64) -> f64 {
-        if is_odd_splay(splay_deg) {
-            self.crown_radius - self.crown_delta
-        } else {
-            self.crown_radius
+        match self.crown_row_at(splay_deg) {
+            CrownRow::Int => self.crown_radius - self.crown_delta,
+            CrownRow::Ext => self.crown_radius,
         }
     }
 

@@ -83,7 +83,7 @@ fn load_case_report(
 ) -> LoadCaseReport {
     let bar_check = check_bar(
         &case.result.rear_bar,
-        case.result.splay_deg,
+        case.result.row,
         &case.result.bar_loads(),
         spec.safety_factor,
         Some(case.result.rear_face_x),

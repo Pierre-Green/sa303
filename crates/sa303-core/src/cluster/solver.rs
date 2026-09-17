@@ -487,7 +487,7 @@ fn compute_bumper_loads(
     // référence, exactement comme la barre d'une jonction. On lui applique donc
     // la même répartition : `f_ori` arrive à son extrémité haute (le pion
     // arrière), et les deux goupilles s'en partagent la résultante et le moment.
-    let geo = chain[0].geo;
+    let geo = &chain[0].geo;
     let pair_anchor_point = b0.o + geo.anchor_local.rotate(b0.phi);
     let pair_latch_point = b0.o + geo.latch_local.rotate(b0.phi);
     let (f_anchor_g, f_latch_g, m_g) =
