@@ -13,8 +13,8 @@ pub use geometry::{
     JointOffset, SpeakerGeometry, BAR_FIT_TOLERANCE_MM,
 };
 pub use model::{
-    BarHole, BarHoles, BelowCompatibility, Crown, Hinge, PolarHole, RearBar, SpeakerAcousticsModel,
-    SpeakerMechanicalModel, SpeakerModel, SplayRange, WaveguideFront,
+    BarHole, BarHoles, BelowCompatibility, Crown, GuideMeasurement, Hinge, PolarHole, RearBar,
+    SpeakerAcousticsModel, SpeakerMechanicalModel, SpeakerModel, SplayRange, WaveguideFront,
 };
 pub use report::{
     geometry_report, CrownHoleReport, GeometryInconsistency, SpeakerGeometryReport,

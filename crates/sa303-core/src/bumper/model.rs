@@ -18,6 +18,36 @@ pub struct BumperCompatibility {
     pub stacked: bool,
 }
 
+/// Position des deux pions qui goupillent le bumper à l'enceinte de référence.
+///
+/// Cotée **depuis les bords du bumper**, comme sur le plan : l'avant pour le
+/// pion avant, l'arrière pour le pion arrière. C'est du perçage déclaré, pas
+/// une construction — les déduire de la quincaillerie de l'enceinte donnerait
+/// deux points qui ne sont pas ceux-là, et qui bougeraient avec le modèle
+/// d'enceinte monté dessous.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BumperPins {
+    /// Recul du pion avant depuis la face avant du bumper, mm.
+    pub front_from_front_mm: f64,
+    /// Avancée du pion arrière depuis la face arrière du bumper, mm.
+    pub rear_from_rear_mm: f64,
+    /// Hauteur des deux pions au-dessus du dessous du bumper, mm. Les deux sont
+    /// sur la même ligne : c'est un perçage de flanc, traversant.
+    pub height_from_bottom_mm: f64,
+}
+
+/// Perçage de la SA303-BUMPER : les deux pions à mi-épaisseur, l'avant à
+/// 12,567 mm de la face avant et l'arrière à 32,604 mm de la face arrière.
+/// Sert de repli aux fichiers écrits avant que ce perçage ne soit déclaré.
+fn default_pins() -> BumperPins {
+    BumperPins {
+        front_from_front_mm: 12.567,
+        rear_from_rear_mm: 32.604,
+        height_from_bottom_mm: 50.0,
+    }
+}
+
 /// Bumper de capotage, posé sur l'enceinte du haut en vol ou sous l'enceinte
 /// du bas en stack. En vol, porte la barre de déport qui permet de décaler le
 /// point d'accroche hors de l'aplomb du bumper.
@@ -48,6 +78,11 @@ pub struct BumperModel {
     /// jamais faire planter la lecture (brief §8, leçon du champ précédent).
     #[serde(default = "default_max_direct_deport_mm")]
     pub max_direct_deport_mm: f64,
+    /// Perçage des deux pions, coté depuis les bords du bumper.
+    /// `#[serde(default)]` : un fichier déjà sur disque sans ce champ se lit
+    /// toujours, avec le perçage de la SA303-BUMPER (brief §8).
+    #[serde(default = "default_pins")]
+    pub pins: BumperPins,
     /// Alias : anciennement `compatibleBoxes` (brief §8).
     #[serde(alias = "compatibleBoxes")]
     pub compatible_speakers: Vec<BumperCompatibility>,

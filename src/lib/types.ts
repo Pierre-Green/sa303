@@ -53,6 +53,23 @@ export interface Crown {
  */
 export type WaveguideFront = "isophase" | "constantCurvature";
 
+/**
+ * Ce qu'on a réellement relevé du guide, par identification d'un modèle
+ * d'ouverture sur des polaires simulées ou mesurées.
+ *
+ * Front **plan** : `acousticMouthHeightMm` est le `D` équivalent qui pilote le
+ * critère 5. Front **courbé** : les deux premiers champs sont corrélés par
+ * l'ajustement, seul leur rapport `D/R` — le secteur — est déterminé, et le `D`
+ * identifié n'est alors PAS une hauteur de bouche.
+ */
+export interface GuideMeasurement {
+  acousticMouthHeightMm: number;
+  /** Rayon du front identifié, m. `null` = front strictement plan. */
+  wavefrontRadiusM?: number | null;
+  /** `(Hz, dB)` au bord du secteur, relatifs à l'axe. */
+  edgeLevelDb: [number, number][];
+}
+
 export interface SpeakerAcoustics {
   fs: number;
   directivityHorizontal: number;
@@ -67,6 +84,12 @@ export interface SpeakerAcoustics {
   /** Niveau du guide à la moitié de son secteur (dB, négatif). −6 dB donne un
    * raccord plat entre deux caisses voisines. */
   wgLevelAtHalfCoverageDb: number;
+  /** Secteur encore rayonné par un guide **isophase**, degrés. 0 = front
+   * parfaitement plan. C'est lui qui décale l'angle de raccord vers une caisse
+   * à guide courbé, par tangence des deux fronts. */
+  wgIsophaseSectorDeg?: number;
+  /** Relevé d'identification du guide, quand il existe. */
+  guideMeasurement?: GuideMeasurement | null;
 }
 
 /** Plage de splay recommandée pour une jonction, en degrés. Hors plage, la
@@ -152,6 +175,18 @@ export interface BumperCompatibility {
   stacked: boolean;
 }
 
+/** Perçage des deux pions du bumper, coté depuis ses bords comme sur le plan.
+ * C'est du perçage déclaré : ni déduit de la quincaillerie de l'enceinte, ni
+ * reconstruit à l'écran. */
+export interface BumperPins {
+  /** Recul du pion avant depuis la face avant, mm. */
+  frontFromFrontMm: number;
+  /** Avancée du pion arrière depuis la face arrière, mm. */
+  rearFromRearMm: number;
+  /** Hauteur des deux pions au-dessus du dessous du bumper, mm. */
+  heightFromBottomMm: number;
+}
+
 export interface BumperModel {
   id: string;
   name: string;
@@ -161,6 +196,7 @@ export interface BumperModel {
   shackleHeightAboveBumper: number;
   /** Décalage max avant qu'une SA303-BUMPER-BAR ne soit nécessaire, mm (déf. depth/2). */
   maxDirectDeportMm: number;
+  pins: BumperPins;
   compatibleSpeakers: BumperCompatibility[];
 }
 
@@ -392,8 +428,24 @@ export interface BumperView {
   pivotAngleDeg: number | null;
   /** Les deux mêmes en repère global, avec leur point d'application sur
    * l'enceinte de référence : le viewer les dessine tels quels. */
+  /** Les deux pions à leur perçage déclaré (`BumperModel.pins`). Point
+   * d'application des deux efforts ci-dessus : la statique se résout là où la
+   * barre est boulonnée, et ces positions ne sortent que de là. */
   orientationPointGlobal: Vec2 | null;
   pivotPointGlobal: Vec2 | null;
+  /** La paire ancrage/verrou par laquelle la barre du bumper est boulonnée sur
+   * l'enceinte de référence. Vol uniquement : en stack le bumper est goupillé
+   * sans barre, il n'y a pas de paire à encastrer. */
+  pairAnchorHoleGlobal: Vec2 | null;
+  pairLatchHoleGlobal: Vec2 | null;
+  fPairAnchorGlobal: Vec2 | null;
+  fPairLatchGlobal: Vec2 | null;
+  fPairAnchorN: number | null;
+  fPairAnchorAngleDeg: number | null;
+  fPairLatchN: number | null;
+  fPairLatchAngleDeg: number | null;
+  /** Moment de la barre du bumper au barycentre de la paire, N·m par flanc. */
+  pairMomentNm: number | null;
   orientationForceGlobal: Vec2 | null;
   pivotForceGlobal: Vec2 | null;
   /** Charge que le bumper reprend en entier : la manille en vol, la réaction du
@@ -504,7 +556,15 @@ export interface WstInputs {
   speedOfSound: number;
   boxHeightMm: number;
   gapMm: number;
+  /** Hauteur de bouche **physique** D, mm : l'ARF du verdict, le profil de
+   * retard, la géométrie. */
   radiatingHeightMm: number;
+  /** Hauteur de bouche **acoustique** équivalente, mm — celle que voit le
+   * rayonnement. Sert au critère 5 et à lui seul. `null` : on retombe sur la
+   * bouche physique. Sans objet pour un guide à front courbé. */
+  acousticMouthHeightMm?: number | null;
+  /** Secteur encore rayonné par un guide isophase, degrés. 0 = front plan. */
+  isophaseSectorDeg?: number;
   speakerCount: number;
   splaysDeg: number[];
   distancesM: number[];
@@ -515,10 +575,19 @@ export interface WstInputs {
 export interface WstDerived {
   stepMm: number;
   gapMm: number;
+  /** ARF du verdict : celui de la bouche physique. */
   arf: number;
   lineHeightM: number;
   /** Bouche réellement utilisée : celle de l'enceinte si elle en déclare une. */
   radiatingHeightMm: number;
+  /** Bouche acoustique retenue, mm. Égale à la physique quand rien ne la
+   * renseigne, ou pour un guide à front courbé où elle n'a pas de sens. */
+  acousticMouthHeightMm: number;
+  /** La bouche acoustique vient-elle d'un relevé, ou d'un repli sur la
+   * physique ? L'écran doit pouvoir dire d'où sort le chiffre. */
+  acousticMouthIsMeasured: boolean;
+  /** Secteur du guide isophase en jeu, degrés. */
+  isophaseSectorDeg: number;
   /** Guide réellement utilisé — l'enceinte l'emporte sur la saisie. */
   guide: WstGuideKind;
   /** Pas dérivé de la géométrie d'une enceinte (il varie alors avec l'angle). */
@@ -526,12 +595,22 @@ export interface WstDerived {
 }
 
 export interface WstCriterion1 {
-  arf: number;
+  /** ARF de la bouche physique. **C'est lui qui fait le verdict** : le plus bas
+   * des deux, donc le plus prudent. */
+  arfGeometric: number;
+  /** ARF de la bouche acoustique. Affiché à côté, jamais à la place. L'écart
+   * entre les deux est la contribution de la diffraction de bride. */
+  arfAcoustic: number;
   arfMin: number;
+  /** Verdict, établi sur `arfGeometric` seul. */
   satisfied: boolean;
   /** `null` à ARF ≥ 1 : ligne continue, pas de lobe de réseau. */
   sideLobeAttenuationDb: number | null;
+  /** Le même lobe lu sur l'ARF acoustique — la borne optimiste. */
+  sideLobeAttenuationAcousticDb: number | null;
   axialLossDb: number;
+  /** Les deux ARF diffèrent-ils ? Sinon la mention n'a pas d'objet. */
+  arfsDiffer: boolean;
 }
 
 export interface WstCriterion2Sample {
@@ -549,6 +628,12 @@ export interface WstCriterion2 {
 export interface WstCriterion3 {
   fMaxHz: number;
   maxDeviationMm: number;
+  /** Rayon du front relevé, m. `null` = front déclaré strictement plan. */
+  wavefrontRadiusM: number | null;
+  /** Écart au plan réel de ce front sur la bouche : `s = (D/2)² / (2R)`. */
+  wavefrontDeviationMm: number | null;
+  /** Fréquence jusqu'à laquelle cet écart tient dans λ/4. */
+  isophaseFrequencyLimitHz: number | null;
 }
 
 export interface WstNearFieldSample {
@@ -617,23 +702,61 @@ export interface WstCca {
   rows: WstCcaRow[];
 }
 
+/** Ce que le rayon réel du guide fait à un splay donné, face au rayon visé. */
+export type WstRadiusVerdict = "tooCurved" | "tooFlat" | "matched";
+
 export interface WstCurvedGuideRow {
   splayDeg: number;
   /** `θ_guide ≥ α` : les secteurs voisins se juxtaposent sans laisser de trou. */
   covered: boolean;
+  /** `θ_guide − α`, **signé**. Positif = recouvrement, un réglage acceptable.
+   * Négatif = trou angulaire, et ça c'est une faute. */
+  overlapDeg: number;
+  /** Premier creux dans la zone de recouvrement. `null` en trou angulaire :
+   * sans zone commune, rien n'interfère. */
+  overlapNotchHz: number | null;
   targetRadiusM: number | null;
+  /** `R_réel − R_visé`, m. */
+  radiusErrorM: number | null;
+  radiusVerdict: WstRadiusVerdict | null;
+  /** Fréquence au-dessus de laquelle la courbure doit être juste. Ce n'est PAS
+   * une limite de fonctionnement : en dessous, des cordes plates approximent
+   * l'arc à mieux que λ/4 et un guide isophase ferait pareil. */
   curvatureMattersAboveHz: number | null;
+}
+
+/** Le niveau au bord du secteur à une fréquence, et sa bosse au raccord. */
+export interface WstEdgeLevelSample {
+  frequencyHz: number;
+  levelDb: number;
+  /** Après médiane glissante : c'est lui qui entre dans le verdict. */
+  smoothedLevelDb: number;
+  spliceLevelDb: number;
+  /** Accident étroit du guide : signalé, mais pas laissé juger la bande. */
+  isNarrowArtifact: boolean;
 }
 
 export interface WstCurvedGuide {
   coverageDeg: number;
   maxSplayDeg: number;
+  /** Plage recommandée : `[θ_guide − 3° ; θ_guide]`, jamais au-dessus. */
+  recommendedSplayMinDeg: number;
+  recommendedSplayMaxDeg: number;
+  /** Médiane de bande du relevé quand il existe — pas son minimum. */
   levelAtHalfSplayDb: number;
-  /** Niveau au raccord : deux secteurs voisins s'y somment, soit +6 dB. */
+  /** Bosse au raccord : deux secteurs voisins s'y somment en phase, soit
+   * +6 dB. Cible 0 dB. */
   spliceLevelDb: number;
+  edgeLevels: WstEdgeLevelSample[];
+  hasNarrowArtifact: boolean;
   rows: WstCurvedGuideRow[];
+  isophaseSectorDeg: number;
+  /** Tangence des deux fronts : `(θ_iso + θ_courbe) / 2`. */
   transitionSplayDeg: number;
+  /** Rayon réel du front, m, quand il a été identifié. */
+  actualRadiusM: number | null;
   guideDelayProfile: WstGuideDelaySample[];
+  actualDelayProfile: WstGuideDelaySample[];
 }
 
 export interface WstReport {
@@ -693,12 +816,33 @@ export interface JointChecks {
   bar: BarCheck;
 }
 
+/** Les chemins de charge de l'accrochage du bumper : le pendant de
+ * `JointChecks` pour la liaison qui porte la grappe entière. */
+export interface BumperChecks {
+  utilizationFrontPin: number | null;
+  utilizationRearPin: number | null;
+  /** La paire où la barre du bumper est boulonnée. `null` en stack : le bumper
+   * y est goupillé sans barre. */
+  utilizationBarAnchor: number | null;
+  utilizationBarLatch: number | null;
+  utilizationWorst: number;
+  governingPath: string | null;
+}
+
 export interface ClusterExport {
   definition: Cluster;
   result: ClusterResult;
   /** Un par jonction, même ordre que `result.joints`. */
   jointChecks: JointChecks[];
+  /** L'accrochage du bumper : pions, et paire de sa barre en vol. */
+  bumperChecks: BumperChecks;
+  /** Le pire taux, jonctions **et** accrochage du bumper confondus. */
   utilizationWorst: number;
+  /** Coefficient de sécurité réel de la grappe : `sf / pire taux`. */
+  safetyFactor: number;
+  /** Le même à k_dyn = 1,1, pour comparer à Soundvision qui ne dynamise pas de
+   * la même façon. Les réglages ne sont pas modifiés pour autant. */
+  safetyFactorStatic: number;
 }
 
 export interface ImpossibleClusterExport {

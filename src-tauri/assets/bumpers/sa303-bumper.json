@@ -6,6 +6,11 @@
   "height": 100.0,
   "shackleHeightAboveBumper": 40.0,
   "maxDirectDeportMm": 351.0,
+  "pins": {
+    "frontFromFrontMm": 12.567,
+    "rearFromRearMm": 32.604,
+    "heightFromBottomMm": 50.0
+  },
   "compatibleSpeakers": [
     {
       "speakerModelId": "sa303-isophase",

@@ -10,6 +10,7 @@ mod aggregate;
 mod joint;
 mod kinematics;
 mod model;
+mod pair;
 mod solver;
 mod worst_cases_selector;
 

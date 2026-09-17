@@ -18,12 +18,13 @@ pub use formulas::{
     frequency_limit_half_wavelength, grating_lobe_angle_rad, guide_path_delay_m,
     isophase_frequency_limit, line_first_dip_angle_rad, max_frequency_hz, max_splay_rad,
     max_step_m, max_wavefront_deviation_m, min_distance_m, near_field_boundary_fresnel_m,
-    near_field_boundary_m, no_near_field_below_hz, side_lobe_attenuation_db, transition_splay_rad,
-    wavelength_m, SPEED_OF_SOUND_DEFAULT, SPEED_OF_SOUND_PAPER,
+    near_field_boundary_m, no_near_field_below_hz, overlap_notch_frequency_hz,
+    side_lobe_attenuation_db, transition_splay_rad, wavefront_flatness_deviation_m,
+    wavefront_sector_rad, wavelength_m, SPEED_OF_SOUND_DEFAULT, SPEED_OF_SOUND_PAPER,
 };
 pub use report::{
     acoustic_step_mm, front_gap_mm, wst_report, Cca, CcaRow, Criterion1, Criterion2,
     Criterion2Sample, Criterion3, Criterion5, Criterion5AngleLimit, Criterion5Row, CurvatureRow,
-    CurvedGuide, CurvedGuideRow, GuideDelaySample, GuideKind, NearField, NearFieldSample,
-    WstDerived, WstInputs, WstReport, ANALYSIS_FREQUENCIES_HZ,
+    CurvedGuide, CurvedGuideRow, EdgeLevelSample, GuideDelaySample, GuideKind, NearField,
+    NearFieldSample, RadiusVerdict, WstDerived, WstInputs, WstReport, ANALYSIS_FREQUENCIES_HZ,
 };

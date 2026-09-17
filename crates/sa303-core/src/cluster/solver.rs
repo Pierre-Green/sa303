@@ -10,7 +10,10 @@ use super::kinematics::{
     weighted_cg, ChainSpeaker, SpeakerInstance,
 };
 use super::model::{Cluster, Compartment};
-use crate::bumper::{bumper_outline_top, bumper_pickup_height, BumperBarModel, BumperModel};
+use super::pair::split_over_pair;
+use crate::bumper::{
+    bumper_outline_top, bumper_pickup_height, bumper_pin_points, BumperBarModel, BumperModel,
+};
 use crate::settings::Settings;
 use crate::speaker::{SpeakerModel, SplayRange};
 use crate::tie::{tie_default_angle_deg, tie_tension, tie_valid_angle_range_deg, TieForce};
@@ -132,8 +135,29 @@ pub struct BumperView {
     /// Les deux mêmes efforts en repère **global**, avec leur point
     /// d'application sur l'enceinte de référence : le viewer les dessine tels
     /// quels, il n'a pas à tourner un vecteur (brief §1).
+    /// Les deux pions du bumper, à leur perçage **déclaré**
+    /// (`BumperModel::pins`), repère global. Point d'application des deux
+    /// efforts ci-dessus : la statique se résout là où la barre est réellement
+    /// boulonnée, et c'est le seul endroit d'où ces positions sortent.
     pub orientation_point_global: Option<Vec2>,
     pub pivot_point_global: Option<Vec2>,
+    /// La paire ancrage/verrou par laquelle la barre du bumper est boulonnée sur
+    /// l'enceinte de référence. Vol uniquement : en stack le bumper est
+    /// simplement goupillé, il n'y a pas de barre à encastrer.
+    ///
+    /// Renseignée pour que l'enceinte de référence montre les mêmes perçages
+    /// chargés que n'importe quelle autre enceinte de la grappe — elle est tenue
+    /// par la même quincaillerie, ce n'est pas un cas particulier.
+    pub pair_anchor_hole_global: Option<Vec2>,
+    pub pair_latch_hole_global: Option<Vec2>,
+    pub f_pair_anchor_global: Option<Vec2>,
+    pub f_pair_latch_global: Option<Vec2>,
+    pub f_pair_anchor_n: Option<f64>,
+    pub f_pair_anchor_angle_deg: Option<f64>,
+    pub f_pair_latch_n: Option<f64>,
+    pub f_pair_latch_angle_deg: Option<f64>,
+    /// Moment de la barre du bumper au barycentre de la paire, N·m par flanc.
+    pub pair_moment_nm: Option<f64>,
     pub orientation_force_global: Option<Vec2>,
     pub pivot_force_global: Option<Vec2>,
 
@@ -175,6 +199,15 @@ struct BumperLoads {
     orientation_point: Vec2,
     pivot_force: Vec2,
     pivot_point: Vec2,
+    /// La barre du bumper est boulonnée sur l'enceinte de référence par la même
+    /// paire de goupilles qu'une jonction ordinaire : ancrage et verrou. Ce que
+    /// ces deux goupilles-là subissent, par flanc.
+    pair_anchor_point: Vec2,
+    pair_latch_point: Vec2,
+    pair_anchor_force: Vec2,
+    pair_latch_force: Vec2,
+    /// Moment de la barre réduit au barycentre de la paire, N·m par flanc.
+    pair_moment_nm: f64,
     /// Résultante extérieure reprise par la manille, déjà retournée : c'est ce
     /// que la manille **tire**, pas ce que la grappe pèse.
     support_force: Vec2,
@@ -350,18 +383,15 @@ pub struct ImpossibleConfiguration {
 fn compute_stacked_bumper_pins(
     chain: &[ChainSpeaker],
     speakers: &[SpeakerInstance],
-    reference_index: usize,
-    frame_hole_splay: f64,
+    pins_global: [Vec2; 2],
     g: f64,
     k_dyn: f64,
     share_per_flank: f64,
 ) -> (Vec2, Vec2, Vec2, Vec2) {
-    let geo = chain[reference_index].geo;
-    let bref = speakers[reference_index];
-    // Pion avant : la charnière haute. Pion arrière : le trou de cadre, celui
-    // qui impose l'assiette de calage.
-    let front = bref.o + geo.ht.rotate(bref.phi);
-    let rear = bref.o + geo.crown(frame_hole_splay).rotate(bref.phi);
+    // Perçage déclaré du bumper, avant puis arrière. Déjà en repère global : le
+    // bumper posé au sol reste parallèle à celui-ci, il ne prend pas l'assiette
+    // de l'enceinte.
+    let [front, rear] = pins_global;
 
     let mut w_total = 0.0;
     let mut sum = Vec2::ZERO;
@@ -394,25 +424,35 @@ fn compute_stacked_bumper_pins(
 
 /// Efforts transmis par le bumper à l'enceinte de référence (`speakers[0]`),
 /// exprimés dans le repère de cette enceinte — même schéma qu'une jonction
-/// réelle (brief §5) : un bras à deux forces entre le trou de splay 0
-/// (`anchor_at(0)`, côté enceinte) et le point d'accroche (côté bumper), et
-/// un pivot au HT de l'enceinte. Corps libre = toutes les enceintes, puisque
-/// tout pend de ce point.
+/// réelle (brief §5) : un bras à deux forces entre le pion arrière et le point
+/// d'accroche, et un pivot au pion avant. Corps libre = toutes les enceintes,
+/// puisque tout pend de ce point.
+///
+/// `pins_local` est le perçage **déclaré** du bumper (`BumperModel::pins`),
+/// avant puis arrière, dans le repère de l'enceinte de référence. C'est là que
+/// la barre est réellement boulonnée, donc là que la statique se résout : s'en
+/// remettre à la quincaillerie de l'enceinte (charnière haute, trou d'ancrage)
+/// donnait des bras de levier qui n'étaient pas ceux du montage, et qui
+/// bougeaient avec le modèle d'enceinte monté dessous.
 fn compute_bumper_loads(
     chain: &[ChainSpeaker],
     speakers: &[SpeakerInstance],
+    pins_local: [Vec2; 2],
     pickup_local: Vec2,
-    g: f64,
-    k_dyn: f64,
-    share_per_flank: f64,
+    settings: &Settings,
     tie: Option<TieForce>,
 ) -> BumperLoads {
-    // Le bumper est posé sur l'enceinte du haut : c'est sa quincaillerie à
-    // elle qui reprend l'effort.
-    let geo = chain[0].geo;
+    let (g, k_dyn, share_per_flank) = (
+        settings.gravity,
+        settings.dynamic_factor,
+        settings.share_per_flank,
+    );
     let b0 = speakers[0];
-    let pvg = b0.o + geo.ht.rotate(b0.phi);
-    let an_local = geo.anchor_local;
+    let [front_pin_local, rear_pin_local] = pins_local;
+    let pvg = b0.o + front_pin_local.rotate(b0.phi);
+    let an_local = rear_pin_local;
+    // Le bras arrière monte du pion arrière jusqu'à la hauteur d'accroche, à
+    // son aplomb : c'est lui qui fixe la direction de l'effort de ce pion.
     let bo_local = Vec2::new(an_local.x, pickup_local.y);
     let bo = b0.o + bo_local.rotate(b0.phi);
     let an = b0.o + an_local.rotate(b0.phi);
@@ -442,8 +482,28 @@ fn compute_bumper_loads(
     let f_ori = u * lambda;
     let f_piv = -rext - f_ori;
 
+    // La barre qui descend du pion arrière est boulonnée au caisson par sa paire
+    // ancrage/verrou — c'est elle qui verrouille la rotation de l'enceinte de
+    // référence, exactement comme la barre d'une jonction. On lui applique donc
+    // la même répartition : `f_ori` arrive à son extrémité haute (le pion
+    // arrière), et les deux goupilles s'en partagent la résultante et le moment.
+    let geo = chain[0].geo;
+    let pair_anchor_point = b0.o + geo.anchor_local.rotate(b0.phi);
+    let pair_latch_point = b0.o + geo.latch_local.rotate(b0.phi);
+    let (f_anchor_g, f_latch_g, m_g) =
+        split_over_pair(pair_anchor_point, pair_latch_point, an, f_ori);
+
     let sg = -share_per_flank;
     BumperLoads {
+        // Sens de la paire : `+share_per_flank`, comme dans une jonction — la
+        // répartition part déjà de ce que la barre délivre aux goupilles, là où
+        // `f_ori`/`f_piv` ci-dessous partent du corps libre et doivent être
+        // retournés.
+        pair_anchor_point,
+        pair_latch_point,
+        pair_anchor_force: f_anchor_g * share_per_flank,
+        pair_latch_force: f_latch_g * share_per_flank,
+        pair_moment_nm: m_g * share_per_flank / 1000.0,
         // Par flanc et retournés, comme partout ailleurs : ce que la
         // quincaillerie subit, pas ce qui agit sur le corps libre.
         orientation_force: f_ori * sg,
@@ -711,15 +771,11 @@ pub fn compute_cluster(
                 let edge_x = threshold * pickup.x.signum();
                 attach.o + Vec2::new(edge_x, pickup.y).rotate(attach.phi)
             });
-            let loads = compute_bumper_loads(
-                chain,
-                &speakers,
-                pickup,
-                settings.gravity,
-                settings.dynamic_factor,
-                settings.share_per_flank,
-                tie_force,
-            );
+            // Perçage déclaré du bumper, exprimé dans le repère de l'enceinte de
+            // référence : en vol le bumper est rigidement fixé à elle.
+            let pins_local = bumper_pin_points(&outline_local, bumper_model);
+            let loads =
+                compute_bumper_loads(chain, &speakers, pins_local, pickup, settings, tie_force);
             let of_local = loads.orientation_force.rotate_transpose(attach.phi);
             let pf_local = loads.pivot_force.rotate_transpose(attach.phi);
             let pickup_g = attach.o + pickup.rotate(attach.phi);
@@ -737,6 +793,19 @@ pub fn compute_cluster(
                 pivot_angle_deg: Some(angle_of(pf_local)),
                 orientation_point_global: Some(loads.orientation_point),
                 pivot_point_global: Some(loads.pivot_point),
+                pair_anchor_hole_global: Some(loads.pair_anchor_point),
+                pair_latch_hole_global: Some(loads.pair_latch_point),
+                f_pair_anchor_global: Some(loads.pair_anchor_force),
+                f_pair_latch_global: Some(loads.pair_latch_force),
+                f_pair_anchor_n: Some(loads.pair_anchor_force.norm()),
+                f_pair_anchor_angle_deg: Some(angle_of(
+                    loads.pair_anchor_force.rotate_transpose(attach.phi),
+                )),
+                f_pair_latch_n: Some(loads.pair_latch_force.norm()),
+                f_pair_latch_angle_deg: Some(angle_of(
+                    loads.pair_latch_force.rotate_transpose(attach.phi),
+                )),
+                pair_moment_nm: Some(loads.pair_moment_nm),
                 orientation_force_global: Some(loads.orientation_force),
                 pivot_force_global: Some(loads.pivot_force),
                 support_force_n: loads.support_force.norm(),
@@ -778,11 +847,11 @@ pub fn compute_cluster(
             let support = Vec2::new(0.0, total_weight_n);
             let support_point = (outline_global[2] + outline_global[3]) * 0.5;
             // Et les deux pions qui le tiennent à l'enceinte du bas.
+            let pins_global = bumper_pin_points(&outline_global, bumper_model);
             let (front_pt, front_f, rear_pt, rear_f) = compute_stacked_bumper_pins(
                 chain,
                 &speakers,
-                reference_index,
-                chain[reference_index].frame_hole_splay,
+                pins_global,
                 settings.gravity,
                 settings.dynamic_factor,
                 settings.share_per_flank,
@@ -806,6 +875,17 @@ pub fn compute_cluster(
                 pivot_angle_deg: Some(angle_of(front_local)),
                 orientation_point_global: Some(rear_pt),
                 pivot_point_global: Some(front_pt),
+                // En stack le bumper est goupillé sans barre : pas de paire à
+                // encastrer, donc rien à rendre ici.
+                pair_anchor_hole_global: None,
+                pair_latch_hole_global: None,
+                f_pair_anchor_global: None,
+                f_pair_latch_global: None,
+                f_pair_anchor_n: None,
+                f_pair_anchor_angle_deg: None,
+                f_pair_latch_n: None,
+                f_pair_latch_angle_deg: None,
+                pair_moment_nm: None,
                 orientation_force_global: Some(rear_f),
                 pivot_force_global: Some(front_f),
                 support_force_n: support.norm(),

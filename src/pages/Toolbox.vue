@@ -95,6 +95,8 @@ interface FormState {
   boxHeightMm: number;
   gapMm: number;
   radiatingHeightMm: number;
+  acousticMouthHeightMm: number;
+  isophaseSectorDeg: number;
   speakerCount: number;
   splaysText: string;
   distancesText: string;
@@ -110,9 +112,11 @@ const form = reactive<FormState>({
   boxHeightMm: 550,
   gapMm: 8,
   radiatingHeightMm: 464,
+  acousticMouthHeightMm: 485,
+  isophaseSectorDeg: 1.3,
   speakerCount: 6,
-  splaysText: "0, 1, 2, 4, 6, 8, 10, 12, 15, 20",
-  distancesText: "5, 10, 25, 50",
+  splaysText: "0, 1, 2, 3, 4, 5, 10.5, 20",
+  distancesText: "5, 10, 20, 25, 30, 35, 40, 45, 50",
   fMaxHz: 16000,
   guideKind: "isophase",
   guideCoverageDeg: 20,
@@ -149,7 +153,20 @@ watch(selectedSpeaker, (speaker) => {
   if (speaker.acoustics.wgOutputHeight > 0) {
     form.radiatingHeightMm = speaker.acoustics.wgOutputHeight;
   }
+  form.isophaseSectorDeg = speaker.acoustics.wgIsophaseSectorDeg ?? form.isophaseSectorDeg;
+  // Bouche acoustique : elle n'a de sens qu'en front plan. Pour un guide
+  // courbé, le `D` du relevé est corrélé au rayon et ne décrit aucune bouche —
+  // le backend l'ignore, la case le montre en le laissant sur la physique.
+  const measured = speaker.acoustics.guideMeasurement;
+  if (speaker.acoustics.wgFront === "constantCurvature") {
+    form.acousticMouthHeightMm = form.radiatingHeightMm;
+  } else if (measured && measured.acousticMouthHeightMm > 0) {
+    form.acousticMouthHeightMm = measured.acousticMouthHeightMm;
+  }
 });
+
+/** La bouche acoustique n'est ni saisissable ni utilisée en front courbé. */
+const acousticMouthApplies = computed(() => form.guideKind !== "curved");
 
 // Jour affiché dans le formulaire. Une enceinte sélectionnée ouvre un jour
 // différent à chaque angle : la case en montre celui de l'angle de référence,
@@ -166,6 +183,8 @@ function buildInputs(): WstInputs {
     boxHeightMm: form.boxHeightMm,
     gapMm: form.gapMm,
     radiatingHeightMm: form.radiatingHeightMm,
+    acousticMouthHeightMm: acousticMouthApplies.value ? form.acousticMouthHeightMm : null,
+    isophaseSectorDeg: form.isophaseSectorDeg,
     speakerCount: Math.max(1, Math.round(form.speakerCount)),
     splaysDeg: splays.value.length > 0 ? splays.value : [0],
     distancesM: distances.value.length > 0 ? distances.value : [25],
@@ -328,10 +347,35 @@ const ratio = (value: number | null | undefined) =>
 
               <div class="flex flex-col gap-1.5">
                 <Label class="flex items-center text-xs">
-                  Bouche du guide D (mm)
-                  <InfoTip text="Hauteur réellement occupée par la source en sortie de guide, mm. C'est elle qui donne l'ARF = D / pas. Distincte de la hauteur de caisse." />
+                  Bouche physique D (mm)
+                  <InfoTip text="Hauteur réellement occupée par la source en sortie de guide, mm. C'est elle qui donne l'ARF du verdict (ARF = D / pas), le profil de retard du guide et toute la géométrie. Distincte de la hauteur de caisse : c'est le chiffre conservateur, celui qu'on peut aller mesurer." />
                 </Label>
                 <Input v-model.number="form.radiatingHeightMm" type="number" :disabled="!!selectedSpeaker" />
+              </div>
+
+              <div v-if="acousticMouthApplies" class="flex flex-col gap-1.5">
+                <Label class="flex items-center text-xs">
+                  Bouche acoustique D (mm)
+                  <InfoTip text="Hauteur de bouche équivalente que voit le rayonnement, diffraction de bride comprise. Elle sert au critère 5 et à lui seul : dans la dérivation du §6.2, le produit ARF·STEP vaut exactement D et la demi-ouverture d'un élément est λ/D — le critère ne connaît que l'ouverture équivalente, jamais l'ARF géométrique. Laisser sur la bouche physique si elle n'a pas été identifiée." />
+                </Label>
+                <Input
+                  v-model.number="form.acousticMouthHeightMm"
+                  type="number"
+                  :disabled="!!selectedSpeaker"
+                />
+              </div>
+
+              <div class="flex flex-col gap-1.5">
+                <Label class="flex items-center text-xs">
+                  Secteur du guide isophase (°)
+                  <InfoTip text="Secteur encore rayonné par le guide isophase, degrés. 0 = front parfaitement plan. Il entre dans l'angle de raccord vers une caisse à guide courbé, qui est une tangence des deux fronts : (θ_iso + θ_courbe) / 2, et non θ_courbe / 2." />
+                </Label>
+                <Input
+                  v-model.number="form.isophaseSectorDeg"
+                  type="number"
+                  step="0.1"
+                  :disabled="!!selectedSpeaker && form.guideKind !== 'curved'"
+                />
               </div>
 
               <div class="flex flex-col gap-1.5">
@@ -352,14 +396,14 @@ const ratio = (value: number | null | undefined) =>
                 <div class="flex flex-col gap-1.5">
                   <Label class="flex items-center text-xs">
                     Guide θ (°)
-                    <InfoTip text="Secteur vertical rayonné par le guide. C'est lui qui borne le splay : au-delà, les secteurs voisins ne se touchent plus. Le raccord avec une caisse à front plan se fait à θ/2." />
+                    <InfoTip text="Secteur vertical rayonné par le guide. C'est lui qui borne le splay : au-delà, les secteurs voisins ne se touchent plus et il reste un trou. Splay recommandé entre θ − 3° et θ, jamais au-dessus. Quand le guide a été identifié, ce secteur vaut D/R — le seul des deux paramètres du relevé qui soit bien déterminé." />
                   </Label>
                   <Input v-model.number="form.guideCoverageDeg" type="number" :disabled="!!selectedSpeaker" />
                 </div>
                 <div class="flex flex-col gap-1.5">
                   <Label class="flex items-center text-xs">
                     Niveau à θ/2 (dB)
-                    <InfoTip text="Niveau du guide à la moitié de son secteur, relevé en simulation ou en mesure. Deux secteurs voisins s'y somment, soit +6 dB : −6 dB donne donc un raccord plat, −8 dB un creux de 2 dB." />
+                    <InfoTip text="Niveau du guide à la moitié de son secteur, relevé en simulation ou en mesure. Deux sources en phase s'y somment de façon cohérente sur la bissectrice, soit +6 dB : −6 dB donne donc un raccord plat, −8 dB un creux de 2 dB. Quand l'enceinte porte un relevé en fréquence, c'est sa médiane de bande qui sert — pas son minimum, qui ne dirait que le pire accident." />
                   </Label>
                   <Input
                     v-model.number="form.guideLevelAtHalfSplayDb"
@@ -452,7 +496,15 @@ const ratio = (value: number | null | undefined) =>
                 <dd>{{ metres(report.derived.lineHeightM) }}</dd>
 
                 <dt class="text-muted-foreground">Bouche D</dt>
-                <dd>{{ mm(report.derived.radiatingHeightMm) }}</dd>
+                <dd>
+                  {{ mm(report.derived.radiatingHeightMm) }}
+                  <span
+                    v-if="report.derived.acousticMouthIsMeasured"
+                    class="text-xs text-muted-foreground"
+                  >
+                    (acoustique {{ mm(report.derived.acousticMouthHeightMm) }})
+                  </span>
+                </dd>
                 <dt class="text-muted-foreground">Front</dt>
                 <dd>
                   {{ report.derived.guide.kind === "isophase" ? "plan" : "courbure constante" }}
@@ -464,13 +516,24 @@ const ratio = (value: number | null | undefined) =>
                   </span>
                 </dd>
 
-                <dt class="text-muted-foreground">ARF</dt>
+                <dt class="text-muted-foreground">ARF géométrique</dt>
                 <dd :class="report.criterion1.satisfied ? 'text-status-ok' : 'text-status-alarm'">
-                  {{ ratio(report.criterion1.arf) }}
+                  {{ ratio(report.criterion1.arfGeometric) }}
                   <span class="text-xs">(min {{ ratio(report.criterion1.arfMin) }})</span>
                 </dd>
                 <dt class="text-muted-foreground">Lobe secondaire</dt>
                 <dd>{{ db(report.criterion1.sideLobeAttenuationDb) }}</dd>
+
+                <template v-if="report.criterion1.arfsDiffer">
+                  <dt class="text-muted-foreground">ARF acoustique</dt>
+                  <dd class="text-muted-foreground">
+                    {{ ratio(report.criterion1.arfAcoustic) }}
+                  </dd>
+                  <dt class="text-muted-foreground">Lobe secondaire</dt>
+                  <dd class="text-muted-foreground">
+                    {{ db(report.criterion1.sideLobeAttenuationAcousticDb) }}
+                  </dd>
+                </template>
 
                 <dt class="text-muted-foreground">Perte axiale</dt>
                 <dd>{{ db(report.criterion1.axialLossDb) }}</dd>
@@ -479,6 +542,11 @@ const ratio = (value: number | null | undefined) =>
                   {{ report.criterion1.satisfied ? "conforme" : "sous le seuil" }}
                 </dd>
               </dl>
+              <p v-if="report.criterion1.arfsDiffer" class="mt-3 text-xs text-muted-foreground">
+                L'écart entre les deux ARF est la contribution de la diffraction de bride : la
+                bouche acoustique est plus grande que la bouche physique. La vérité est entre les
+                deux — le verdict se prend sur le géométrique, qui est le plus prudent.
+              </p>
             </CardContent>
           </Card>
 
@@ -487,7 +555,7 @@ const ratio = (value: number | null | undefined) =>
             <CardHeader>
               <CardTitle class="flex items-center text-sm">
                 Critère 5 — fréquence tenable par angle
-                <InfoTip text="α_max = 2λ/(ARF·pas) − pas/d. Au-delà de cette fréquence, la zone sans énergie entre deux caisses se referme après l'auditeur : le trou devient audible." />
+                <InfoTip text="α_max = 2λ/D − pas/d, où D est la bouche ACOUSTIQUE — dans la dérivation du §6.2, le produit ARF·STEP ne vaut jamais autre chose. Au-delà de cette fréquence, la zone sans énergie entre deux caisses se referme après l'auditeur : le trou devient audible. L'ARF de la colonne est dérivé du pas pour l'affichage, il ne pilote pas le calcul." />
               </CardTitle>
             </CardHeader>
             <CardContent class="flex flex-col gap-3">
@@ -574,8 +642,18 @@ const ratio = (value: number | null | undefined) =>
               </p>
 
               <dl class="grid grid-cols-2 gap-x-6 gap-y-2 font-mono text-sm sm:grid-cols-4">
-                <dt class="text-muted-foreground">Splay max</dt>
-                <dd>{{ deg(curvedGuide.maxSplayDeg) }}</dd>
+                <dt class="flex items-center text-muted-foreground">
+                  Splay max
+                  <InfoTip text="L'ouverture du guide elle-même : au-delà, les deux secteurs ne se touchent plus. Splay recommandé entre θ − 3° et θ, jamais au-dessus — un recouvrement modéré est un réglage acceptable, un trou angulaire est une faute." />
+                </dt>
+                <dd>
+                  {{ deg(curvedGuide.maxSplayDeg) }}
+                  <span class="text-xs text-muted-foreground">
+                    (viser {{ deg(curvedGuide.recommendedSplayMinDeg) }}–{{
+                      deg(curvedGuide.recommendedSplayMaxDeg)
+                    }})
+                  </span>
+                </dd>
                 <dt class="text-muted-foreground">Niveau à α/2</dt>
                 <dd>{{ db(curvedGuide.levelAtHalfSplayDb) }}</dd>
 
@@ -585,17 +663,32 @@ const ratio = (value: number | null | undefined) =>
                 </dd>
                 <dt class="flex items-center text-muted-foreground">
                   Vers isophase
-                  <InfoTip text="Raccord entre une caisse à front plan et une caisse à guide courbé : les deux fronts sont tangents à la moitié du secteur." />
+                  <InfoTip text="Raccord entre une caisse à front plan et une caisse à guide courbé. La condition est la tangence des deux fronts à la jonction : chacun y arrive incliné de la moitié de son propre secteur, soit (θ_iso + θ_courbe) / 2. La forme θ/2 n'en est que le cas particulier d'un guide isophase parfaitement plan." />
                 </dt>
-                <dd>{{ deg(curvedGuide.transitionSplayDeg) }}</dd>
+                <dd>
+                  {{ deg(curvedGuide.transitionSplayDeg) }}
+                  <span v-if="curvedGuide.isophaseSectorDeg > 0" class="text-xs text-muted-foreground">
+                    (θ_iso {{ deg(curvedGuide.isophaseSectorDeg) }})
+                  </span>
+                </dd>
+
+                <template v-if="curvedGuide.actualRadiusM != null">
+                  <dt class="flex items-center text-muted-foreground">
+                    Rayon réel
+                    <InfoTip text="Rayon du front identifié sur le guide, à comparer au rayon visé de chaque angle. R_réel < R_visé : le guide est trop courbé pour ce splay, les secteurs se recouvrent. R_réel > R_visé : il reste un trou." />
+                  </dt>
+                  <dd>{{ metres(curvedGuide.actualRadiusM) }}</dd>
+                </template>
               </dl>
 
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Angle</TableHead>
-                    <TableHead>Couverture</TableHead>
+                    <TableHead>Recouvrement</TableHead>
+                    <TableHead>1er creux</TableHead>
                     <TableHead>Rayon visé</TableHead>
+                    <TableHead>Écart au réel</TableHead>
                     <TableHead>Courbure critique au-dessus de</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -603,18 +696,75 @@ const ratio = (value: number | null | undefined) =>
                   <TableRow v-for="row in curvedGuide.rows" :key="row.splayDeg">
                     <TableCell class="font-medium">{{ deg(row.splayDeg) }}</TableCell>
                     <TableCell :class="row.covered ? 'text-status-ok' : 'text-status-alarm'">
-                      {{ row.covered ? "couvert" : "trou entre secteurs" }}
+                      {{ row.covered ? "+" : "" }}{{ deg(row.overlapDeg) }}
+                      <span class="text-xs">{{ row.covered ? "" : "· trou angulaire" }}</span>
                     </TableCell>
+                    <TableCell>{{ row.overlapNotchHz == null ? "—" : khz(row.overlapNotchHz) }}</TableCell>
                     <TableCell>{{ row.targetRadiusM == null ? "plate" : metres(row.targetRadiusM) }}</TableCell>
+                    <TableCell :class="row.radiusVerdict === 'matched' ? 'text-status-ok' : ''">
+                      <template v-if="row.radiusErrorM == null">—</template>
+                      <template v-else>
+                        {{ row.radiusErrorM > 0 ? "+" : "" }}{{ metres(row.radiusErrorM) }}
+                        <span class="text-xs text-muted-foreground">
+                          {{
+                            row.radiusVerdict === "tooCurved"
+                              ? "· trop courbé"
+                              : row.radiusVerdict === "tooFlat"
+                                ? "· trop plat"
+                                : ""
+                          }}
+                        </span>
+                      </template>
+                    </TableCell>
                     <TableCell>{{ khz(row.curvatureMattersAboveHz) }}</TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
               <p class="text-xs text-muted-foreground">
-                Sous la fréquence indiquée, des cordes plates approximent l'arc à mieux
-                que λ/4 : la courbure du guide y est indifférente. Au-dessus, elle doit
-                être juste.
+                Recouvrement positif = les deux secteurs se chevauchent, réglage acceptable
+                tant qu'il reste modéré ; négatif = trou angulaire entre eux, et ça c'est une
+                faute. La fréquence indiquée en dernière colonne n'est pas une limite de
+                fonctionnement : en dessous, des cordes plates approximent l'arc à mieux que
+                λ/4 et un guide isophase donnerait le même résultat. Au-dessus seulement, la
+                courbure du guide doit être juste.
               </p>
+
+              <template v-if="curvedGuide.edgeLevels.length > 0">
+                <p class="mt-1 text-xs text-muted-foreground">
+                  Bosse au raccord relevée en fréquence (niveau au bord du secteur + 6 dB, cible
+                  0 dB) :
+                </p>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Fréquence</TableHead>
+                      <TableHead>Bord du secteur</TableHead>
+                      <TableHead>Lissé</TableHead>
+                      <TableHead>Raccord</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow v-for="sample in curvedGuide.edgeLevels" :key="sample.frequencyHz">
+                      <TableCell>{{ khz(sample.frequencyHz) }}</TableCell>
+                      <TableCell :class="sample.isNarrowArtifact ? 'text-status-warn' : ''">
+                        {{ db(sample.levelDb) }}
+                        <span v-if="sample.isNarrowArtifact" class="text-xs">· accident étroit</span>
+                      </TableCell>
+                      <TableCell class="text-muted-foreground">{{ db(sample.smoothedLevelDb) }}</TableCell>
+                      <TableCell
+                        :class="Math.abs(sample.spliceLevelDb) <= 2 ? 'text-status-ok' : 'text-status-alarm'"
+                      >
+                        {{ db(sample.spliceLevelDb) }}
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+                <p v-if="curvedGuide.hasNarrowArtifact" class="text-xs text-muted-foreground">
+                  Les points signalés sont des accidents étroits du guide, pas un comportement de
+                  secteur : le verdict de bande est pris sur la médiane glissante, jamais sur le
+                  minimum — sinon un seul creux jugerait tout le raccord.
+                </p>
+              </template>
 
               <template v-if="curvedGuide.guideDelayProfile.length > 0">
                 <p class="mt-1 text-xs text-muted-foreground">
@@ -622,6 +772,19 @@ const ratio = (value: number | null | undefined) =>
                 </p>
                 <div class="flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs">
                   <span v-for="sample in curvedGuide.guideDelayProfile" :key="sample.yMm">
+                    <span class="text-muted-foreground">y {{ sample.yMm.toFixed(0) }}</span>
+                    → {{ sample.delayMm.toFixed(2) }} mm
+                  </span>
+                </div>
+              </template>
+
+              <template v-if="curvedGuide.actualDelayProfile.length > 0">
+                <p class="mt-1 text-xs text-muted-foreground">
+                  Profil du guide réel ({{ metres(curvedGuide.actualRadiusM) }}), sur la même
+                  bouche :
+                </p>
+                <div class="flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs">
+                  <span v-for="sample in curvedGuide.actualDelayProfile" :key="sample.yMm">
                     <span class="text-muted-foreground">y {{ sample.yMm.toFixed(0) }}</span>
                     → {{ sample.delayMm.toFixed(2) }} mm
                   </span>
@@ -678,6 +841,17 @@ const ratio = (value: number | null | undefined) =>
                   <strong>{{ khz(report.nearField.noNearFieldBelowHz) }}</strong> · déviation
                   admissible à {{ khz(report.criterion3.fMaxHz) }} :
                   <strong>{{ mm(report.criterion3.maxDeviationMm) }}</strong>
+                </p>
+                <p
+                  v-if="report.criterion3.wavefrontDeviationMm != null"
+                  class="text-xs text-muted-foreground"
+                >
+                  Front relevé à {{ metres(report.criterion3.wavefrontRadiusM) }} de rayon : écart
+                  au plan
+                  <strong>{{ mm(report.criterion3.wavefrontDeviationMm) }}</strong> sur la bouche
+                  (s = (D/2)² / 2R), soit isophase jusqu'à
+                  <strong>{{ khz(report.criterion3.isophaseFrequencyLimitHz) }}</strong
+                  >. C'est la vraie mesure de « à quel point le front est plan ».
                 </p>
                 <Table>
                   <TableHeader>

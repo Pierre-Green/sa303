@@ -19,7 +19,7 @@
 
 use crate::bumper::{BumperBarModel, BumperModel};
 use crate::checks::{check_bar, utilization, BarCheck, SandwichSpec};
-use crate::cluster::{compute_cluster, Cluster, ClusterResult, JointResult};
+use crate::cluster::{compute_cluster, BumperView, Cluster, ClusterResult, JointResult};
 use crate::settings::Settings;
 use crate::speaker::SpeakerModel;
 use serde::Serialize;
@@ -91,6 +91,60 @@ impl JointChecks {
     }
 }
 
+/// Les chemins de charge de l'accrochage du bumper, chacun rapporté à son
+/// admissible — le pendant de [`JointChecks`] pour la liaison qui porte la
+/// grappe entière.
+///
+/// Sans eux le document se contredisait : il vérifiait les cinq chemins de
+/// chaque jonction, mais pas ceux qui reprennent *tout* ce qui pend. Un
+/// relecteur pouvait lire un coefficient de sécurité de grappe sans savoir si
+/// les pions du bumper tenaient.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BumperChecks {
+    /// Sandwich au pion avant du bumper.
+    pub utilization_front_pin: Option<f64>,
+    /// Sandwich au pion arrière.
+    pub utilization_rear_pin: Option<f64>,
+    /// Sandwich à l'ancrage et au verrou où la barre du bumper est boulonnée.
+    /// `None` en stack : le bumper y est goupillé sans barre.
+    pub utilization_bar_anchor: Option<f64>,
+    pub utilization_bar_latch: Option<f64>,
+    pub utilization_worst: f64,
+    /// Nom du chemin qui gouverne, ou `None` si rien n'est renseigné.
+    pub governing_path: Option<&'static str>,
+}
+
+impl BumperChecks {
+    fn of(view: &BumperView, spec: &SandwichSpec) -> Self {
+        let at = |force_n: Option<f64>| force_n.map(|n| utilization(n, spec));
+        let utilization_front_pin = at(view.pivot_force_n);
+        let utilization_rear_pin = at(view.orientation_force_n);
+        let utilization_bar_anchor = at(view.f_pair_anchor_n);
+        let utilization_bar_latch = at(view.f_pair_latch_n);
+
+        let paths = [
+            ("pion avant", utilization_front_pin),
+            ("pion arrière", utilization_rear_pin),
+            ("ancrage barre bumper", utilization_bar_anchor),
+            ("verrou barre bumper", utilization_bar_latch),
+        ];
+        let governing = paths
+            .into_iter()
+            .filter_map(|(name, u)| u.map(|u| (name, u)))
+            .max_by(|(_, a), (_, b)| a.total_cmp(b));
+
+        Self {
+            utilization_front_pin,
+            utilization_rear_pin,
+            utilization_bar_anchor,
+            utilization_bar_latch,
+            utilization_worst: governing.map_or(0.0, |(_, u)| u),
+            governing_path: governing.map(|(name, _)| name),
+        }
+    }
+}
+
 /// Une grappe résolue : sa définition telle qu'enregistrée, le résultat complet
 /// du solveur, et les vérifications jonction par jonction.
 ///
@@ -104,7 +158,11 @@ pub struct ClusterExport {
     pub result: ClusterResult,
     /// Un par jonction, même ordre que `result.joints`.
     pub joint_checks: Vec<JointChecks>,
-    /// Le pire taux de la grappe, tous chemins et toutes jonctions confondus.
+    /// L'accrochage du bumper : pions, et paire de sa barre en vol.
+    pub bumper_checks: BumperChecks,
+    /// Le pire taux de la grappe, tous chemins confondus — jonctions **et**
+    /// accrochage du bumper. Laisser ce dernier dehors donnait un coefficient
+    /// de sécurité qui ignorait la liaison portant toute la grappe.
     pub utilization_worst: f64,
     /// Coefficient de sécurité réel de la grappe : l'inverse du pire taux. Le
     /// taux est rapporté à `R_m / sf`, donc un taux de 0,5 sous `sf = 4` veut
@@ -198,10 +256,11 @@ pub fn build_audit_export(
                     .iter()
                     .map(|j| JointChecks::of(j, &spec))
                     .collect();
+                let bumper_checks = BumperChecks::of(&result.bumper_view, &spec);
                 let utilization_worst = joint_checks
                     .iter()
                     .map(|c| c.utilization_worst)
-                    .fold(0.0_f64, f64::max);
+                    .fold(bumper_checks.utilization_worst, f64::max);
                 // Même grappe, même barre, seul `k_dyn` change. Recalculée
                 // plutôt que mise à l'échelle : les efforts ne sont pas tous
                 // proportionnels au poids — la tirette, elle, est résolue pour
@@ -213,10 +272,14 @@ pub fn build_audit_export(
                         .ok()
                         .map(|r| {
                             let spec = SandwichSpec::from_settings(&static_settings);
+                            // Même périmètre que `utilization_worst` ci-dessus,
+                            // bumper compris : sinon les deux colonnes ne
+                            // compareraient pas la même chose.
+                            let bumper = BumperChecks::of(&r.bumper_view, &spec).utilization_worst;
                             r.joints
                                 .iter()
                                 .map(|j| JointChecks::of(j, &spec).utilization_worst)
-                                .fold(0.0_f64, f64::max)
+                                .fold(bumper, f64::max)
                         })
                         .unwrap_or(utilization_worst);
 
@@ -224,6 +287,7 @@ pub fn build_audit_export(
                     definition: cluster.clone(),
                     result,
                     joint_checks,
+                    bumper_checks,
                     utilization_worst,
                     safety_factor: safety_from(utilization_worst, settings.safety_factor),
                     safety_factor_static: safety_from(static_worst, settings.safety_factor),

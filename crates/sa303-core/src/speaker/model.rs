@@ -64,6 +64,33 @@ fn default_level_at_half_coverage_db() -> f64 {
     -6.0
 }
 
+/// Ce qu'on a réellement relevé du guide, par identification d'un modèle
+/// d'ouverture sur des polaires simulées ou mesurées. Optionnel : un modèle
+/// d'enceinte reste utilisable sans, avec les seules valeurs de fiche.
+///
+/// Les trois champs ne se lisent pas de la même façon selon le front :
+/// - front **plan**, `acoustic_mouth_height_mm` est le `D` équivalent qui pilote
+///   le critère 5, et `wavefront_radius_m` (très grand) sert seulement à chiffrer
+///   la planéité résiduelle ;
+/// - front **courbé**, `acoustic_mouth_height_mm` et `wavefront_radius_m` sont
+///   corrélés par l'ajustement : pris isolément aucun des deux n'a de sens, seul
+///   leur rapport `D/R` — le secteur — est bien déterminé. Le `D` identifié n'est
+///   alors **pas** une hauteur de bouche et ne doit jamais servir d'ARF.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GuideMeasurement {
+    /// `D` équivalent identifié, mm.
+    pub acoustic_mouth_height_mm: f64,
+    /// Rayon du front identifié, m. `None` = front strictement plan.
+    #[serde(default)]
+    pub wavefront_radius_m: Option<f64>,
+    /// Niveau au bord du secteur en fonction de la fréquence : `(Hz, dB)`
+    /// relatifs à l'axe, relevés à la moitié de l'ouverture du guide. Alimente
+    /// la bosse au raccord fréquence par fréquence, au lieu d'une valeur unique.
+    #[serde(default)]
+    pub edge_level_db: Vec<(f64, f64)>,
+}
+
 /// Descriptif acoustique d'une enceinte. Aucun calcul de **rigging** n'en
 /// dépend — seul `SpeakerMechanicalModel` entre dans la physique des charges —
 /// mais les critères WST s'y appuient entièrement : le front, la bouche du
@@ -95,6 +122,17 @@ pub struct SpeakerAcousticsModel {
     /// voisines. Sans objet pour un front isophase.
     #[serde(default = "default_level_at_half_coverage_db")]
     pub wg_level_at_half_coverage_db: f64,
+    /// Secteur encore rayonné par un guide **isophase**, degrés. 0 = front
+    /// parfaitement plan. Ce n'est pas une coquetterie : c'est lui qui décale
+    /// l'angle de raccord vers une caisse à guide courbé, par tangence des deux
+    /// fronts. Sans objet pour un front courbé, dont le secteur est
+    /// `directivity_vertical`.
+    #[serde(default)]
+    pub wg_isophase_sector_deg: f64,
+    /// Relevé d'identification du guide, quand il existe. Il prime sur les
+    /// valeurs de fiche pour ce qu'il renseigne.
+    #[serde(default)]
+    pub guide_measurement: Option<GuideMeasurement>,
 }
 
 // `Default` écrit à la main plutôt que dérivé : le niveau au demi-secteur doit
@@ -109,6 +147,8 @@ impl Default for SpeakerAcousticsModel {
             wg_front: WaveguideFront::default(),
             wg_output_height: 0.0,
             wg_level_at_half_coverage_db: default_level_at_half_coverage_db(),
+            wg_isophase_sector_deg: 0.0,
+            guide_measurement: None,
         }
     }
 }

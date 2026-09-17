@@ -41,7 +41,7 @@ fn sa303() -> SpeakerModel {
                 angle_deg: -13.0,
             },
             latch_offset: 100.0,
-            splay_grid: vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 20.0],
+            splay_grid: vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 10.5, 20.0],
             frame_hole_splay: 0.0,
             rear_face_x: 351.0,
             rear_bar: RearBar {
@@ -285,7 +285,7 @@ fn golden_bar_loads_on_the_reference_joint() {
     };
 
     let sm = sa303();
-    let splays = [5.0, 10.0];
+    let splays = [5.0, 10.5];
     let chain = vec![ChainSpeaker::from_model(&sm); 3];
     let speakers = build_cluster(&chain, &splays, 0.0);
     let j = compute_joint(&JointInput {
@@ -306,10 +306,10 @@ fn golden_bar_loads_on_the_reference_joint() {
     let total = |v: sa303_core::vector::Vec2| v * -2.0;
     let f_bielle = total(j.f_pivot);
     let f_couronne = total(j.f_orientation);
-    assert!((f_bielle.x - -30.966).abs() < 0.01, "{f_bielle:?}");
-    assert!((f_bielle.y - 709.247).abs() < 0.01, "{f_bielle:?}");
-    assert!((f_couronne.x - 30.966).abs() < 0.01, "{f_couronne:?}");
-    assert!((f_couronne.y - 1424.749).abs() < 0.01, "{f_couronne:?}");
+    assert!((f_bielle.x - -30.860).abs() < 0.01, "{f_bielle:?}");
+    assert!((f_bielle.y - 706.822).abs() < 0.01, "{f_bielle:?}");
+    assert!((f_couronne.x - 30.860).abs() < 0.01, "{f_couronne:?}");
+    assert!((f_couronne.y - 1427.1731).abs() < 0.01, "{f_couronne:?}");
 
     // Repère de barre. L = 324.756 mm, l'entraxe couronne-ancrage de la
     // couronne intérieure : le splay 5 est impair.
@@ -324,19 +324,19 @@ fn golden_bar_loads_on_the_reference_joint() {
     // `up660`, déportée de 19,4 mm — les deux droites font donc 3,43° entre
     // elles, et la décomposition tourne d'autant. |F| ne bouge pas.
     assert!(
-        (j.bar_axial_n - -706.854).abs() < 0.01,
+        (j.bar_axial_n - -708.065).abs() < 0.01,
         "N = {}",
         j.bar_axial_n
     );
     assert!(
-        (j.bar_shear_n - -89.858).abs() < 0.01,
+        (j.bar_shear_n - -89.932).abs() < 0.01,
         "V = {}",
         j.bar_shear_n
     );
     // La résultante, elle, est invariante : c'est bien la même force, lue dans
     // un repère qui a tourné.
     let f_norm = (j.bar_axial_n.powi(2) + j.bar_shear_n.powi(2)).sqrt();
-    assert!((f_norm - 712.54).abs() < 0.02, "|F| = {f_norm}");
+    assert!((f_norm - 713.75).abs() < 0.02, "|F| = {f_norm}");
 
     // Moment. La section critique est l'**ancrage**, premier pion depuis la
     // couronne. Le moment y est un invariant de repère — c'est |F| fois la
@@ -347,7 +347,7 @@ fn golden_bar_loads_on_the_reference_joint() {
         sm.mechanical.rear_bar.holes.anchor.along()
     );
     assert!(
-        (j.bar_moment_max_nm - 42.847).abs() < 0.01,
+        (j.bar_moment_max_nm - 42.894).abs() < 0.01,
         "M_ancrage = {}",
         j.bar_moment_max_nm
     );
@@ -391,7 +391,7 @@ fn golden_bar_loads_on_the_reference_joint() {
     assert!(check.critical.drilled);
     assert!((check.critical.width_mm - 70.0).abs() < 1e-9);
     assert!(
-        (check.critical.moment_nmm / 1000.0 - 42.85).abs() < 0.01,
+        (check.critical.moment_nmm / 1000.0 - 42.89).abs() < 0.01,
         "M ancrage = {}",
         check.critical.moment_nmm / 1000.0
     );

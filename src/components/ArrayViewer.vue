@@ -21,6 +21,10 @@ import { speakerDisplayNumber } from "@/lib/display";
 const props = defineProps<{
   result: ClusterResult;
   compartment: Compartment;
+  /** Identifiant de la grappe affichée. C'est lui, et non `result`, qui dit
+   * qu'on regarde autre chose : `result` est un objet neuf à chaque recalcul,
+   * donc le surveiller ferait sauter le cadrage à chaque splay modifié. */
+  viewKey?: string | null;
 }>();
 
 /** Longueur de référence pour les traits et flèches (mm) : l'étendue
@@ -112,7 +116,12 @@ function cssVar(name: string): string {
 const colors = computed(() => {
   void themeTick.value; // dépendance réactive volontaire, cf. commentaire ci-dessus
   return {
+    // Les trois perçages de la zone orientation ont chacun leur teinte : ils
+    // sont sur des cercles différents et ne voient pas la même charge, les
+    // confondre à l'écran revenait à les confondre tout court.
     orientation: cssVar("--zone-orientation"),
+    anchor: cssVar("--zone-anchor"),
+    latch: cssVar("--zone-latch"),
     pivot: cssVar("--zone-pivot"),
     lift: cssVar("--zone-lift"),
     alarm: cssVar("--status-alarm"),
@@ -171,10 +180,36 @@ function fitContent() {
   stage.batchDraw();
 }
 
+/** Remet le zoom molette et le panoramique à zéro. Le cadrage automatique
+ * (`fitContent`) travaille sur le groupe interne : sans ce reset, la vue
+ * gardait le zoom et le déplacement choisis pour la grappe précédente, et on
+ * atterrissait hors champ en changeant de grappe. */
+function resetView() {
+  const stage = stageRef.value?.getNode();
+  if (!stage) return;
+  stage.scale({ x: 1, y: 1 });
+  stage.position({ x: 0, y: 0 });
+  stageScale.value = 1;
+}
+
 watch(
   () => [props.result, size.value.width, size.value.height],
   () => void nextTick(fitContent),
   { deep: true },
+);
+
+// Changer de grappe rend la vue précédente sans objet : on repart du cadrage
+// initial, popup comprise — celle d'avant désignait une enceinte qui n'est plus
+// celle-là. Réglé sur `viewKey` et non sur `result` : régler une grappe la
+// recalcule en continu, et le zoom qu'on vient d'ajuster pour regarder un
+// détail ne doit pas se défaire à chaque degré saisi.
+watch(
+  () => props.viewKey,
+  () => {
+    closePopup();
+    resetView();
+    void nextTick(fitContent);
+  },
 );
 
 const stageConfig = computed(() => ({
@@ -405,10 +440,45 @@ const speakerPopupData = computed(() => {
     splay: speakerSplayDeg(idx),
     joint: speakerLoadedJoint(idx),
     pairJoint: speakerPairJoint(idx),
+    // La barre du bumper est boulonnée sur la paire de CETTE enceinte : ses
+    // deux goupilles sont les siennes, au même titre que celles d'une jonction.
+    // (Les efforts de pion, eux, restent au bumper : ils sont à lui.)
+    bumperBarPair: bumperBarPairLoads(idx),
+    tie: tiePopupData(idx),
     bottomElevationMm: props.result.elevation.speakerBottomMm[idx],
     pinned: pinnedIdx.value === idx,
   };
 });
+
+
+
+/// La paire ancrage/verrou chargée par la barre du bumper, pour l'enceinte qui
+/// la porte. `null` partout ailleurs, et en stack où il n'y a pas de barre.
+function bumperBarPairLoads(idx: number) {
+  const bv = props.result.bumperView;
+  if (idx !== 0 || props.compartment !== "flown") return null;
+  if (bv.fPairAnchorN === null || bv.fPairLatchN === null) return null;
+  return {
+    anchorN: bv.fPairAnchorN,
+    anchorAngleDeg: bv.fPairAnchorAngleDeg ?? 0,
+    latchN: bv.fPairLatchN,
+    latchAngleDeg: bv.fPairLatchAngleDeg ?? 0,
+    momentNm: bv.pairMomentNm ?? 0,
+  };
+}
+
+/// La tirette s'accroche sur l'enceinte du **bas** de la grappe suspendue.
+/// C'est donc dans sa fiche qu'on attend sa tension et sa direction : c'est
+/// elle qui les encaisse.
+function tiePopupData(idx: number) {
+  const last = props.result.speakers.length - 1;
+  if (props.compartment !== "flown" || idx !== last) return null;
+  if (!props.result.tiePointGlobal || props.result.tieTensionN <= 0) return null;
+  return {
+    tensionKn: props.result.tieTensionN / 1000,
+    angleDeg: props.result.tieDirectionAngleDeg,
+  };
+}
 
 const speakerPopupStyle = computed(() => {
   if (!anchor.value) return {};
@@ -613,39 +683,91 @@ const bumperSupportArrow = computed(() => {
 ///
 /// D'où le trait de rattachement : sans lui les deux flèches se confondent avec
 /// celles des jonctions, et le bumper a l'air de ne rien porter.
-const bumperPins = computed(() => {
+
+
+/// La paire ancrage/verrou par laquelle la barre du bumper est boulonnée sur
+/// l'enceinte de référence. Dessinée exactement comme la paire d'une jonction —
+/// deux flèches à leurs goupilles, l'entraxe qui les relie — parce que c'est la
+/// même liaison : cette enceinte est tenue par la même quincaillerie que les
+/// autres, ce n'est pas un cas particulier.
+const bumperBarPair = computed(() => {
   const bv = props.result.bumperView;
-  if (!bv.orientationPointGlobal || !bv.orientationForceGlobal) return null;
-  if (!bv.pivotPointGlobal || !bv.pivotForceGlobal) return null;
-  // Milieu de la face du bumper qui regarde l'enceinte : le trait part de là.
-  const face = {
-    x: (bv.outlineGlobal[2].x + bv.outlineGlobal[3].x) / 2,
-    y: (bv.outlineGlobal[2].y + bv.outlineGlobal[3].y) / 2,
-  };
-  const tether = (p: Vec2) => {
-    const a = toLocal(face);
-    const b = toLocal(p);
-    return {
-      points: [a.x, a.y, b.x, b.y],
-      stroke: colors.value.lift,
-      strokeWidth: px(1),
-      dash: [px(3), px(3)],
-      opacity: 0.6,
-    };
-  };
+  const an = bv.pairAnchorHoleGlobal;
+  const lt = bv.pairLatchHoleGlobal;
+  const fa = bv.fPairAnchorGlobal;
+  const fl = bv.fPairLatchGlobal;
+  if (!an || !lt || !fa || !fl) return null;
+  const a = toLocal(an);
+  const b = toLocal(lt);
+  const mid = { x: (an.x + lt.x) / 2, y: (an.y + lt.y) / 2 };
   return {
-    rear: arrowConfig(
-      bv.orientationPointGlobal,
-      bv.orientationForceGlobal,
-      colors.value.orientation,
-    ),
-    front: arrowConfig(bv.pivotPointGlobal, bv.pivotForceGlobal, colors.value.pivot),
-    rearHole: holeMarkerConfig(bv.orientationPointGlobal, colors.value.orientation),
-    frontHole: holeMarkerConfig(bv.pivotPointGlobal, colors.value.pivot),
-    rearTether: tether(bv.orientationPointGlobal),
-    frontTether: tether(bv.pivotPointGlobal),
+    // Détaillée quand l'enceinte qui la porte, ou le bumper d'où vient la
+    // barre, est sous le curseur ou épinglé : dans les deux cas c'est cette
+    // liaison-là qu'on est en train de lire.
+    detailed:
+      [0, BUMPER_ANCHOR_IDX].includes(anchor.value?.idx ?? -99) ||
+      [0, BUMPER_ANCHOR_IDX].includes(pinnedIdx.value ?? -99),
+    span: {
+      points: [a.x, a.y, b.x, b.y],
+      stroke: colors.value.anchor,
+      strokeWidth: px(1),
+      opacity: 0.5,
+    },
+    anchor: arrowConfig(an, fa, colors.value.anchor),
+    latch: arrowConfig(lt, fl, colors.value.latch),
+    anchorHole: holeMarkerConfig(an, colors.value.anchor),
+    latchHole: holeMarkerConfig(lt, colors.value.latch),
+    // Au repos, la résultante au milieu de la paire : le couple s'y annule, il
+    // ne reste que ce que la barre déverse dans le caisson. Même lecture que
+    // pour les paires de jonction, et même raison — trois flèches à l'arrière
+    // d'un même caisson se chevauchent.
+    resultant: arrowConfig(mid, { x: fa.x + fl.x, y: fa.y + fl.y }, colors.value.orientation),
+    midHole: holeMarkerConfig(mid, colors.value.orientation),
   };
 });
+
+const bumperPins = computed(() => {
+  const bv = props.result.bumperView;
+  if (!bv.orientationForceGlobal || !bv.pivotForceGlobal) return null;
+  // Perçage **déclaré** du bumper (`BumperModel.pins`), placé côté Rust comme
+  // tout le reste. C'est aussi là que la statique se résout : ces deux points
+  // sont la seule définition des pions, le viewer n'en reconstruit aucune.
+  const frontAt = bv.pivotPointGlobal;
+  const rearAt = bv.orientationPointGlobal;
+  if (!frontAt || !rearAt) return null;
+  return {
+    rear: arrowConfig(rearAt, bv.orientationForceGlobal, colors.value.lift),
+    front: arrowConfig(frontAt, bv.pivotForceGlobal, colors.value.lift),
+    // Plus gros que les marqueurs de jonction : ces deux pions reprennent toute
+    // la grappe, pas la charge d'une seule liaison.
+    rearHole: holeMarkerConfig(rearAt, colors.value.lift, 5),
+    frontHole: holeMarkerConfig(frontAt, colors.value.lift, 5),
+    // Étiquettes seulement quand le bumper est sous le curseur : nommer les
+    // pions en permanence rajouterait du texte là où on vient justement d'en
+    // enlever.
+    labels: pinLabelsVisible.value
+      ? [pinLabel(frontAt, "pion avant"), pinLabel(rearAt, "pion arrière")]
+      : [],
+  };
+});
+
+/// Les pions se nomment quand on regarde le bumper : ils sont à lui, et c'est
+/// sur lui que leurs valeurs sont affichées.
+const pinLabelsVisible = computed(
+  () => anchor.value?.idx === BUMPER_ANCHOR_IDX || pinnedIdx.value === BUMPER_ANCHOR_IDX,
+);
+
+function pinLabel(p: Vec2, text: string) {
+  const s = toLocal(p);
+  return {
+    x: s.x + px(7),
+    y: s.y - px(14),
+    text,
+    fontSize: px(11),
+    fontStyle: "600",
+    fill: colors.value.lift,
+  };
+}
 
 function arrowConfig(from: Vec2, force: Vec2, color: string) {
   const mag = Math.hypot(force.x, force.y);
@@ -701,9 +823,16 @@ function pairSpanConfig(j: ClusterResult["joints"][number]) {
   };
 }
 
-function holeMarkerConfig(p: Vec2, color: string) {
+function holeMarkerConfig(p: Vec2, color: string, radiusPx = 3) {
   const s = toLocal(p);
-  return { x: s.x, y: s.y, radius: px(3), fill: colors.value.card, stroke: color, strokeWidth: px(1.5) };
+  return {
+    x: s.x,
+    y: s.y,
+    radius: px(radiusPx),
+    fill: colors.value.card,
+    stroke: color,
+    strokeWidth: px(1.5),
+  };
 }
 
 function reversedRingConfig(p: Vec2) {
@@ -835,16 +964,33 @@ function handleWheel(e: { evt: WheelEvent }) {
               <v-text :config="bumperSupportArrow!.label" />
             </template>
 
-            <!-- Les deux pions du bumper, avant et arrière, à leur point
-                 d'application réel — dans le caisson, pas sur le rectangle du
-                 bumper. Le trait pointillé dit à quelle pièce ils appartiennent. -->
+            <!-- La paire qui boulonne la barre du bumper sur l'enceinte de
+                 référence : ses deux goupilles à elle, comme sur toute autre
+                 enceinte de la grappe — donc lue de la même façon, une seule
+                 résultante au repos et le détail au survol. -->
+            <template v-if="bumperBarPair">
+              <template v-if="bumperBarPair!.detailed">
+                <v-arrow :config="bumperBarPair!.anchor" />
+                <v-arrow :config="bumperBarPair!.latch" />
+                <v-line :config="bumperBarPair!.span" />
+                <v-circle :config="bumperBarPair!.anchorHole" />
+                <v-circle :config="bumperBarPair!.latchHole" />
+              </template>
+              <template v-else>
+                <v-arrow :config="bumperBarPair!.resultant" />
+                <v-circle :config="bumperBarPair!.midHole" />
+              </template>
+            </template>
+
+            <!-- Les deux pions du bumper, avant et arrière, portés par la face
+                 du bumper qui les tient : c'est le bumper qui charge, pas
+                 l'enceinte de référence. -->
             <template v-if="bumperPins">
-              <v-line :config="bumperPins!.frontTether" />
-              <v-line :config="bumperPins!.rearTether" />
               <v-arrow :config="bumperPins!.front" />
               <v-arrow :config="bumperPins!.rear" />
               <v-circle :config="bumperPins!.frontHole" />
               <v-circle :config="bumperPins!.rearHole" />
+              <v-text v-for="(l, i) in bumperPins!.labels" :key="'pin-' + i" :config="l" />
             </template>
 
             <template v-if="compartment === 'flown' && tieArrowConfig">
@@ -864,13 +1010,13 @@ function handleWheel(e: { evt: WheelEvent }) {
                    dans le caisson ; le détail du couple ne se lit de toute façon
                    qu'en regardant une jonction en particulier. -->
               <template v-if="pairDetailed(j)">
-                <v-arrow :config="arrowConfig(j.anchorHoleGlobal, j.fAnchorGlobal, colors.orientation)" />
-                <v-arrow :config="arrowConfig(j.latchHoleGlobal, j.fLatchGlobal, colors.orientation)" />
+                <v-arrow :config="arrowConfig(j.anchorHoleGlobal, j.fAnchorGlobal, colors.anchor)" />
+                <v-arrow :config="arrowConfig(j.latchHoleGlobal, j.fLatchGlobal, colors.latch)" />
                 <!-- L'entraxe, bras du couple : c'est lui qui explique l'écart
                      entre les deux flèches. -->
                 <v-line :config="pairSpanConfig(j)" />
-                <v-circle :config="holeMarkerConfig(j.anchorHoleGlobal, colors.orientation)" />
-                <v-circle :config="holeMarkerConfig(j.latchHoleGlobal, colors.orientation)" />
+                <v-circle :config="holeMarkerConfig(j.anchorHoleGlobal, colors.anchor)" />
+                <v-circle :config="holeMarkerConfig(j.latchHoleGlobal, colors.latch)" />
               </template>
               <template v-else>
                 <v-arrow :config="pairResultantConfig(j)" />
@@ -927,7 +1073,11 @@ function handleWheel(e: { evt: WheelEvent }) {
              splay et sa bielle, celle du dessus sa paire ancrage/verrou. Les
              quatre trous sont donc bien les siens — c'est le nom du trou qui
              compte, pas celui de la jonction. -->
-        <template v-if="speakerPopupData.joint || speakerPopupData.pairJoint">
+        <template
+          v-if="
+            speakerPopupData.joint || speakerPopupData.pairJoint || speakerPopupData.bumperBarPair
+          "
+        >
           <div class="mt-1 text-xs text-muted-foreground">Efforts sur ses perçages</div>
         </template>
 
@@ -948,15 +1098,38 @@ function handleWheel(e: { evt: WheelEvent }) {
           </div>
         </template>
 
+        <!-- Tenue par la barre du bumper, sur sa propre paire : mêmes trous,
+             mêmes noms que partout ailleurs dans la grappe. -->
+        <template v-if="speakerPopupData.bumperBarPair">
+          <div class="flex justify-between text-zone-anchor">
+            <dt>Ancrage</dt>
+            <dd>
+              {{ speakerPopupData.bumperBarPair.anchorN.toFixed(0) }} N @
+              {{ speakerPopupData.bumperBarPair.anchorAngleDeg.toFixed(1) }}°
+            </dd>
+          </div>
+          <div class="flex justify-between text-zone-latch">
+            <dt>Verrou</dt>
+            <dd>
+              {{ speakerPopupData.bumperBarPair.latchN.toFixed(0) }} N @
+              {{ speakerPopupData.bumperBarPair.latchAngleDeg.toFixed(1) }}°
+            </dd>
+          </div>
+          <div class="flex justify-between">
+            <dt class="text-muted-foreground">M barre bumper</dt>
+            <dd>{{ speakerPopupData.bumperBarPair.momentNm.toFixed(1) }} N·m</dd>
+          </div>
+        </template>
+
         <template v-if="speakerPopupData.pairJoint">
-          <div class="flex justify-between text-zone-orientation">
+          <div class="flex justify-between text-zone-anchor">
             <dt>Ancrage</dt>
             <dd>
               {{ speakerPopupData.pairJoint.fAnchorN.toFixed(0) }} N @
               {{ speakerPopupData.pairJoint.fAnchorAngleDeg.toFixed(1) }}°
             </dd>
           </div>
-          <div class="flex justify-between text-zone-orientation">
+          <div class="flex justify-between text-zone-latch">
             <dt>Verrou</dt>
             <dd>
               {{ speakerPopupData.pairJoint.fLatchN.toFixed(0) }} N @
@@ -971,8 +1144,33 @@ function handleWheel(e: { evt: WheelEvent }) {
           </div>
         </template>
 
+        <!-- La tirette tire sur cette enceinte-ci : sa tension est une charge
+             qu'elle subit, au même titre que ses goupilles. -->
+        <template v-if="speakerPopupData.tie">
+          <div class="mt-1 text-xs text-muted-foreground">Tirette</div>
+          <div class="flex justify-between text-zone-lift">
+            <dt>Tension</dt>
+            <dd>{{ speakerPopupData.tie.tensionKn.toFixed(2) }} kN</dd>
+          </div>
+          <div class="flex justify-between">
+            <dt class="text-muted-foreground">Direction</dt>
+            <dd>
+              {{
+                speakerPopupData.tie.angleDeg !== null
+                  ? `${speakerPopupData.tie.angleDeg.toFixed(1)}°`
+                  : "—"
+              }}
+            </dd>
+          </div>
+        </template>
+
         <p
-          v-if="!speakerPopupData.joint && !speakerPopupData.pairJoint"
+          v-if="
+            !speakerPopupData.joint &&
+            !speakerPopupData.pairJoint &&
+            !speakerPopupData.bumperBarPair &&
+            !speakerPopupData.tie
+          "
           class="mt-1 text-muted-foreground"
         >
           Aucune charge directe (flanc non porteur).

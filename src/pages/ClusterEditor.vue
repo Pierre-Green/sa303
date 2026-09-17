@@ -747,6 +747,7 @@ watch(form, recomputeViewer, { deep: true, immediate: true });
         v-if="clusterResult"
         :result="clusterResult"
         :compartment="form.compartment"
+        :view-key="form.id"
         class="h-full"
       />
       <div v-else class="flex h-full items-center justify-center text-sm text-muted-foreground">

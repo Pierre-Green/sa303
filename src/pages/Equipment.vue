@@ -90,6 +90,9 @@ interface BumperFormState {
   height: number;
   shackleHeightAboveBumper: number;
   maxDirectDeportMm: number;
+  pinFrontFromFrontMm: number;
+  pinRearFromRearMm: number;
+  pinHeightFromBottomMm: number;
   compatibility: Record<string, { flown: boolean; stacked: boolean }>;
 }
 
@@ -102,6 +105,10 @@ function blankBumperForm(): BumperFormState {
     height: 100,
     shackleHeightAboveBumper: 40,
     maxDirectDeportMm: 351,
+    // Perçage de la SA303-BUMPER : deux pions à mi-épaisseur.
+    pinFrontFromFrontMm: 12.567,
+    pinRearFromRearMm: 32.604,
+    pinHeightFromBottomMm: 50,
     compatibility: {},
   };
 }
@@ -121,6 +128,9 @@ function loadIntoBumperForm(b: BumperModel) {
     height: b.height,
     shackleHeightAboveBumper: b.shackleHeightAboveBumper,
     maxDirectDeportMm: b.maxDirectDeportMm,
+    pinFrontFromFrontMm: b.pins.frontFromFrontMm,
+    pinRearFromRearMm: b.pins.rearFromRearMm,
+    pinHeightFromBottomMm: b.pins.heightFromBottomMm,
     compatibility,
   });
 }
@@ -158,6 +168,11 @@ function buildBumper(): BumperModel {
     height: bumperForm.height,
     shackleHeightAboveBumper: bumperForm.shackleHeightAboveBumper,
     maxDirectDeportMm: bumperForm.maxDirectDeportMm,
+    pins: {
+      frontFromFrontMm: bumperForm.pinFrontFromFrontMm,
+      rearFromRearMm: bumperForm.pinRearFromRearMm,
+      heightFromBottomMm: bumperForm.pinHeightFromBottomMm,
+    },
     compatibleSpeakers: Object.entries(bumperForm.compatibility)
       .filter(([, c]) => c.flown || c.stacked)
       .map(([speakerModelId, c]) => ({ speakerModelId, flown: c.flown, stacked: c.stacked })),
@@ -497,6 +512,27 @@ async function removeBumperBar() {
                       Déport direct max<InfoTip text="Décalage maximal de l'accroche par rapport au centre du bumper avant qu'une SA303-BUMPER-BAR ne soit nécessaire. Par défaut la moitié de la profondeur." />
                     </Label>
                     <Input v-model.number="bumperForm.maxDirectDeportMm" type="number" />
+                  </div>
+                </div>
+
+                <div>
+                  <Label class="mb-1.5 flex items-center text-xs">
+                    Perçage des pions
+                    <InfoTip text="Les deux pions qui goupillent le bumper à l'enceinte de référence, cotés depuis les bords du bumper comme sur le plan. C'est du perçage déclaré : il n'est pas déduit de la quincaillerie de l'enceinte, qui donnerait deux points différents et dépendants du modèle monté dessous." />
+                  </Label>
+                  <div class="grid grid-cols-3 gap-2">
+                    <div class="flex flex-col gap-1.5">
+                      <Label class="text-xs">Avant / face avant</Label>
+                      <Input v-model.number="bumperForm.pinFrontFromFrontMm" type="number" step="0.001" />
+                    </div>
+                    <div class="flex flex-col gap-1.5">
+                      <Label class="text-xs">Arrière / face arrière</Label>
+                      <Input v-model.number="bumperForm.pinRearFromRearMm" type="number" step="0.001" />
+                    </div>
+                    <div class="flex flex-col gap-1.5">
+                      <Label class="text-xs">Hauteur / dessous</Label>
+                      <Input v-model.number="bumperForm.pinHeightFromBottomMm" type="number" step="0.1" />
+                    </div>
                   </div>
                 </div>
 

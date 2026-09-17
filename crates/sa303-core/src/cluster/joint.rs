@@ -25,6 +25,7 @@
 
 use super::kinematics::{ChainSpeaker, SpeakerInstance};
 use super::model::Compartment;
+use super::pair::split_over_pair;
 use crate::speaker::{CrownRow, JointOffset, RearBar, SpeakerGeometry, SplayRange};
 use crate::tie::TieForce;
 use crate::vector::{angle_of, Vec2};
@@ -353,9 +354,6 @@ pub fn compute_joint(input: &JointInput) -> Result<JointResult, JointInconsisten
     // donc `Σ M = M_G` est vrai par construction plutôt que par une convention
     // qu'il faudrait retenir. Le test `pin_pair_reproduces_force_and_moment` le
     // vérifie sur un point quelconque.
-    let ab = an - lt;
-    let d = ab.norm();
-    let g_point = (an + lt) * 0.5;
     // Effort que la barre applique au caisson du bas. En vol la barre fait
     // partie du corps libre et reçoit `f_ori` à la couronne ; en stack elle est
     // hors du corps libre et reçoit `−f_ori`. Dans les deux cas elle transmet
@@ -364,16 +362,9 @@ pub fn compute_joint(input: &JointInput) -> Result<JointResult, JointInconsisten
         Compartment::Flown => f_ori,
         Compartment::Stacked => -f_ori,
     };
-    // Ce que les goupilles **subissent**, donc l'opposé de la réaction qu'elles
-    // opposent à la barre : la barre leur délivre exactement ce qu'elle a reçu
-    // à la couronne, moment compris.
-    let f_pair = f_on_bar;
-    let m_g = (bo - g_point).cross(f_on_bar);
-    // perp(ab) tourné d'un quart de tour : (x, y) -> (−y, x).
-    let perp = Vec2::new(-ab.y, ab.x) * (1.0 / d);
-    let p = perp * (m_g / d);
-    let f_anchor_g = f_pair * 0.5 + p;
-    let f_latch_g = f_pair * 0.5 - p;
+    // Ce que les goupilles **subissent** : la barre leur délivre exactement ce
+    // qu'elle a reçu à la couronne, moment compris.
+    let (f_anchor_g, f_latch_g, m_g) = split_over_pair(an, lt, bo, f_on_bar);
     // Exactement le moment qui produit le couple ci-dessus — pas une
     // reconstruction `|V| × bras`, qui perdrait le bras transversal de `up660`
     // et ne coïnciderait donc plus avec les efforts réellement rendus.

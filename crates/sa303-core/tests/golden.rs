@@ -2,7 +2,7 @@
 //! puis valeurs de référence (golden test).
 
 use sa303_core::bumper::{
-    BumperBarCompatibility, BumperBarModel, BumperCompatibility, BumperModel,
+    BumperBarCompatibility, BumperBarModel, BumperCompatibility, BumperModel, BumperPins,
 };
 use sa303_core::cluster::{Cluster, Compartment, JointResult, JointSetting};
 use sa303_core::settings::{AxisMapping, PinSpec, PlateSpec, Settings};
@@ -44,7 +44,7 @@ fn default_speaker() -> SpeakerModel {
                 angle_deg: -13.0,
             },
             latch_offset: 100.0,
-            splay_grid: vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 20.0],
+            splay_grid: vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 10.5, 20.0],
             frame_hole_splay: 0.0,
             rear_face_x: 351.0,
             rear_bar: RearBar {
@@ -156,33 +156,33 @@ fn representative_clusters(bumper_id: &str) -> Vec<Cluster> {
         ),
         flown_cluster(
             "Grosse banane 12",
-            &[1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.0, 10.0, 10.0, 10.0],
+            &[1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5],
             None,
             bumper_id,
         ),
         flown_cluster(
             "J-array 14",
             &[
-                0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 2.0, 3.0, 5.0, 10.0, 10.0, 20.0,
+                0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 2.0, 3.0, 5.0, 10.5, 10.5, 20.0,
             ],
             None,
             bumper_id,
         ),
         flown_cluster(
             "Long splay 8",
-            &[5.0, 5.0, 10.0, 10.0, 10.0, 20.0, 20.0],
+            &[5.0, 5.0, 10.5, 10.5, 10.5, 20.0, 20.0],
             None,
             bumper_id,
         ),
         flown_cluster(
             "Assiette -6",
-            &[0.0, 0.0, 0.0, 1.0, 1.0, 2.0, 3.0, 5.0, 10.0, 10.0, 10.0],
+            &[0.0, 0.0, 0.0, 1.0, 1.0, 2.0, 3.0, 5.0, 10.5, 10.5, 10.5],
             Some(-6.0),
             bumper_id,
         ),
         stack_cluster("Stack classique 3", &[0.0, 20.0], 40.0, bumper_id),
         stack_cluster("Stack 4 boites", &[0.0, 0.0, 20.0], 40.0, bumper_id),
-        stack_cluster("Stack peu incliné", &[0.0, 10.0], 20.0, bumper_id),
+        stack_cluster("Stack peu incliné", &[0.0, 10.5], 20.0, bumper_id),
         stack_cluster("Stack droit 3", &[0.0, 0.0], 0.0, bumper_id),
     ]
 }
@@ -196,11 +196,62 @@ fn default_bumper() -> BumperModel {
         height: 100.0,
         shackle_height_above_bumper: 40.0,
         max_direct_deport_mm: 702.0 / 2.0,
+        // Perçage relevé de la SA303-BUMPER : deux pions à mi-épaisseur.
+        pins: BumperPins {
+            front_from_front_mm: 12.567,
+            rear_from_rear_mm: 32.604,
+            height_from_bottom_mm: 50.0,
+        },
         compatible_speakers: vec![BumperCompatibility {
             speaker_model_id: "sa303".into(),
             flown: true,
             stacked: true,
         }],
+    }
+}
+
+/// Le perçage des pions est une donnée du bumper, pas une construction : il se
+/// lit sur ses propres bords, et ne doit dépendre ni du modèle d'enceinte monté
+/// dessous ni de la quincaillerie de celui-ci.
+#[test]
+fn bumper_pins_sit_where_the_drawing_says_and_not_on_the_speaker_hardware() {
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let outline = sa303_core::bumper::bumper_outline_top(&sm, &bumper);
+    let [front, rear] = sa303_core::bumper::bumper_pin_points(&outline, &bumper);
+
+    // Repère enceinte : avant = x négatif, bumper posé sur la face supérieure.
+    // Avant à 12,567 mm de la face avant, arrière à 32,604 mm de la face
+    // arrière, tous deux à mi-épaisseur (50 sur 100).
+    let half_d = bumper.depth / 2.0;
+    let bottom = sm.mechanical.height / 2.0;
+    assert!((front.x - (-half_d + 12.567)).abs() < 1e-9, "{front:?}");
+    assert!((rear.x - (half_d - 32.604)).abs() < 1e-9, "{rear:?}");
+    assert!((front.y - (bottom + 50.0)).abs() < 1e-9, "{front:?}");
+    assert!(
+        (rear.y - front.y).abs() < 1e-9,
+        "les deux pions sont sur la même ligne"
+    );
+
+    // Et l'entraxe des pions est bien celui du plan, pas celui de la couronne.
+    let span = (rear - front).norm();
+    assert!(
+        (span - (702.0 - 12.567 - 32.604)).abs() < 1e-9,
+        "entraxe {span}"
+    );
+
+    // Ils ne se confondent avec aucun trou de l'enceinte : la statique se
+    // résout dans le caisson, les pions sont sur le bumper.
+    let geo = sa303_core::speaker::SpeakerGeometry::compute(&sm);
+    for hole in [geo.ht, geo.anchor_local, geo.latch_local] {
+        assert!(
+            (hole - front).norm() > 1.0,
+            "pion avant confondu avec {hole:?}"
+        );
+        assert!(
+            (hole - rear).norm() > 1.0,
+            "pion arrière confondu avec {hole:?}"
+        );
     }
 }
 
@@ -247,7 +298,7 @@ fn the_moment_residual_is_sensitive_enough_to_catch_a_wrong_bielle_force() {
     let sm = default_speaker();
     let bumper = default_bumper();
     let settings = default_settings();
-    let cluster = flown_cluster("contrôle", &[1.0, 5.0, 10.0], None, &bumper.id);
+    let cluster = flown_cluster("contrôle", &[1.0, 5.0, 10.5], None, &bumper.id);
     let result = compute_cluster(std::slice::from_ref(&sm), &cluster, &settings, &bumper, &[])
         .expect("configuration possible");
 
@@ -360,7 +411,9 @@ fn golden_reference_bumper() -> BumperModel {
 
 /// Valeurs de référence recalculées sous le modèle à bielle : la liaison avant
 /// et la barre arrière ayant échangé leurs rôles, les efforts ne pouvaient pas
-/// rester ceux du modèle précédent. Elles sortent du calcul, pas d'un
+/// rester ceux du modèle précédent. Repiquées une seconde fois au passage du
+/// trou de couronne de 10° à 10,5° : la grappe n'a plus la même forme, donc
+/// plus les mêmes efforts (J7 bouge le plus, +23,8 N sur 3,9 kN). Elles sortent du calcul, pas d'un
 /// recoupement à la main — ce qui est vérifié indépendamment, c'est la
 /// cinématique (`tests/bielle.rs`, contre le perçage relevé) et l'équilibre
 /// (`invariant_equilibrium_residual_is_negligible`).
@@ -371,7 +424,7 @@ fn golden_grosse_banane_12() {
     let settings = default_settings();
     let cluster = flown_cluster(
         "Grosse banane 12",
-        &[1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.0, 10.0, 10.0, 10.0],
+        &[1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5],
         None,
         &bumper.id,
     );
@@ -383,27 +436,27 @@ fn golden_grosse_banane_12() {
     const TOL_DEG: f64 = 0.2;
 
     // J1
-    check_case(j(1), 4265.1, 345.8, TOL_N, TOL_DEG);
+    check_case(j(1), 4270.7, 345.7, TOL_N, TOL_DEG);
     let mp = j(1).f_pivot.norm();
-    assert!((mp - 1637.2).abs() <= TOL_N, "J1 F bielle {mp}");
+    assert!((mp - 1631.8).abs() <= TOL_N, "J1 F bielle {mp}");
     angle_close(j(1).f_pivot, 359.5, TOL_DEG);
 
     // J2
-    check_case(j(2), 4630.6, 349.3, TOL_N, TOL_DEG);
+    check_case(j(2), 4639.8, 349.3, TOL_N, TOL_DEG);
     let mp = j(2).f_pivot.norm();
-    assert!((mp - 713.2).abs() <= TOL_N, "J2 F bielle {mp}");
+    assert!((mp - 704.1).abs() <= TOL_N, "J2 F bielle {mp}");
     angle_close(j(2).f_pivot, 359.0, TOL_DEG);
 
     // J3
-    check_case(j(3), 5091.7, 352.9, TOL_N, TOL_DEG);
+    check_case(j(3), 5104.7, 352.9, TOL_N, TOL_DEG);
     let mp = j(3).f_pivot.norm();
-    assert!((mp - 291.6).abs() <= TOL_N, "J3 F bielle {mp}");
+    assert!((mp - 304.7).abs() <= TOL_N, "J3 F bielle {mp}");
     angle_close(j(3).f_pivot, 178.5, TOL_DEG);
 
     // J7
-    check_case(j(7), 3910.5, 5.7, TOL_N, TOL_DEG);
+    check_case(j(7), 3934.3, 5.6, TOL_N, TOL_DEG);
     let mp = j(7).f_pivot.norm();
-    assert!((mp - 1262.0).abs() <= TOL_N, "J7 F bielle {mp}");
+    assert!((mp - 1285.9).abs() <= TOL_N, "J7 F bielle {mp}");
     angle_close(j(7).f_pivot, 177.5, TOL_DEG);
 }
 
@@ -542,7 +595,7 @@ fn bumper_free_hang_matches_manual_pickup_at_bumper_center() {
     let sm = default_speaker();
     let bumper = default_bumper();
     let settings = default_settings();
-    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.0, 10.0, 10.0, 10.0];
+    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
 
     let cluster = flown_cluster("avec bumper", &splays, None, &bumper.id);
     let result = compute_cluster(std::slice::from_ref(&sm), &cluster, &settings, &bumper, &[])
@@ -571,7 +624,7 @@ fn bumper_imposed_tilt_solves_pickup_directly_above_cm() {
     let settings = default_settings();
     let cluster = flown_cluster(
         "assiette imposée",
-        &[1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.0, 10.0, 10.0, 10.0],
+        &[1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5],
         Some(-6.0),
         &bumper.id,
     );
@@ -592,7 +645,7 @@ fn bumper_reports_deport_bar_only_when_pickup_exceeds_bumper_depth() {
     let bumper = default_bumper();
     let bumper_bar = default_bumper_bar();
     let settings = default_settings();
-    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.0, 10.0, 10.0, 10.0];
+    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
 
     // Assiette libre, accrochage centré : tient dans le bumper, pas de barre.
     let free = flown_cluster("libre", &splays, None, &bumper.id);
@@ -721,7 +774,7 @@ fn deport_beyond_bar_max_reach_auto_activates_a_tie_and_keeps_equilibrium() {
         ..default_bumper_bar()
     };
     let settings = default_settings();
-    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.0, 10.0, 10.0, 10.0]; // somme 65°
+    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5]; // somme 65°
 
     // Assiette imposée à -20°, direction de traction à 0° (connue tenable et
     // dégagée à cette assiette, cf. probe manuel) : rien ne bloque le câble.
@@ -789,7 +842,7 @@ fn tie_direction_that_crosses_another_enceinte_is_impossible() {
         ..default_bumper_bar()
     };
     let settings = default_settings();
-    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.0, 10.0, 10.0, 10.0];
+    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
 
     let mut cluster = flown_cluster("tirette bloquée", &splays, Some(-6.0), &bumper.id);
     cluster.tie_angle = Some(90.0);
@@ -820,7 +873,7 @@ fn tie_direction_clear_of_other_enceintes_stays_possible() {
         ..default_bumper_bar()
     };
     let settings = default_settings();
-    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.0, 10.0, 10.0, 10.0];
+    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
 
     let mut cluster = flown_cluster("tirette possible", &splays, Some(-20.0), &bumper.id);
     cluster.tie_angle = Some(0.0);
@@ -867,7 +920,7 @@ fn user_can_pick_their_own_angle_inside_the_reported_range() {
         ..default_bumper_bar()
     };
     let settings = default_settings();
-    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.0, 10.0, 10.0, 10.0];
+    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
 
     let mut baseline = flown_cluster("angle connu", &splays, Some(-20.0), &bumper.id);
     baseline.tie_angle = Some(0.0); // connu tenable et dégagé à cette assiette
@@ -913,7 +966,7 @@ fn user_chosen_angle_outside_the_valid_range_is_impossible() {
         ..default_bumper_bar()
     };
     let settings = default_settings();
-    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.0, 10.0, 10.0, 10.0];
+    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
 
     let mut cluster = flown_cluster("hors plage", &splays, Some(-20.0), &bumper.id);
     cluster.tie_angle = Some(180.0); // hors de la plage valable à -20° (cf. probe manuel)
@@ -949,7 +1002,7 @@ fn tie_direction_is_never_a_pushing_direction() {
         ..default_bumper_bar()
     };
     let settings = default_settings();
-    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.0, 10.0, 10.0, 10.0];
+    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
 
     let mut cluster = flown_cluster("grosse banane -61", &splays, Some(-61.0), &bumper.id);
     cluster.tie_angle = Some(90.0); // connu tenable à -61°, contrairement à 0°
@@ -975,7 +1028,7 @@ fn bumper_loads_satisfy_equilibrium_like_a_real_joint() {
     let sm = default_speaker();
     let bumper = default_bumper();
     let settings = default_settings();
-    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.0, 10.0, 10.0, 10.0];
+    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
     let cluster = flown_cluster("charge bumper", &splays, Some(-6.0), &bumper.id);
     let result = compute_cluster(std::slice::from_ref(&sm), &cluster, &settings, &bumper, &[])
         .expect("configuration possible");
@@ -1022,7 +1075,7 @@ fn bar_is_derived_automatically_from_the_active_bumper_never_selected_manually()
         }],
     };
     let settings = default_settings();
-    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.0, 10.0, 10.0, 10.0];
+    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
     let mut cluster = flown_cluster("auto barre", &splays, Some(-20.0), &bumper.id);
     cluster.tie_angle = Some(0.0); // connu tenable et dégagé à cette assiette
 
@@ -1073,7 +1126,7 @@ fn speaker_accepting_heavy_below() -> SpeakerModel {
         speaker_model_id: "sa303-heavy".into(),
         flown: true,
         stacked: true,
-        recommended_splay: Some(SplayRange::exactly(10.0)),
+        recommended_splay: Some(SplayRange::exactly(10.5)),
     });
     model
 }
@@ -1106,7 +1159,7 @@ fn mixed_chain_weighs_each_speaker_on_its_own_mass() {
     let catalogue = vec![light.clone(), heavy.clone()];
 
     let cluster = mixed_cluster(
-        &[10.0, 20.0],
+        &[10.5, 20.0],
         &["sa303", "sa303-heavy", "sa303-heavy"],
         &bumper.id,
     );
@@ -1141,7 +1194,7 @@ fn undeclared_joint_between_two_models_is_impossible() {
     let settings = default_settings();
     let catalogue = vec![light, heavy];
 
-    let cluster = mixed_cluster(&[10.0, 5.0], &["sa303", "sa303-heavy", "sa303"], &bumper.id);
+    let cluster = mixed_cluster(&[10.5, 5.0], &["sa303", "sa303-heavy", "sa303"], &bumper.id);
     let err = compute_cluster(&catalogue, &cluster, &settings, &bumper, &[])
         .expect_err("jonction heavy → sa303 non déclarée");
     assert!(
@@ -1179,13 +1232,13 @@ fn acoustic_recommendation_flags_the_joint_without_ever_failing() {
     let ids = ["sa303", "sa303-heavy", "sa303-heavy"];
 
     // 10° puis 20° : exactement ce que les deux modèles recommandent.
-    let optimal = mixed_cluster(&[10.0, 20.0], &ids, &bumper.id);
+    let optimal = mixed_cluster(&[10.5, 20.0], &ids, &bumper.id);
     let optimal_result = compute_cluster(&catalogue, &optimal, &settings, &bumper, &[])
         .expect("configuration possible");
     assert!(optimal_result.joints.iter().all(|j| j.acoustically_optimal));
     assert_eq!(
         optimal_result.joints[0].recommended_splay_range_deg,
-        Some([10.0, 10.0])
+        Some([10.5, 10.5])
     );
     assert_eq!(
         optimal_result.joints[1].recommended_splay_range_deg,
@@ -1211,7 +1264,7 @@ fn a_joint_without_declared_recommendation_is_never_flagged() {
     let sm = default_speaker();
     let bumper = default_bumper();
     let settings = default_settings();
-    let cluster = flown_cluster("libre", &[0.0, 10.0], None, &bumper.id);
+    let cluster = flown_cluster("libre", &[0.0, 10.5], None, &bumper.id);
 
     let result = compute_cluster(std::slice::from_ref(&sm), &cluster, &settings, &bumper, &[])
         .expect("configuration possible");
@@ -1249,21 +1302,21 @@ fn mutually_declared_models_can_alternate_in_both_directions() {
         speaker_model_id: "sa303-heavy".into(),
         flown: true,
         stacked: true,
-        recommended_splay: Some(SplayRange::exactly(10.0)),
+        recommended_splay: Some(SplayRange::exactly(10.5)),
     });
     let mut heavy = heavy_speaker();
     heavy.compatible_below.push(BelowCompatibility {
         speaker_model_id: "sa303".into(),
         flown: true,
         stacked: true,
-        recommended_splay: Some(SplayRange::exactly(10.0)),
+        recommended_splay: Some(SplayRange::exactly(10.5)),
     });
     let bumper = default_bumper();
     let settings = default_settings();
     let catalogue = vec![light, heavy];
 
     // sa303 → heavy (10°, recommandé) → sa303 (4°, hors reco).
-    let cluster = mixed_cluster(&[10.0, 4.0], &["sa303", "sa303-heavy", "sa303"], &bumper.id);
+    let cluster = mixed_cluster(&[10.5, 4.0], &["sa303", "sa303-heavy", "sa303"], &bumper.id);
     let result = compute_cluster(&catalogue, &cluster, &settings, &bumper, &[])
         .expect("les deux sens sont déclarés");
 
@@ -1337,7 +1390,7 @@ fn the_trim_height_moves_the_cluster_without_changing_a_single_force() {
     let bumper = default_bumper();
     let bumper_bar = default_bumper_bar();
     let settings = default_settings();
-    let splays = [0.0, 5.0, 10.0];
+    let splays = [0.0, 5.0, 10.5];
 
     let ground = flown_cluster("au sol", &splays, None, &bumper.id);
     let mut flown = ground.clone();
@@ -1473,7 +1526,7 @@ fn a_pickup_that_slides_along_the_bumper_is_reported_as_off_centre() {
     let bumper = default_bumper();
     let bumper_bar = default_bumper_bar();
     let settings = default_settings();
-    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.0, 10.0, 10.0, 10.0];
+    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
 
     let view_at = |tilt: Option<f64>| {
         let cluster = flown_cluster("accroche", &splays, tilt, &bumper.id);
@@ -1627,7 +1680,7 @@ fn the_pin_pair_reproduces_both_the_force_and_the_moment_of_the_bar() {
     let clusters = [
         flown_cluster("vol pair", &[0.0, 2.0, 20.0], None, &bumper.id),
         flown_cluster("vol impair", &[1.0, 3.0, 5.0], Some(-10.0), &bumper.id),
-        stack_cluster("stack", &[0.0, 10.0, 20.0], 40.0, &bumper.id),
+        stack_cluster("stack", &[0.0, 10.5, 20.0], 40.0, &bumper.id),
     ];
 
     let mut checked = 0;
@@ -1744,7 +1797,7 @@ fn the_tie_tension_already_carries_the_dynamic_factor() {
         ..default_bumper_bar()
     };
     let settings = default_settings();
-    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.0, 10.0, 10.0, 10.0];
+    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
     let mut cluster = flown_cluster("tirette", &splays, Some(-20.0), &bumper.id);
     cluster.tie_angle = Some(0.0);
 
@@ -1784,7 +1837,7 @@ fn only_the_top_flown_joint_is_flagged_as_following_the_legacy_bumper_model() {
 
     let flown = compute_cluster(
         std::slice::from_ref(&sm),
-        &flown_cluster("vol", &[1.0, 5.0, 10.0], None, &bumper.id),
+        &flown_cluster("vol", &[1.0, 5.0, 10.5], None, &bumper.id),
         &settings,
         &bumper,
         &[],
@@ -1802,7 +1855,7 @@ fn only_the_top_flown_joint_is_flagged_as_following_the_legacy_bumper_model() {
     // En stack il n'y a pas de bumper au-dessus : aucune jonction n'est concernée.
     let stacked = compute_cluster(
         std::slice::from_ref(&sm),
-        &stack_cluster("stack", &[0.0, 10.0], 40.0, &bumper.id),
+        &stack_cluster("stack", &[0.0, 10.5], 40.0, &bumper.id),
         &settings,
         &bumper,
         &[],
@@ -1933,6 +1986,64 @@ fn the_audit_export_carries_everything_needed_to_recompute_it() {
             };
             assert!((by_name - check.utilization_worst).abs() < 1e-12);
         }
+
+        // L'accrochage du bumper est vérifié au même titre : c'est lui qui
+        // reprend tout ce qui pend. Le pire de la grappe le majore aussi.
+        let bc = &c.bumper_checks;
+        assert!(
+            c.utilization_worst >= bc.utilization_worst - 1e-12,
+            "{} : le pire de la grappe ignore l'accrochage du bumper",
+            c.definition.name
+        );
+        if let Some(path) = bc.governing_path {
+            let by_name = match path {
+                "pion avant" => bc.utilization_front_pin,
+                "pion arrière" => bc.utilization_rear_pin,
+                "ancrage barre bumper" => bc.utilization_bar_anchor,
+                "verrou barre bumper" => bc.utilization_bar_latch,
+                other => panic!("chemin inconnu : {other}"),
+            };
+            assert!((by_name.unwrap() - bc.utilization_worst).abs() < 1e-12);
+        }
+        // Les deux pions sont toujours chargés, dans les deux compartiments.
+        assert!(bc.utilization_front_pin.is_some(), "pion avant non vérifié");
+        assert!(
+            bc.utilization_rear_pin.is_some(),
+            "pion arrière non vérifié"
+        );
+
+        // Et la géométrie qui fonde ces efforts voyage avec : perçage déclaré du
+        // bumper, et points d'application en repère global.
+        let bumper_def = export
+            .definitions
+            .bumpers
+            .iter()
+            .find(|b| b.id == c.definition.bumper_model_id)
+            .expect("bumper présent");
+        assert!(bumper_def.pins.front_from_front_mm > 0.0);
+        assert!(bumper_def.pins.rear_from_rear_mm > 0.0);
+        let bv = &c.result.bumper_view;
+        assert!(bv.pivot_point_global.is_some(), "pion avant sans position");
+        assert!(
+            bv.orientation_point_global.is_some(),
+            "pion arrière sans position"
+        );
+        assert!(bv.pin_span_mm > 0.0);
+
+        // En vol, la barre du bumper est boulonnée sur une paire : ses deux
+        // efforts et son moment doivent être dans le document.
+        if c.definition.compartment == Compartment::Flown {
+            assert!(
+                bv.pair_anchor_hole_global.is_some(),
+                "ancrage sans position"
+            );
+            assert!(bv.pair_latch_hole_global.is_some(), "verrou sans position");
+            assert!(bv.f_pair_anchor_n.is_some(), "ancrage sans effort");
+            assert!(bv.f_pair_latch_n.is_some(), "verrou sans effort");
+            assert!(bv.pair_moment_nm.is_some(), "paire sans moment");
+            assert!(bc.utilization_bar_anchor.is_some(), "ancrage non vérifié");
+            assert!(bc.utilization_bar_latch.is_some(), "verrou non vérifié");
+        }
     }
 }
 
@@ -2011,7 +2122,7 @@ fn the_audit_export_round_trips_through_json() {
     let settings = default_settings();
     let selection = vec![flown_cluster(
         "aller-retour",
-        &[1.0, 10.0],
+        &[1.0, 10.5],
         None,
         &bumper.id,
     )];
@@ -2054,7 +2165,7 @@ fn dump_audit_export_sample() {
     let sm = default_speaker();
     let bumper = default_bumper();
     let settings = default_settings();
-    let selection = vec![flown_cluster("Exemple", &[5.0, 10.0], None, &bumper.id)];
+    let selection = vec![flown_cluster("Exemple", &[5.0, 10.5], None, &bumper.id)];
     let export = build_audit_export(
         "2026-09-15T10:00:00Z".into(),
         &selection,
@@ -2176,7 +2287,7 @@ fn the_bumper_carries_exactly_what_hangs_below_it() {
     let bumper = default_bumper();
     let settings = default_settings();
 
-    let cluster = flown_cluster("charge bumper", &[1.0, 2.0, 5.0, 10.0], None, &bumper.id);
+    let cluster = flown_cluster("charge bumper", &[1.0, 2.0, 5.0, 10.5], None, &bumper.id);
     let r = compute_cluster(std::slice::from_ref(&sm), &cluster, &settings, &bumper, &[])
         .expect("configuration possible");
 
@@ -2217,7 +2328,7 @@ fn a_stacked_bumper_reports_both_its_ground_reaction_and_its_two_pins() {
     let sm = default_speaker();
     let bumper = default_bumper();
     let settings = default_settings();
-    let cluster = stack_cluster("appui", &[0.0, 10.0], 20.0, &bumper.id);
+    let cluster = stack_cluster("appui", &[0.0, 10.5], 20.0, &bumper.id);
     let r = compute_cluster(std::slice::from_ref(&sm), &cluster, &settings, &bumper, &[])
         .expect("configuration possible");
 
@@ -2312,7 +2423,7 @@ fn the_export_carries_the_sampled_stress_profile_and_its_critical_section() {
     let sm = default_speaker();
     let bumper = default_bumper();
     let settings = default_settings();
-    let selection = vec![flown_cluster("profil", &[1.0, 5.0, 10.0], None, &bumper.id)];
+    let selection = vec![flown_cluster("profil", &[1.0, 5.0, 10.5], None, &bumper.id)];
     let export = build_audit_export(
         "2026-09-16T10:00:00Z".into(),
         &selection,
@@ -2340,4 +2451,147 @@ fn the_export_carries_the_sampled_stress_profile_and_its_critical_section() {
             }
         }
     }
+}
+
+/// Le perçage déclaré doit **piloter** la statique, pas seulement le dessin :
+/// déplacer un pion change les bras de levier, donc les efforts. Sans ça, la
+/// déclaration serait décorative et le solveur garderait sa propre idée du
+/// montage.
+#[test]
+fn moving_a_declared_pin_moves_the_bumper_loads() {
+    let sm = default_speaker();
+    let settings = default_settings();
+    let bumper = default_bumper();
+    let cluster = flown_cluster("banane", &[1.0, 5.0, 10.5], None, &bumper.id);
+
+    let reference = compute_cluster(std::slice::from_ref(&sm), &cluster, &settings, &bumper, &[])
+        .expect("configuration possible");
+
+    // Même grappe, pion arrière reculé de 100 mm : le bras du couple s'allonge,
+    // l'effort de pion doit baisser.
+    let mut moved = default_bumper();
+    moved.pins.rear_from_rear_mm -= 100.0;
+    let after = compute_cluster(std::slice::from_ref(&sm), &cluster, &settings, &moved, &[])
+        .expect("configuration possible");
+
+    let before_n = reference
+        .bumper_view
+        .orientation_force_n
+        .expect("vol : pions renseignés");
+    let after_n = after
+        .bumper_view
+        .orientation_force_n
+        .expect("vol : pions renseignés");
+    assert!(
+        (before_n - after_n).abs() > 1.0,
+        "le perçage déclaré ne pilote pas la statique : {before_n} N inchangé"
+    );
+    assert!(
+        after.bumper_view.pin_span_mm > reference.bumper_view.pin_span_mm,
+        "l'entraxe des pions doit suivre la déclaration"
+    );
+}
+
+/// L'enceinte de référence est tenue par la même quincaillerie que les autres :
+/// une barre boulonnée sur sa paire ancrage/verrou. Ces deux goupilles doivent
+/// donc porter, et porter exactement ce que la barre leur délivre.
+#[test]
+fn the_reference_speaker_carries_the_bumper_bar_on_its_own_pair() {
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let settings = default_settings();
+    let cluster = flown_cluster(
+        "banane",
+        &[1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5],
+        None,
+        &bumper.id,
+    );
+    let r = compute_cluster(std::slice::from_ref(&sm), &cluster, &settings, &bumper, &[])
+        .expect("configuration possible");
+    let bv = &r.bumper_view;
+
+    let anchor = bv.f_pair_anchor_global.expect("vol : la paire est chargée");
+    let latch = bv.f_pair_latch_global.expect("vol : la paire est chargée");
+    // La paire reprend l'effort du pion arrière, celui que la barre descend :
+    // leur somme vaut ce que la barre a reçu, par flanc.
+    let rear = bv.orientation_force_global.expect("vol");
+    let sum = anchor + latch;
+    assert!(
+        (sum + rear).norm() < 1e-6,
+        "la paire ne rend pas ce que la barre reçoit : {sum:?} contre {rear:?}"
+    );
+
+    // Et le couple qu'elles s'opposent équilibre le moment de la barre.
+    let an = bv.pair_anchor_hole_global.expect("vol");
+    let lt = bv.pair_latch_hole_global.expect("vol");
+    let rear_pt = bv.orientation_point_global.expect("vol");
+    let g = (an + lt) * 0.5;
+    let moment_nmm = (an - g).cross(anchor) + (lt - g).cross(latch) - (rear_pt - g).cross(-rear);
+    assert!(
+        moment_nmm.abs() < 1e-6,
+        "moment non équilibré : {moment_nmm}"
+    );
+
+    // Les deux goupilles sont bien celles de l'enceinte, pas des pions du bumper.
+    let geo = sa303_core::speaker::SpeakerGeometry::compute(&sm);
+    let s0 = r.speakers[0];
+    let expect_an = s0.o + geo.anchor_local.rotate(s0.phi);
+    assert!((an - expect_an).norm() < 1e-9, "ancrage hors du caisson");
+    assert!(bv.f_pair_anchor_n.unwrap() > 0.0);
+    assert!(bv.pair_moment_nm.is_some());
+}
+
+/// L'accrochage du bumper doit peser sur le verdict de la grappe, pas seulement
+/// figurer à côté : c'est lui qui reprend tout ce qui pend. Une grappe dont les
+/// pions sont plus chargés que toutes les jonctions doit voir son coefficient de
+/// sécurité en tenir compte.
+#[test]
+fn the_bumper_attachment_can_govern_the_cluster_safety_factor() {
+    use sa303_core::export::build_audit_export;
+
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let settings = default_settings();
+    // Grappe longue : les pions reprennent onze enceintes, les jonctions basses
+    // n'en portent qu'une ou deux.
+    let selection = vec![flown_cluster(
+        "banane",
+        &[1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5],
+        None,
+        &bumper.id,
+    )];
+
+    let export = build_audit_export(
+        "2026-09-17T10:00:00Z".into(),
+        &selection,
+        std::slice::from_ref(&sm),
+        std::slice::from_ref(&bumper),
+        &[],
+        &settings,
+    );
+    let c = &export.clusters[0];
+
+    // Le pire des jonctions seules, face au pire une fois le bumper compté.
+    let joints_only = c
+        .joint_checks
+        .iter()
+        .map(|j| j.utilization_worst)
+        .fold(0.0_f64, f64::max);
+    assert!(
+        c.bumper_checks.utilization_worst > 0.0,
+        "bumper non vérifié"
+    );
+    assert!(
+        c.utilization_worst >= joints_only - 1e-12,
+        "le bumper ne peut qu'augmenter le pire taux"
+    );
+    assert!(
+        (c.utilization_worst - joints_only.max(c.bumper_checks.utilization_worst)).abs() < 1e-12,
+        "le pire de la grappe n'est pas le max des deux"
+    );
+    // Et le coefficient de sécurité en découle, donc il couvre bien l'accrochage.
+    assert!(
+        (c.safety_factor - settings.safety_factor / c.utilization_worst).abs() < 1e-9,
+        "coefficient déconnecté du pire taux"
+    );
 }

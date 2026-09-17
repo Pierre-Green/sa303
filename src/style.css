@@ -13,6 +13,8 @@
     --color-zone-pivot: var(--zone-pivot);
     --color-zone-orientation: var(--zone-orientation);
     --color-zone-lift: var(--zone-lift);
+    --color-zone-anchor: var(--zone-anchor);
+    --color-zone-latch: var(--zone-latch);
     --color-status-ok: var(--status-ok);
     --color-status-warn: var(--status-warn);
     --color-status-alarm: var(--status-alarm);
@@ -92,6 +94,8 @@
     --zone-pivot: oklch(0.5 0.12 320);
     --zone-orientation: oklch(0.52 0.1 220);
     --zone-lift: oklch(0.6 0.13 60);
+    --zone-anchor: oklch(0.52 0.12 150);
+    --zone-latch: oklch(0.52 0.13 285);
     --status-ok: oklch(0.55 0.1 175);
     --status-warn: oklch(0.65 0.14 70);
     --status-alarm: oklch(0.55 0.22 25);
@@ -133,6 +137,8 @@
     --zone-pivot: oklch(0.72 0.13 320);
     --zone-orientation: oklch(0.72 0.1 220);
     --zone-lift: oklch(0.75 0.13 60);
+    --zone-anchor: oklch(0.74 0.13 150);
+    --zone-latch: oklch(0.74 0.14 285);
     --status-ok: oklch(0.72 0.11 175);
     --status-warn: oklch(0.78 0.14 70);
     --status-alarm: oklch(0.7 0.19 25);

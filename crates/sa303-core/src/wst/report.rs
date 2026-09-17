@@ -11,7 +11,7 @@
 
 use super::formulas::*;
 use crate::cluster::{build_cluster, ChainSpeaker};
-use crate::speaker::{SpeakerModel, WaveguideFront};
+use crate::speaker::{GuideMeasurement, SpeakerModel, WaveguideFront};
 use serde::{Deserialize, Serialize};
 
 /// Fréquences d'analyse par défaut (Hz) : celles du tableau du papier,
@@ -55,8 +55,23 @@ pub struct WstInputs {
     /// Jour en façade, mm. Ignoré si une enceinte est sélectionnée : il est
     /// alors dérivé de la géométrie, angle par angle.
     pub gap_mm: f64,
-    /// Hauteur rayonnante D, mm.
+    /// Hauteur de bouche **physique** D, mm. C'est elle qui fonde l'ARF du
+    /// verdict, le profil de retard et toute la géométrie : le chiffre
+    /// conservateur, celui qu'on peut mesurer au mètre.
     pub radiating_height_mm: f64,
+    /// Hauteur de bouche **acoustique** équivalente, mm — celle que voit le
+    /// rayonnement, diffraction de bride comprise. Sert au critère 5 et à lui
+    /// seul (voir le préambule du critère 5 dans `formulas`). `None` : on
+    /// retombe sur la bouche physique, donc sur le comportement d'avant.
+    ///
+    /// Sans objet pour un guide à front courbé : le `D` qu'on y identifie est
+    /// corrélé au rayon et ne décrit aucune bouche (cf. `resolve_mouths`).
+    #[serde(default)]
+    pub acoustic_mouth_height_mm: Option<f64>,
+    /// Secteur encore rayonné par un guide isophase, degrés. 0 = front
+    /// parfaitement plan. Entre dans l'angle de raccord vers un guide courbé.
+    #[serde(default)]
+    pub isophase_sector_deg: f64,
     /// Nombre de caisses de la ligne.
     pub speaker_count: usize,
     /// Angles entre caisses à évaluer, degrés.
@@ -75,11 +90,21 @@ pub struct WstInputs {
 pub struct WstDerived {
     pub step_mm: f64,
     pub gap_mm: f64,
+    /// ARF du verdict : celui de la bouche **physique**.
     pub arf: f64,
     pub line_height_m: f64,
     /// Bouche de guide réellement utilisée, mm — celle de l'enceinte quand elle
     /// en déclare une, sinon la saisie.
     pub radiating_height_mm: f64,
+    /// Bouche acoustique retenue, mm. Égale à la bouche physique quand rien ne
+    /// la renseigne, ou pour un guide à front courbé où elle n'a pas de sens.
+    pub acoustic_mouth_height_mm: f64,
+    /// `true` si cette bouche acoustique vient d'un relevé et non d'un repli sur
+    /// la bouche physique — l'écran doit pouvoir dire d'où vient le chiffre.
+    pub acoustic_mouth_is_measured: bool,
+    /// Secteur du guide isophase en jeu, degrés — le sien s'il est isophase,
+    /// celui de la caisse d'en face s'il est courbé.
+    pub isophase_sector_deg: f64,
     /// Guide réellement utilisé : le front décide des critères applicables, et
     /// l'écran doit pouvoir montrer lequel a servi.
     pub guide: GuideKind,
@@ -91,12 +116,24 @@ pub struct WstDerived {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Criterion1 {
-    pub arf: f64,
+    /// ARF de la bouche physique, `D_phys / STEP`. **C'est lui qui fait le
+    /// verdict** : il est le plus bas des deux, donc le plus prudent.
+    pub arf_geometric: f64,
+    /// ARF de la bouche acoustique, `D_ac / STEP`. Affiché à côté, jamais à la
+    /// place : il flatte la ligne. Égal au géométrique quand aucune bouche
+    /// acoustique n'est renseignée, et pour un guide à front courbé.
+    pub arf_acoustic: f64,
     pub arf_min: f64,
+    /// Verdict, établi sur `arf_geometric` seul.
     pub satisfied: bool,
     /// `None` à ARF ≥ 1 : ligne continue, pas de lobe de réseau.
     pub side_lobe_attenuation_db: Option<f64>,
+    /// Le même lobe lu sur l'ARF acoustique — la borne optimiste.
+    pub side_lobe_attenuation_acoustic_db: Option<f64>,
     pub axial_loss_db: f64,
+    /// `true` quand les deux ARF diffèrent : il y a alors quelque chose à dire
+    /// à l'écran, sinon la mention n'aurait pas d'objet.
+    pub arfs_differ: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -121,6 +158,15 @@ pub struct Criterion2 {
 pub struct Criterion3 {
     pub f_max_hz: f64,
     pub max_deviation_mm: f64,
+    /// Rayon du front relevé, m. `None` = front déclaré strictement plan.
+    pub wavefront_radius_m: Option<f64>,
+    /// Écart au plan réel de ce front sur la bouche physique :
+    /// `s = (D/2)² / (2R)`. C'est la mesure de « à quel point le front est
+    /// plan », à comparer à `max_deviation_mm`.
+    pub wavefront_deviation_mm: Option<f64>,
+    /// Fréquence jusqu'à laquelle cet écart tient dans λ/4. Très au-delà de la
+    /// bande audio pour un vrai guide isophase : c'est le résultat attendu.
+    pub isophase_frequency_limit_hz: Option<f64>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -152,6 +198,9 @@ pub struct Criterion5Row {
     /// incliner fait bâiller la façade. C'est lui qui creuse le pas et fait
     /// baisser l'ARF.
     pub gap_mm: f64,
+    /// ARF **dérivé** du pas de cette ligne et de la bouche physique, pour
+    /// l'affichage. Le calcul, lui, est piloté par la bouche acoustique : c'est
+    /// l'ordre qui garantit qu'ARF et pas ne peuvent pas se contredire.
     pub arf: f64,
     /// Même ordre que `WstInputs::distances_m`. `None` : aucune fréquence
     /// tenable (angle nul ou négatif).
@@ -223,6 +272,19 @@ pub struct Cca {
     pub rows: Vec<CcaRow>,
 }
 
+/// Ce que le rayon réel du guide fait à un splay donné, comparé au rayon visé.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RadiusVerdict {
+    /// `R_réel < R_visé` : le guide est trop courbé pour ce splay, les secteurs
+    /// se recouvrent.
+    TooCurved,
+    /// `R_réel > R_visé` : le guide n'est pas assez courbé, il reste un trou.
+    TooFlat,
+    /// Les deux rayons coïncident à mieux que la tolérance d'affichage.
+    Matched,
+}
+
 /// Un angle évalué face à un guide à front courbé.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -231,10 +293,41 @@ pub struct CurvedGuideRow {
     /// `θ_guide ≥ α` : les secteurs voisins se juxtaposent sans laisser de
     /// trou. C'est le critère qui remplace le critère 5 pour ce type de guide.
     pub covered: bool,
+    /// `θ_guide − α`, **signé**. Positif = recouvrement, un réglage acceptable
+    /// tant qu'il reste modéré. Négatif = trou angulaire entre les deux
+    /// secteurs, et ça c'est une faute.
+    pub overlap_deg: f64,
+    /// Premier creux d'interférence dans la zone de recouvrement :
+    /// `c / (2·STEP·sin(recouvrement/2))`. `None` en trou angulaire — sans zone
+    /// commune, rien n'interfère.
+    pub overlap_notch_hz: Option<f64>,
     /// Rayon que le front du guide doit viser à cet angle : `STEP / α`.
     pub target_radius_m: Option<f64>,
-    /// Fréquence au-dessus de laquelle ce rayon doit être juste.
+    /// Écart au rayon réel du guide, `R_réel − R_visé` (m). `None` si l'un des
+    /// deux manque.
+    pub radius_error_m: Option<f64>,
+    /// Lecture de cet écart. `None` si le rayon réel n'est pas connu.
+    pub radius_verdict: Option<RadiusVerdict>,
+    /// Fréquence au-dessus de laquelle ce rayon doit être juste. Ce n'est pas
+    /// une limite de fonctionnement : en dessous, des cordes plates approximent
+    /// l'arc à mieux que λ/4, et un guide isophase donnerait le même résultat.
     pub curvature_matters_above_hz: Option<f64>,
+}
+
+/// Le niveau au bord du secteur à une fréquence, et ce qu'il donne au raccord.
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EdgeLevelSample {
+    pub frequency_hz: f64,
+    /// Niveau relevé tel quel, dB relatifs à l'axe.
+    pub level_db: f64,
+    /// Le même après médiane glissante : c'est lui qui entre dans le verdict.
+    pub smoothed_level_db: f64,
+    /// Bosse au raccord à cette fréquence : niveau lissé + 6 dB.
+    pub splice_level_db: f64,
+    /// `true` quand le point relevé s'écarte nettement de ses voisins : accident
+    /// étroit du guide, à signaler mais pas à laisser piloter le verdict.
+    pub is_narrow_artifact: bool,
 }
 
 /// Verdicts propres à un guide à front courbé. Le critère 5 du papier ne
@@ -244,21 +337,40 @@ pub struct CurvedGuideRow {
 #[serde(rename_all = "camelCase")]
 pub struct CurvedGuide {
     pub coverage_deg: f64,
-    /// Splay maximal : l'ouverture du guide elle-même.
+    /// Splay maximal : l'ouverture du guide elle-même. Au-delà, les deux
+    /// secteurs ne se touchent plus.
     pub max_splay_deg: f64,
-    /// Niveau relevé du guide à la moitié du splay (dB, négatif).
+    /// Plage de splay recommandée : `[θ_guide − 3° ; θ_guide]`. En dessous on
+    /// gaspille de la couverture en recouvrement, au-dessus on ouvre un trou.
+    pub recommended_splay_min_deg: f64,
+    pub recommended_splay_max_deg: f64,
+    /// Niveau relevé du guide à la moitié du splay (dB, négatif). Quand un
+    /// relevé `edge_level_db` existe, c'est sa médiane de bande — pas son
+    /// minimum, qui ne dirait que le pire accident.
     pub level_at_half_splay_db: f64,
     /// Niveau au raccord entre deux secteurs voisins : deux contributions
-    /// égales s'additionnent, soit +6 dB. 0 dB = raccord plat ; négatif = creux
-    /// au raccord ; positif = bosse.
+    /// égales et en phase s'additionnent sur la bissectrice, soit +6 dB. 0 dB =
+    /// raccord plat, la cible ; négatif = creux ; positif = bosse.
     pub splice_level_db: f64,
+    /// La même bosse, fréquence par fréquence, quand le guide a été relevé.
+    /// Vide sinon.
+    pub edge_levels: Vec<EdgeLevelSample>,
+    /// `true` si au moins un point du relevé est un accident étroit. Il est
+    /// signalé à l'écran, et exclu du verdict de bande par le lissage.
+    pub has_narrow_artifact: bool,
     pub rows: Vec<CurvedGuideRow>,
+    /// Secteur encore rayonné par le guide isophase d'en face, degrés.
+    pub isophase_sector_deg: f64,
     /// Raccord entre une caisse isophase et une caisse à guide courbé : les
-    /// deux fronts sont tangents à θ/2.
+    /// deux fronts y sont tangents, soit `(θ_iso + θ_courbe) / 2`.
     pub transition_splay_deg: f64,
-    /// Profil de retard visé sur la bouche, à l'angle de référence — de quoi
-    /// vérifier le guide contre sa cible.
+    /// Rayon réel du front du guide, m, quand il a été identifié.
+    pub actual_radius_m: Option<f64>,
+    /// Profil de retard visé sur la bouche physique, à l'angle de référence —
+    /// de quoi vérifier le guide contre sa cible.
     pub guide_delay_profile: Vec<GuideDelaySample>,
+    /// Le profil du guide réel, sur la même bouche. Vide sans rayon identifié.
+    pub actual_delay_profile: Vec<GuideDelaySample>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -307,21 +419,192 @@ pub fn acoustic_step_mm(model: &SpeakerModel, splay_deg: f64) -> f64 {
     model.mechanical.height + front_gap_mm(model, splay_deg)
 }
 
+/// Tout ce que le guide apporte à l'analyse, une fois tranché entre enceinte
+/// sélectionnée, relevé d'identification et saisie manuelle.
+struct ResolvedGuide {
+    kind: GuideKind,
+    /// Bouche physique, mm : l'ARF du verdict, le profil de retard, la géométrie.
+    physical_mouth_mm: f64,
+    /// Bouche acoustique, mm : le critère 5, et rien d'autre.
+    acoustic_mouth_mm: f64,
+    acoustic_is_measured: bool,
+    /// Rayon du front rayonné, m. `None` = front strictement plan.
+    wavefront_radius_m: Option<f64>,
+    /// Secteur du guide isophase (le sien s'il est isophase, celui de la caisse
+    /// d'en face s'il est courbé), degrés.
+    isophase_sector_deg: f64,
+    edge_level_db: Vec<(f64, f64)>,
+}
+
 /// Le front, la bouche du guide et son secteur décrivent l'enceinte, pas
 /// l'analyse : quand une enceinte est fournie, ce sont ses valeurs qui font
 /// foi et les champs saisis correspondants sont ignorés. Sans enceinte (étude
 /// d'une caisse qui n'est pas au catalogue), tout vient de la saisie.
-fn resolve_guide(inputs: &WstInputs, speaker: Option<&SpeakerModel>) -> GuideKind {
-    let Some(model) = speaker else {
-        return inputs.guide.clone();
+///
+/// Deux règles portent tout le reste de ce module :
+///
+/// 1. La bouche **acoustique** ne sert qu'au critère 5. L'ARF du verdict se
+///    calcule sur la bouche **physique**, la seule qu'on puisse aller mesurer.
+/// 2. Un guide à front **courbé** n'a pas de bouche acoustique du tout. Le `D`
+///    que l'identification lui trouve n'est pas séparable du rayon : seul le
+///    rapport `D/R`, le secteur, est déterminé. Le prendre pour une bouche
+///    ferait chuter l'ARF et déclencherait une alarme sans objet. Son
+///    information acoustique est donc portée par le seul secteur.
+fn resolve_guide(inputs: &WstInputs, speaker: Option<&SpeakerModel>) -> ResolvedGuide {
+    // Une bouche à 0 mm n'est pas une enceinte : c'est un modèle dont le champ
+    // n'a jamais été renseigné. On retombe alors sur la saisie plutôt que de
+    // rendre un ARF nul qui ferait échouer tous les critères sans raison.
+    let physical_mouth_mm = match speaker {
+        Some(model) if model.acoustics.wg_output_height > 0.0 => model.acoustics.wg_output_height,
+        _ => inputs.radiating_height_mm,
     };
-    match model.acoustics.wg_front {
-        WaveguideFront::Isophase => GuideKind::Isophase,
-        WaveguideFront::ConstantCurvature => GuideKind::Curved {
-            coverage_deg: model.acoustics.directivity_vertical,
-            level_at_half_splay_db: model.acoustics.wg_level_at_half_coverage_db,
+    let measurement: Option<&GuideMeasurement> =
+        speaker.and_then(|m| m.acoustics.guide_measurement.as_ref());
+    let front = match speaker {
+        Some(model) => model.acoustics.wg_front,
+        None => match inputs.guide {
+            GuideKind::Isophase => WaveguideFront::Isophase,
+            GuideKind::Curved { .. } => WaveguideFront::ConstantCurvature,
         },
+    };
+    let wavefront_radius_m = measurement.and_then(|m| m.wavefront_radius_m);
+    let edge_level_db = measurement
+        .map(|m| m.edge_level_db.clone())
+        .unwrap_or_default();
+
+    match front {
+        WaveguideFront::Isophase => {
+            // Le relevé prime sur la saisie ; à défaut des deux, la bouche
+            // physique — c'est ce repli qui préserve le comportement d'avant.
+            let (acoustic_mouth_mm, acoustic_is_measured) = measurement
+                .map(|m| m.acoustic_mouth_height_mm)
+                .filter(|d| *d > 0.0)
+                .or(inputs.acoustic_mouth_height_mm.filter(|d| *d > 0.0))
+                .map_or((physical_mouth_mm, false), |d| (d, true));
+            // Un guide isophase n'est jamais rigoureusement plan : son secteur
+            // résiduel vaut `D_phys / R_iso`. La fiche prime si elle le déclare.
+            let declared = speaker.map_or(inputs.isophase_sector_deg, |m| {
+                m.acoustics.wg_isophase_sector_deg
+            });
+            let isophase_sector_deg = if declared > 0.0 {
+                declared
+            } else {
+                wavefront_sector_rad(physical_mouth_mm / 1000.0, wavefront_radius_m)
+                    .map_or(inputs.isophase_sector_deg, f64::to_degrees)
+            };
+            ResolvedGuide {
+                kind: GuideKind::Isophase,
+                physical_mouth_mm,
+                acoustic_mouth_mm,
+                acoustic_is_measured,
+                wavefront_radius_m,
+                isophase_sector_deg,
+                edge_level_db,
+            }
+        }
+        WaveguideFront::ConstantCurvature => {
+            // Secteur : `D_identifié / R_identifié` quand le guide a été relevé
+            // — c'est le seul chiffre que l'ajustement détermine bien. Sinon la
+            // directivité de fiche, ou la saisie.
+            let declared_coverage = match (speaker, &inputs.guide) {
+                (Some(model), _) => model.acoustics.directivity_vertical,
+                (None, GuideKind::Curved { coverage_deg, .. }) => *coverage_deg,
+                (None, GuideKind::Isophase) => 0.0,
+            };
+            let coverage_deg = measurement
+                .and_then(|m| {
+                    wavefront_sector_rad(m.acoustic_mouth_height_mm / 1000.0, m.wavefront_radius_m)
+                })
+                .map_or(declared_coverage, f64::to_degrees);
+            let level_at_half_splay_db = match (speaker, &inputs.guide) {
+                (Some(model), _) => model.acoustics.wg_level_at_half_coverage_db,
+                (
+                    None,
+                    GuideKind::Curved {
+                        level_at_half_splay_db,
+                        ..
+                    },
+                ) => *level_at_half_splay_db,
+                (None, GuideKind::Isophase) => -6.0,
+            };
+            ResolvedGuide {
+                kind: GuideKind::Curved {
+                    coverage_deg,
+                    level_at_half_splay_db,
+                },
+                physical_mouth_mm,
+                // Règle 2 : pas de bouche acoustique pour un front courbé.
+                acoustic_mouth_mm: physical_mouth_mm,
+                acoustic_is_measured: false,
+                wavefront_radius_m,
+                // Le secteur isophase en jeu est celui de la caisse d'en face,
+                // qui n'est pas ce modèle-ci : il vient de la saisie.
+                isophase_sector_deg: inputs.isophase_sector_deg,
+                edge_level_db,
+            }
+        }
     }
+}
+
+/// Médiane glissante sur trois points, bords conservés tels quels.
+///
+/// Un guide a des accidents étroits — un creux sur un seul point de mesure est
+/// une résonance locale, pas le comportement du secteur. La moyenne en garderait
+/// une trace, la médiane l'écarte franchement tout en suivant les vraies pentes.
+fn running_median(levels: &[f64]) -> Vec<f64> {
+    (0..levels.len())
+        .map(|i| {
+            if i == 0 || i + 1 == levels.len() {
+                return levels[i];
+            }
+            let mut window = [levels[i - 1], levels[i], levels[i + 1]];
+            window.sort_by(f64::total_cmp);
+            window[1]
+        })
+        .collect()
+}
+
+/// Médiane d'un échantillon. `None` sur un échantillon vide.
+fn median(values: &[f64]) -> Option<f64> {
+    if values.is_empty() {
+        return None;
+    }
+    let mut sorted = values.to_vec();
+    sorted.sort_by(f64::total_cmp);
+    let mid = sorted.len() / 2;
+    Some(if sorted.len().is_multiple_of(2) {
+        (sorted[mid - 1] + sorted[mid]) / 2.0
+    } else {
+        sorted[mid]
+    })
+}
+
+/// Au-delà de cet écart au lissage, un point du relevé est tenu pour un
+/// accident étroit du guide : on le signale, on ne le laisse pas juger.
+const NARROW_ARTIFACT_DB: f64 = 3.0;
+
+/// Dépouillement du relevé au bord du secteur : les points tels quels, leur
+/// lissage, la bosse au raccord qui en découle — et le niveau de bande qui fait
+/// le verdict, pris comme **médiane** du lissage. Ni le minimum ni la moyenne :
+/// le minimum ferait juger toute la bande par le pire accident, la moyenne l'y
+/// laisserait peser.
+fn dissect_edge_levels(points: &[(f64, f64)]) -> (Vec<EdgeLevelSample>, Option<f64>) {
+    let levels: Vec<f64> = points.iter().map(|(_, db)| *db).collect();
+    let smoothed = running_median(&levels);
+    let samples = points
+        .iter()
+        .zip(&smoothed)
+        .map(
+            |(&(frequency_hz, level_db), &smoothed_level_db)| EdgeLevelSample {
+                frequency_hz,
+                level_db,
+                smoothed_level_db,
+                splice_level_db: smoothed_level_db + 6.0,
+                is_narrow_artifact: (level_db - smoothed_level_db).abs() > NARROW_ARTIFACT_DB,
+            },
+        )
+        .collect();
+    (samples, median(&smoothed))
 }
 
 /// Rapport complet. `speaker` sélectionnée : le pas (et donc l'ARF) est dérivé
@@ -329,15 +612,13 @@ fn resolve_guide(inputs: &WstInputs, speaker: Option<&SpeakerModel>) -> GuideKin
 /// acoustique. Sinon, pas constant `box_height + gap` et guide saisi.
 pub fn wst_report(inputs: &WstInputs, speaker: Option<&SpeakerModel>) -> WstReport {
     let c = inputs.speed_of_sound;
-    let guide = resolve_guide(inputs, speaker);
-    // Une bouche à 0 mm n'est pas une enceinte : c'est un modèle dont le champ
-    // n'a jamais été renseigné. On retombe alors sur la saisie plutôt que de
-    // rendre un ARF nul qui ferait échouer tous les critères sans raison.
-    let radiating_height_mm = match speaker {
-        Some(model) if model.acoustics.wg_output_height > 0.0 => model.acoustics.wg_output_height,
-        _ => inputs.radiating_height_mm,
-    };
+    let resolved = resolve_guide(inputs, speaker);
+    let guide = resolved.kind.clone();
+    let radiating_height_mm = resolved.physical_mouth_mm;
     let radiating_height_m = radiating_height_mm / 1000.0;
+    // Le `D` du critère 5 : la bouche acoustique. Elle vaut la bouche physique
+    // dès que rien ne la renseigne, donc ce chemin reste celui d'avant.
+    let acoustic_mouth_m = resolved.acoustic_mouth_mm / 1000.0;
     let splays_deg = if inputs.splays_deg.is_empty() {
         vec![0.0]
     } else {
@@ -361,6 +642,7 @@ pub fn wst_report(inputs: &WstInputs, speaker: Option<&SpeakerModel>) -> WstRepo
     let reference_splay_deg = splays_deg[0];
     let step_m = step_m_at(reference_splay_deg);
     let reference_arf = arf(radiating_height_m, step_m);
+    let reference_arf_acoustic = arf(acoustic_mouth_m, step_m);
     let line_height_m = inputs.speaker_count as f64 * step_m;
 
     let derived = WstDerived {
@@ -372,17 +654,28 @@ pub fn wst_report(inputs: &WstInputs, speaker: Option<&SpeakerModel>) -> WstRepo
         arf: reference_arf,
         line_height_m,
         radiating_height_mm,
+        acoustic_mouth_height_mm: resolved.acoustic_mouth_mm,
+        acoustic_mouth_is_measured: resolved.acoustic_is_measured,
+        isophase_sector_deg: resolved.isophase_sector_deg,
         guide: guide.clone(),
         step_from_speaker: speaker.is_some(),
     };
 
+    // Deux ARF côte à côte, jamais l'un à la place de l'autre : le géométrique
+    // borne par le bas (il ne compte que la bouche qu'on peut mesurer),
+    // l'acoustique par le haut (il inclut ce que la bride diffracte). L'écart
+    // entre les deux *est* la contribution de la bride ; la vérité est entre
+    // les deux, et le verdict se prend sur le plus prudent.
     let arf_min_value = arf_min(inputs.speaker_count);
     let criterion1 = Criterion1 {
-        arf: reference_arf,
+        arf_geometric: reference_arf,
+        arf_acoustic: reference_arf_acoustic,
         arf_min: arf_min_value,
         satisfied: reference_arf >= arf_min_value,
         side_lobe_attenuation_db: side_lobe_attenuation_db(reference_arf),
+        side_lobe_attenuation_acoustic_db: side_lobe_attenuation_db(reference_arf_acoustic),
         axial_loss_db: axial_loss_db(reference_arf),
+        arfs_differ: (reference_arf_acoustic - reference_arf).abs() > 1e-9,
     };
 
     let frequency_limit_hz = frequency_limit_half_wavelength(c, step_m);
@@ -402,9 +695,17 @@ pub fn wst_report(inputs: &WstInputs, speaker: Option<&SpeakerModel>) -> WstRepo
             .collect(),
     };
 
+    // Planéité du front : ce que le rayon relevé donne réellement comme écart au
+    // plan sur la bouche, face au λ/4 admissible à `f_max`.
+    let wavefront_deviation_m =
+        wavefront_flatness_deviation_m(radiating_height_m, resolved.wavefront_radius_m);
     let criterion3 = Criterion3 {
         f_max_hz: inputs.f_max_hz,
         max_deviation_mm: max_wavefront_deviation_m(c, inputs.f_max_hz) * 1000.0,
+        wavefront_radius_m: resolved.wavefront_radius_m,
+        wavefront_deviation_mm: wavefront_deviation_m.map(|s| s * 1000.0),
+        isophase_frequency_limit_hz: wavefront_deviation_m
+            .and_then(|s| isophase_frequency_limit(c, s)),
     };
 
     let near_field = NearField {
@@ -441,13 +742,16 @@ pub fn wst_report(inputs: &WstInputs, speaker: Option<&SpeakerModel>) -> WstRepo
             .iter()
             .map(|&splay_deg| {
                 let row_step_m = step_m_at(splay_deg);
-                let row_arf = arf(radiating_height_m, row_step_m);
                 let row_gap_mm = gap_mm_at(splay_deg);
                 Criterion5Row {
                     splay_deg,
                     step_mm: row_step_m * 1000.0,
                     gap_mm: row_gap_mm,
-                    arf: row_arf,
+                    // ARF *dérivé* du pas, pas l'inverse : la bouche est la
+                    // donnée matérielle, le pas vient de l'angle, et l'ARF n'est
+                    // que leur rapport. Piloter par l'ARF laisserait afficher une
+                    // fréquence limite qui ne correspond à aucune géométrie.
+                    arf: arf(radiating_height_m, row_step_m),
                     f_max_by_distance_hz: inputs
                         .distances_m
                         .iter()
@@ -455,7 +759,7 @@ pub fn wst_report(inputs: &WstInputs, speaker: Option<&SpeakerModel>) -> WstRepo
                             max_frequency_hz(
                                 c,
                                 splay_deg.to_radians(),
-                                row_arf,
+                                acoustic_mouth_m,
                                 row_step_m,
                                 distance_m,
                             )
@@ -473,14 +777,14 @@ pub fn wst_report(inputs: &WstInputs, speaker: Option<&SpeakerModel>) -> WstRepo
                     .iter()
                     .map(|&distance_m| {
                         let splay =
-                            max_splay_rad(c, frequency_hz, reference_arf, step_m, distance_m);
+                            max_splay_rad(c, frequency_hz, acoustic_mouth_m, step_m, distance_m);
                         (splay > 0.0).then(|| splay.to_degrees())
                     })
                     .collect(),
             })
             .collect(),
         max_step_mm: closest_distance_m
-            .map(|d| max_step_m(c, inputs.f_max_hz, reference_arf, d) * 1000.0),
+            .map(|d| max_step_m(c, inputs.f_max_hz, acoustic_mouth_m, d) * 1000.0),
         closest_distance_m,
     });
 
@@ -537,33 +841,80 @@ pub fn wst_report(inputs: &WstInputs, speaker: Option<&SpeakerModel>) -> WstRepo
     // Guide à front courbé : le verdict n'est plus « à quelle fréquence le trou
     // se referme » mais « le guide couvre-t-il l'angle, et se raccorde-t-il à
     // plat ». Deux secteurs voisins se recouvrent au raccord, donc deux
-    // contributions égales s'y additionnent : +6 dB sur le niveau relevé à α/2.
+    // contributions égales et en phase s'y additionnent : +6 dB sur le niveau
+    // relevé au bord du secteur.
     let curved_guide = match guide {
         GuideKind::Isophase => None,
         GuideKind::Curved {
             coverage_deg,
             level_at_half_splay_db,
-        } => Some(CurvedGuide {
-            coverage_deg,
-            max_splay_deg: coverage_deg,
-            level_at_half_splay_db,
-            splice_level_db: level_at_half_splay_db + 6.0,
-            rows: splays_deg
-                .iter()
-                .map(|&splay_deg| {
-                    let (radius_m, sagitta_m) = arc_row(splay_deg);
-                    CurvedGuideRow {
-                        splay_deg,
-                        covered: coverage_deg >= splay_deg,
-                        target_radius_m: radius_m,
-                        curvature_matters_above_hz: sagitta_m
-                            .and_then(|s| isophase_frequency_limit(c, s)),
-                    }
-                })
-                .collect(),
-            transition_splay_deg: transition_splay_rad(coverage_deg.to_radians()).to_degrees(),
-            guide_delay_profile: guide_delay_profile(reference_radius_m, radiating_height_m),
-        }),
+        } => {
+            let (edge_levels, measured_band_level_db) =
+                dissect_edge_levels(&resolved.edge_level_db);
+            // Le relevé prime sur la valeur de fiche quand il existe — mais par
+            // sa médiane de bande, jamais par son minimum.
+            let level_at_half_splay_db = measured_band_level_db.unwrap_or(level_at_half_splay_db);
+            let actual_radius_m = resolved.wavefront_radius_m;
+            Some(CurvedGuide {
+                coverage_deg,
+                max_splay_deg: coverage_deg,
+                // Un peu de recouvrement est un réglage sain ; le trou ne l'est
+                // jamais. La plage recommandée est donc adossée au maximum.
+                recommended_splay_min_deg: (coverage_deg - 3.0).max(0.0),
+                recommended_splay_max_deg: coverage_deg,
+                level_at_half_splay_db,
+                splice_level_db: level_at_half_splay_db + 6.0,
+                has_narrow_artifact: edge_levels.iter().any(|s| s.is_narrow_artifact),
+                edge_levels,
+                rows: splays_deg
+                    .iter()
+                    .map(|&splay_deg| {
+                        let (target_radius_m, sagitta_m) = arc_row(splay_deg);
+                        let overlap_deg = coverage_deg - splay_deg;
+                        // `R_réel < R_visé` : le guide est plus courbé que ce que
+                        // l'angle demande, donc les secteurs se recouvrent.
+                        // `R_réel > R_visé` : il reste un trou entre eux.
+                        let radius_error_m = target_radius_m
+                            .zip(actual_radius_m)
+                            .map(|(target, actual)| actual - target);
+                        CurvedGuideRow {
+                            splay_deg,
+                            covered: overlap_deg >= 0.0,
+                            overlap_deg,
+                            overlap_notch_hz: overlap_notch_frequency_hz(
+                                c,
+                                step_m_at(splay_deg),
+                                overlap_deg.to_radians(),
+                            ),
+                            target_radius_m,
+                            radius_error_m,
+                            radius_verdict: radius_error_m.map(|e| {
+                                if e.abs() <= 1e-3 {
+                                    RadiusVerdict::Matched
+                                } else if e < 0.0 {
+                                    RadiusVerdict::TooCurved
+                                } else {
+                                    RadiusVerdict::TooFlat
+                                }
+                            }),
+                            curvature_matters_above_hz: sagitta_m
+                                .and_then(|s| isophase_frequency_limit(c, s)),
+                        }
+                    })
+                    .collect(),
+                isophase_sector_deg: resolved.isophase_sector_deg,
+                // Tangence des deux fronts : chacun arrive au raccord incliné de
+                // la moitié de son propre secteur.
+                transition_splay_deg: transition_splay_rad(
+                    resolved.isophase_sector_deg.to_radians(),
+                    coverage_deg.to_radians(),
+                )
+                .to_degrees(),
+                actual_radius_m,
+                guide_delay_profile: guide_delay_profile(reference_radius_m, radiating_height_m),
+                actual_delay_profile: guide_delay_profile(actual_radius_m, radiating_height_m),
+            })
+        }
     };
 
     WstReport {
@@ -713,6 +1064,8 @@ mod tests {
             speaker_count: 6,
             splays_deg: vec![0.0, 5.0, 10.0],
             distances_m: vec![10.0, 25.0],
+            acoustic_mouth_height_mm: None,
+            isophase_sector_deg: 0.0,
             f_max_hz: 16_000.0,
             guide: GuideKind::Isophase,
         };
@@ -751,6 +1104,8 @@ mod tests {
             speaker_count: 6,
             splays_deg: splays.clone(),
             distances_m: vec![10.0],
+            acoustic_mouth_height_mm: None,
+            isophase_sector_deg: 0.0,
             f_max_hz: 16_000.0,
             guide: GuideKind::Isophase,
         };
@@ -790,6 +1145,8 @@ mod tests {
             speaker_count: 6,
             splays_deg: vec![0.0, 5.0, 10.0],
             distances_m: vec![10.0],
+            acoustic_mouth_height_mm: None,
+            isophase_sector_deg: 0.0,
             f_max_hz: 16_000.0,
             guide: GuideKind::Isophase,
         };
@@ -810,6 +1167,8 @@ mod tests {
             speaker_count: 6,
             splays_deg: vec![5.0],
             distances_m: vec![25.0],
+            acoustic_mouth_height_mm: None,
+            isophase_sector_deg: 0.0,
             f_max_hz: 16_000.0,
             guide: GuideKind::Isophase,
         };
@@ -835,6 +1194,8 @@ mod tests {
             speaker_count: 6,
             splays_deg: vec![0.0],
             distances_m: vec![2.0],
+            acoustic_mouth_height_mm: None,
+            isophase_sector_deg: 0.0,
             f_max_hz: 20_000.0,
             guide: GuideKind::Isophase,
         };
@@ -861,6 +1222,8 @@ mod tests {
             speaker_count: 12,
             splays_deg: vec![20.0],
             distances_m: vec![5.0],
+            acoustic_mouth_height_mm: None,
+            isophase_sector_deg: 0.0,
             f_max_hz: 16_000.0,
             guide,
         }
@@ -931,6 +1294,8 @@ mod tests {
             wg_front: WaveguideFront::ConstantCurvature,
             wg_output_height: 470.0,
             wg_level_at_half_coverage_db: -8.0,
+            wg_isophase_sector_deg: 0.0,
+            guide_measurement: None,
         };
 
         let inputs = WstInputs {
@@ -956,6 +1321,384 @@ mod tests {
         let report = wst_report(&tight_cca_inputs(GuideKind::Isophase), Some(&model));
         assert!((report.derived.radiating_height_mm - 340.0).abs() < 1e-9);
         assert!(report.derived.arf > 0.0);
+    }
+
+    // --- Bouche physique / bouche acoustique --------------------------------
+
+    /// SA303 isophase : bouche physique 464, bouche acoustique relevée 485 (±10),
+    /// front quasi plan de 22,6 m de rayon.
+    fn sa303_isophase() -> SpeakerModel {
+        let mut model = sa303();
+        model.acoustics = SpeakerAcousticsModel {
+            fs: 60.0,
+            directivity_horizontal: 90.0,
+            directivity_vertical: 0.0,
+            wg_front: WaveguideFront::Isophase,
+            wg_output_height: 464.0,
+            wg_level_at_half_coverage_db: -6.0,
+            wg_isophase_sector_deg: 1.3,
+            guide_measurement: Some(GuideMeasurement {
+                acoustic_mouth_height_mm: 485.0,
+                wavefront_radius_m: Some(22.6),
+                edge_level_db: Vec::new(),
+            }),
+        };
+        model
+    }
+
+    /// SA303 CCA : même bouche physique, front courbé de 1,04 m. Le `D` de 385 mm
+    /// que donne l'identification n'est là que pour former le secteur 21,2° —
+    /// il ne doit jamais ressortir comme hauteur de bouche.
+    fn sa303_cca() -> SpeakerModel {
+        let mut model = sa303();
+        model.acoustics = SpeakerAcousticsModel {
+            fs: 60.0,
+            directivity_horizontal: 90.0,
+            directivity_vertical: 21.2,
+            wg_front: WaveguideFront::ConstantCurvature,
+            wg_output_height: 464.0,
+            wg_level_at_half_coverage_db: -6.0,
+            wg_isophase_sector_deg: 0.0,
+            guide_measurement: Some(GuideMeasurement {
+                acoustic_mouth_height_mm: 385.0,
+                wavefront_radius_m: Some(1.04),
+                edge_level_db: vec![
+                    (3_100.0, -5.3),
+                    (3_900.0, -8.2),
+                    (5_000.0, -6.6),
+                    (6_300.0, -6.9),
+                    (8_000.0, -9.1),
+                    (9_000.0, -13.1),
+                    (10_100.0, -9.0),
+                    (12_000.0, -5.8),
+                ],
+            }),
+        };
+        model
+    }
+
+    fn sa303_inputs(splays_deg: Vec<f64>) -> WstInputs {
+        WstInputs {
+            speed_of_sound: SPEED_OF_SOUND_DEFAULT,
+            box_height_mm: 0.0,
+            gap_mm: 0.0,
+            radiating_height_mm: 464.0,
+            acoustic_mouth_height_mm: None,
+            isophase_sector_deg: 1.3,
+            speaker_count: 6,
+            splays_deg,
+            distances_m: vec![25.0],
+            f_max_hz: 16_000.0,
+            guide: GuideKind::Isophase,
+        }
+    }
+
+    /// Non-régression : sans bouche acoustique, rien ne doit bouger. C'est ce
+    /// repli qui autorise à ajouter le champ sans relire tous les dossiers déjà
+    /// produits.
+    #[test]
+    fn without_an_acoustic_mouth_everything_falls_back_on_the_physical_one() {
+        let base = WstInputs {
+            speed_of_sound: SPEED_OF_SOUND_PAPER,
+            box_height_mm: 550.0,
+            gap_mm: 8.0,
+            radiating_height_mm: 470.0,
+            acoustic_mouth_height_mm: None,
+            isophase_sector_deg: 0.0,
+            speaker_count: 6,
+            splays_deg: vec![0.0, 5.0, 10.0],
+            distances_m: vec![10.0, 25.0],
+            f_max_hz: 16_000.0,
+            guide: GuideKind::Isophase,
+        };
+        let report = wst_report(&base, None);
+
+        // La bouche acoustique retombe sur la physique, et se dit non relevée.
+        assert_eq!(report.derived.acoustic_mouth_height_mm, 470.0);
+        assert!(!report.derived.acoustic_mouth_is_measured);
+        // Les deux ARF coïncident, donc il n'y a rien à commenter à l'écran.
+        assert_eq!(
+            report.criterion1.arf_geometric,
+            report.criterion1.arf_acoustic
+        );
+        assert!(!report.criterion1.arfs_differ);
+        // Et le critère 5 rend exactement ce que l'ancien `ARF · STEP` rendait :
+        // ce produit valait déjà la bouche physique.
+        let step_m = 0.558;
+        for (row, splay_deg) in criterion5(&report).rows.iter().zip(&base.splays_deg) {
+            for (got, &distance_m) in row.f_max_by_distance_hz.iter().zip(&base.distances_m) {
+                let expected = max_frequency_hz(
+                    SPEED_OF_SOUND_PAPER,
+                    splay_deg.to_radians(),
+                    row.arf * step_m,
+                    step_m,
+                    distance_m,
+                );
+                assert_eq!(got.map(f64::to_bits), expected.map(f64::to_bits));
+            }
+        }
+    }
+
+    /// La bouche acoustique pilote le critère 5, et lui seul. L'ARF affiché reste
+    /// celui de la bouche physique — et il est *dérivé* du pas, jamais réglé à
+    /// côté de lui.
+    #[test]
+    fn the_acoustic_mouth_drives_criterion5_and_nothing_else() {
+        let report = wst_report(&sa303_inputs(vec![5.0]), Some(&sa303_isophase()));
+
+        assert_eq!(report.derived.radiating_height_mm, 464.0);
+        assert_eq!(report.derived.acoustic_mouth_height_mm, 485.0);
+        assert!(report.derived.acoustic_mouth_is_measured);
+
+        // STEP = 552,379 mm à 0°… mais la grille commence ici à 5°.
+        let row = &criterion5(&report).rows[0];
+        let step_m = row.step_mm / 1000.0;
+        assert!(
+            (row.arf - 0.464 / step_m).abs() < 1e-12,
+            "ARF dérivé du pas"
+        );
+
+        let f = row.f_max_by_distance_hz[0].expect("5° à 25 m donne une fréquence");
+        let expected = max_frequency_hz(
+            SPEED_OF_SOUND_DEFAULT,
+            5f64.to_radians(),
+            0.485,
+            step_m,
+            25.0,
+        )
+        .unwrap();
+        assert!((f - expected).abs() < 1e-9);
+        // La bouche acoustique étant la plus grande, elle est aussi la plus
+        // sévère : le même calcul sur la bouche physique donnerait plus haut.
+        let on_physical = max_frequency_hz(
+            SPEED_OF_SOUND_DEFAULT,
+            5f64.to_radians(),
+            0.464,
+            step_m,
+            25.0,
+        )
+        .unwrap();
+        assert!(f < on_physical, "{f} devrait être sous {on_physical}");
+    }
+
+    /// Les deux ARF s'affichent côte à côte, avec leur lobe respectif. Le verdict
+    /// ne connaît que le géométrique.
+    #[test]
+    fn both_arfs_are_reported_side_by_side_with_their_own_side_lobe() {
+        // Grille à 0° pour retomber sur l'entraxe nominal : STEP = 552,379 mm.
+        let report = wst_report(&sa303_inputs(vec![0.0]), Some(&sa303_isophase()));
+        let c1 = &report.criterion1;
+
+        assert!(
+            (c1.arf_geometric - 0.840).abs() < 0.001,
+            "{}",
+            c1.arf_geometric
+        );
+        assert!(
+            (c1.arf_acoustic - 0.878).abs() < 0.001,
+            "{}",
+            c1.arf_acoustic
+        );
+        assert!(c1.arfs_differ);
+        assert!((c1.side_lobe_attenuation_db.unwrap() - 14.4).abs() < 0.1);
+        assert!((c1.side_lobe_attenuation_acoustic_db.unwrap() - 17.1).abs() < 0.1);
+        // Le verdict et la perte sur l'axe se lisent sur le géométrique seul.
+        assert_eq!(c1.satisfied, c1.arf_geometric >= c1.arf_min);
+        assert!((c1.axial_loss_db - axial_loss_db(c1.arf_geometric)).abs() < 1e-12);
+    }
+
+    /// Le front isophase n'est pas rigoureusement plan, et le critère 3 doit dire
+    /// de combien : un écart millimétrique, donc une limite isophase très
+    /// au-dessus de la bande audio.
+    #[test]
+    fn criterion3_measures_how_flat_the_isophase_front_actually_is() {
+        let report = wst_report(&sa303_inputs(vec![0.0]), Some(&sa303_isophase()));
+        let c3 = &report.criterion3;
+        assert_eq!(c3.wavefront_radius_m, Some(22.6));
+        let s = c3.wavefront_deviation_mm.expect("rayon connu");
+        assert!((s - 1.19).abs() < 0.01, "{s} mm");
+        assert!(
+            c3.isophase_frequency_limit_hz.unwrap() > 20_000.0,
+            "un front plan doit sortir de la bande audio"
+        );
+        // Et il reste bien plus plat que le λ/4 admissible à 16 kHz.
+        assert!(s < c3.max_deviation_mm);
+    }
+
+    // --- Guide courbé --------------------------------------------------------
+
+    /// Le `D` de 385 mm identifié sur le guide courbé n'est pas une bouche : il
+    /// ne doit ni ressortir comme hauteur, ni entrer dans l'ARF. Sa seule trace
+    /// légitime est le secteur `D/R`.
+    #[test]
+    fn the_curved_guide_keeps_its_physical_mouth_and_only_exports_a_sector() {
+        let report = wst_report(&sa303_inputs(vec![20.0]), Some(&sa303_cca()));
+
+        assert_eq!(report.derived.radiating_height_mm, 464.0);
+        // Pas de bouche acoustique : elle retombe sur la physique.
+        assert_eq!(report.derived.acoustic_mouth_height_mm, 464.0);
+        assert!(!report.derived.acoustic_mouth_is_measured);
+        // L'ARF reste celui de la bouche physique. Sur 385 mm il tomberait à 0,70
+        // et déclencherait une alarme sans fondement.
+        let step_m = report.derived.step_mm / 1000.0;
+        assert!((report.criterion1.arf_geometric - 0.464 / step_m).abs() < 1e-12);
+        assert!(
+            report.criterion1.arf_geometric > 0.80,
+            "pas d'alarme fantôme"
+        );
+        assert!(!report.criterion1.arfs_differ);
+
+        // Le secteur, lui, vient bien de `D/R` = 385 / 1040.
+        let guide = report.curved_guide.expect("guide courbé renseigné");
+        assert!(
+            (guide.coverage_deg - 21.2).abs() < 0.05,
+            "{}",
+            guide.coverage_deg
+        );
+        assert_eq!(guide.actual_radius_m, Some(1.04));
+    }
+
+    /// Le critère 5 ne s'applique pas à un guide courbé — et ce qui le remplace
+    /// doit dire quelque chose.
+    #[test]
+    fn a_curved_guide_gets_coverage_verdicts_instead_of_criterion5() {
+        let report = wst_report(&sa303_inputs(vec![20.0]), Some(&sa303_cca()));
+        assert!(report.criterion5.is_none());
+
+        let guide = report.curved_guide.expect("guide courbé renseigné");
+        let row = &guide.rows[0];
+        // 20° collé sous un guide de 21,2° : 1,2° de recouvrement, du bon côté.
+        assert!(row.covered);
+        assert!((row.overlap_deg - 1.2).abs() < 0.05, "{}", row.overlap_deg);
+        // Et c'est bien le réglage recommandé : entre θ − 3° et θ.
+        assert!(row.splay_deg >= guide.recommended_splay_min_deg);
+        assert!(row.splay_deg <= guide.recommended_splay_max_deg);
+        assert!((guide.recommended_splay_min_deg - 18.2).abs() < 0.05);
+
+        // La courbure doit être juste au-dessus de ~3,6 kHz seulement. En
+        // dessous, un guide isophase donnerait le même résultat.
+        let f = row
+            .curvature_matters_above_hz
+            .expect("20° : arc bien défini");
+        assert!((f - 3_600.0).abs() < 100.0, "obtenu {f} Hz");
+    }
+
+    /// Un splay au-delà de l'ouverture du guide ouvre un **trou angulaire** — une
+    /// faute, à ne pas confondre avec le recouvrement qui, lui, est un réglage.
+    #[test]
+    fn a_splay_wider_than_the_guide_is_a_gap_not_an_overlap() {
+        let report = wst_report(&sa303_inputs(vec![25.0]), Some(&sa303_cca()));
+        let guide = report.curved_guide.expect("guide courbé renseigné");
+        let row = &guide.rows[0];
+
+        assert!(
+            !row.covered,
+            "25° > 21,2° : les secteurs ne se touchent plus"
+        );
+        assert!(row.overlap_deg < 0.0, "{}", row.overlap_deg);
+        assert!((row.overlap_deg + 3.8).abs() < 0.05, "{}", row.overlap_deg);
+        // Sans zone commune, il n'y a rien qui interfère : pas de creux à annoncer.
+        assert!(row.overlap_notch_hz.is_none());
+        // Et l'angle sort de la plage recommandée, par le haut.
+        assert!(row.splay_deg > guide.recommended_splay_max_deg);
+    }
+
+    /// Le recouvrement se paie d'un creux d'interférence : il faut savoir où.
+    #[test]
+    fn a_positive_overlap_reports_its_first_notch() {
+        let report = wst_report(&sa303_inputs(vec![15.0]), Some(&sa303_cca()));
+        let guide = report.curved_guide.expect("guide courbé renseigné");
+        let row = &guide.rows[0];
+
+        assert!((row.overlap_deg - 6.2).abs() < 0.05, "{}", row.overlap_deg);
+        let f = row.overlap_notch_hz.expect("recouvrement positif");
+        assert!((f - 5_700.0).abs() < 100.0, "obtenu {f} Hz");
+    }
+
+    /// Le guide est trop courbé pour un splay serré (recouvrement) et pas assez
+    /// pour un splay ouvert (trou) : le rayon réel doit se comparer au rayon visé.
+    #[test]
+    fn the_actual_radius_is_compared_to_the_one_the_splay_asks_for() {
+        let report = wst_report(&sa303_inputs(vec![10.0, 35.0, 30.86]), Some(&sa303_cca()));
+        let guide = report.curved_guide.expect("guide courbé renseigné");
+
+        // 10° : le rayon visé (~3,2 m) est bien plus grand que le réel (1,04 m).
+        let tight = &guide.rows[0];
+        assert!(tight.target_radius_m.unwrap() > 1.04);
+        assert_eq!(tight.radius_verdict, Some(RadiusVerdict::TooCurved));
+        assert!(tight.radius_error_m.unwrap() < 0.0);
+
+        // Le rayon visé décroît avec l'angle : il finit par passer sous le réel,
+        // et le guide devient alors trop plat pour l'angle demandé.
+        let wide = &guide.rows[1];
+        assert!(wide.target_radius_m.unwrap() < tight.target_radius_m.unwrap());
+        assert_eq!(wide.radius_verdict, Some(RadiusVerdict::TooFlat));
+        assert!(wide.radius_error_m.unwrap() > 0.0);
+
+        // Et il existe un angle où les deux coïncident — `STEP(α)/α = 1,04 m`,
+        // soit 30,86° : c'est l'angle pour lequel ce guide-ci a été dessiné.
+        assert_eq!(guide.rows[2].radius_verdict, Some(RadiusVerdict::Matched));
+        // Le profil de retard cible et le profil réel s'y confondent donc.
+        assert_eq!(
+            guide.actual_delay_profile.len(),
+            guide.guide_delay_profile.len()
+        );
+        // Les deux profils couvrent la bouche **physique**, pas les 385 mm.
+        let span =
+            guide.actual_delay_profile.last().unwrap().y_mm - guide.actual_delay_profile[0].y_mm;
+        assert!((span - 464.0).abs() < 1e-9, "{span} mm");
+    }
+
+    /// Le creux à 9 kHz est un accident étroit du guide. Il doit être signalé,
+    /// mais la médiane de bande ne doit pas le laisser juger tout le raccord :
+    /// prendre le minimum ferait annoncer −7,1 dB au lieu de −0,9.
+    #[test]
+    fn a_narrow_notch_is_flagged_without_driving_the_splice_verdict() {
+        let report = wst_report(&sa303_inputs(vec![20.0]), Some(&sa303_cca()));
+        let guide = report.curved_guide.expect("guide courbé renseigné");
+
+        assert_eq!(guide.edge_levels.len(), 8);
+        assert!(guide.has_narrow_artifact);
+        let notch = guide
+            .edge_levels
+            .iter()
+            .find(|s| s.frequency_hz == 9_000.0)
+            .expect("le point à 9 kHz est relevé");
+        assert_eq!(notch.level_db, -13.1);
+        assert!(notch.is_narrow_artifact, "accident étroit non signalé");
+        // Son lissage l'écarte franchement : il ne tire plus la bande vers le bas.
+        assert!(
+            notch.smoothed_level_db > -10.0,
+            "{}",
+            notch.smoothed_level_db
+        );
+        // Un seul point isolé, donc : le verdict de bande reste proche de 0 dB.
+        assert!((guide.level_at_half_splay_db + 6.9).abs() < 0.05);
+        assert!(
+            (guide.splice_level_db + 0.9).abs() < 0.05,
+            "{}",
+            guide.splice_level_db
+        );
+        assert!(
+            guide.splice_level_db > -13.1 + 6.0,
+            "le minimum a pris la main"
+        );
+    }
+
+    /// L'angle de raccord vers une caisse isophase est une tangence, donc il
+    /// dépend **aussi** du secteur résiduel du guide isophase.
+    #[test]
+    fn the_transition_splay_accounts_for_the_isophase_sector_too() {
+        let report = wst_report(&sa303_inputs(vec![20.0]), Some(&sa303_cca()));
+        let guide = report.curved_guide.expect("guide courbé renseigné");
+        assert_eq!(guide.isophase_sector_deg, 1.3);
+        // (1,3 + 21,2) / 2, et non 21,2 / 2 : 0,6° d'écart sur le raccord.
+        assert!(
+            (guide.transition_splay_deg - 11.25).abs() < 0.05,
+            "{}",
+            guide.transition_splay_deg
+        );
+        assert!(guide.transition_splay_deg > guide.coverage_deg / 2.0);
     }
 
     #[test]
