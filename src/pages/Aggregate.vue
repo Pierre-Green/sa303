@@ -13,7 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import InfoTip from "@/components/InfoTip.vue";
+import InfoTip from "@/components/ui/info-tip/InfoTip.vue";
 import { FileIcon } from "@lucide/vue";
 
 const report = ref<AggregateReport | null>(null);

@@ -21,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
-import InfoTip from "@/components/InfoTip.vue";
+import InfoTip from "@/components/ui/info-tip/InfoTip.vue";
 import {
   Table,
   TableBody,
@@ -297,7 +297,7 @@ async function removeBumperBar() {
 
 <template>
   <div class="flex h-full">
-    <aside class="flex w-[220px] shrink-0 flex-col gap-1 border-r border-border bg-card p-3">
+    <aside class="flex w-55 shrink-0 flex-col gap-1 border-r border-border bg-card p-3">
       <button
         class="rounded-md px-3 py-2 text-left text-sm hover:bg-accent"
         :class="category === 'enceintes' ? 'bg-accent font-medium text-accent-foreground' : ''"

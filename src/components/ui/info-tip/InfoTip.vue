@@ -10,7 +10,9 @@ defineProps<{ text: string }>();
       <button
         type="button"
         tabindex="0"
-        class="ml-1 inline-flex size-3.5 shrink-0 items-center justify-center rounded-full border border-border bg-card text-[9px] font-bold text-muted-foreground hover:bg-foreground hover:text-background focus-visible:outline-none"
+        class="ml-1 inline-flex size-3.5 shrink-0 items-center justify-center
+        rounded-full border border-border bg-card text-[9px] font-bold text-muted-foreground
+        hover:bg-foreground hover:text-background focus-visible:outline-none"
         @click.prevent
       >
         i

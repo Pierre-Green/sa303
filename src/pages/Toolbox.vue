@@ -27,7 +27,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import InfoTip from "@/components/InfoTip.vue";
+import InfoTip from "@/components/ui/info-tip/InfoTip.vue";
 import {
   Select,
   SelectContent,
@@ -249,7 +249,7 @@ const ratio = (value: number | null | undefined) =>
 
 <template>
   <div class="flex h-full">
-    <aside class="flex w-[220px] shrink-0 flex-col gap-1 border-r border-border bg-card p-3">
+    <aside class="flex w-55 shrink-0 flex-col gap-1 border-r border-border bg-card p-3">
       <button class="rounded-md bg-accent px-3 py-2 text-left text-sm font-medium text-accent-foreground">
         Critères WST
       </button>

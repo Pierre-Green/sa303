@@ -7,8 +7,8 @@ import { useBuiltinsStore } from "@/stores/builtins";
 import { api } from "@/lib/api";
 import { speakerDisplayNumber } from "@/lib/display";
 import type { BumperView, Cluster, ClusterResult, Compartment } from "@/lib/types";
-import ArrayViewer from "@/components/ArrayViewer.vue";
-import InfoTip from "@/components/InfoTip.vue";
+import ArrayViewer from "@/components/array-viewer/ArrayViewer.vue";
+import InfoTip from "@/components/ui/info-tip/InfoTip.vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -465,7 +465,7 @@ watch(form, recomputeViewer, { deep: true, immediate: true });
 
 <template>
   <div class="flex h-full">
-    <aside class="flex w-[380px] shrink-0 flex-col gap-4 overflow-y-auto border-r border-border bg-card p-4">
+    <aside class="flex w-95 shrink-0 flex-col gap-4 overflow-y-auto border-r border-border bg-card p-4">
       <div>
         <div class="mb-2 flex items-center justify-between">
           <h2 class="text-sm font-semibold">Grappes &amp; stacks</h2>
