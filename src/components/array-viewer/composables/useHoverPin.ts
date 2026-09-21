@@ -1,8 +1,13 @@
 // Survol = aperçu (pas besoin de cliquer) ; clic = épinglé, pour pouvoir
-// déplacer la souris jusque dans la popup et sélectionner le texte sans qu'elle
-// se referme. Un petit délai à la sortie du survol laisse le temps d'atteindre
-// la popup (élément DOM, distinct des formes Konva) ; épinglé, on n'auto-referme
-// plus du tout.
+// déplacer la souris jusque dans la fiche et sélectionner le texte sans qu'elle
+// se referme. Épinglé, on n'auto-referme plus du tout.
+//
+// Le petit délai à la sortie du survol n'absorbe plus qu'une chose : les creux
+// entre deux formes Konva, quand le pointeur traverse un interstice au passage
+// d'une enceinte à l'autre. Il ne sert **pas** à laisser atteindre la fiche —
+// celle-ci est transparente au pointeur tant qu'elle n'est pas épinglée
+// (`ViewerPopup.vue`), sans quoi elle intercepte le survol de l'enceinte
+// suivante et se fige sur les valeurs de la précédente.
 
 import { computed, onScopeDispose, ref } from "vue";
 
@@ -96,8 +101,6 @@ export function useHoverPin(opts: HoverPinOptions) {
     onLeave,
     onClick,
     close,
-    clearHideTimer,
-    scheduleHide,
   };
 }
 

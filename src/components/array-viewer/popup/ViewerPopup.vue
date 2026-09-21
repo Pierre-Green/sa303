@@ -18,8 +18,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: [];
-  hold: [];
-  release: [];
 }>();
 
 // Bornée au conteneur : près d'un bord, la fiche sortirait du cadre et on
@@ -35,11 +33,17 @@ const title = computed(() =>
 </script>
 
 <template>
+  <!-- Tant qu'elle n'est qu'un aperçu de survol, la fiche est transparente au
+       pointeur. Posée à 12 px du curseur, elle se trouve pile sur le trajet
+       vers l'enceinte suivante : si elle captait la souris, Konva ne recevrait
+       plus le `mouseenter` de cette enceinte-là et la fiche resterait figée sur
+       les valeurs de la précédente — deux enceintes voisines semblaient alors
+       porter exactement la même charge. Épinglée, elle reprend le pointeur :
+       c'est tout l'intérêt d'épingler, aller y sélectionner du texte. -->
   <div
     class="absolute z-10 w-55 select-text rounded-md border border-border bg-popover p-3 text-xs text-popover-foreground shadow-lg"
+    :class="data.pinned ? 'pointer-events-auto' : 'pointer-events-none'"
     :style="style"
-    @mouseenter="emit('hold')"
-    @mouseleave="emit('release')"
   >
     <div class="mb-1.5 flex items-center justify-between">
       <span class="font-semibold">{{ title }}</span>

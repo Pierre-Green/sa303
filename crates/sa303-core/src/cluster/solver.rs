@@ -10,7 +10,7 @@ use super::kinematics::{
     weighted_cg, ChainSpeaker, SpeakerInstance,
 };
 use super::model::{Cluster, Compartment};
-use super::pair::split_over_pair;
+use super::pair::{split_over_pair, split_wrench_over_pair};
 use crate::bumper::{
     bumper_outline_top, bumper_pickup_height, bumper_pin_points, BumperBarModel, BumperModel,
 };
@@ -123,9 +123,10 @@ pub struct BumperView {
     /// dedans, pas à l'algorithme.
     pub tie_angle_range_deg: Option<[f64; 2]>,
     /// Efforts transmis par le bumper à l'enceinte de référence, repère de
-    /// cette enceinte — même schéma qu'une jonction réelle (bras à deux
-    /// forces + pivot), avec pour seuls points d'accroche le trou de splay 0
-    /// et la charnière. Vol uniquement. Par flanc, comme les efforts de
+    /// cette enceinte : ce que chacun de ses **deux pions** encaisse.
+    /// `orientation` est le pion arrière, `pivot` le pion avant — les noms
+    /// datent d'un schéma antérieur, la répartition est aujourd'hui symétrique
+    /// entre les deux. Vol uniquement. Par flanc, comme les efforts de
     /// jonction.
     pub orientation_force_n: Option<f64>,
     pub orientation_angle_deg: Option<f64>,
@@ -181,10 +182,10 @@ pub struct BumperView {
 }
 
 /// Moment que deux efforts de pion imposent à la pièce qui les relie, réduit au
-/// milieu des deux. Sert au bumper dans les deux compartiments : le schéma
-/// diffère (bras à deux forces en vol, répartition élastique en stack) mais la
-/// question posée est la même — que doit encaisser la structure entre ses deux
-/// points d'accroche.
+/// milieu des deux. Sert au bumper dans les deux compartiments — qui se
+/// résolvent désormais de la même façon, par répartition élastique à raideurs
+/// égales — et répond à la même question : que doit encaisser la structure
+/// entre ses deux points d'accroche.
 fn pin_pair_moment_nm(p1: Vec2, f1: Vec2, p2: Vec2, f2: Vec2) -> f64 {
     let g = (p1 + p2) * 0.5;
     ((p1 - g).cross(f1) + (p2 - g).cross(f2)) / 1000.0
@@ -422,11 +423,8 @@ fn compute_stacked_bumper_pins(
     (front, f_front, rear, f_rear)
 }
 
-/// Efforts transmis par le bumper à l'enceinte de référence (`speakers[0]`),
-/// exprimés dans le repère de cette enceinte — même schéma qu'une jonction
-/// réelle (brief §5) : un bras à deux forces entre le pion arrière et le point
-/// d'accroche, et un pivot au pion avant. Corps libre = toutes les enceintes,
-/// puisque tout pend de ce point.
+/// Efforts transmis par le bumper à l'enceinte de référence (`speakers[0]`).
+/// Corps libre = toutes les enceintes, puisque tout pend de ce point.
 ///
 /// `pins_local` est le perçage **déclaré** du bumper (`BumperModel::pins`),
 /// avant puis arrière, dans le repère de l'enceinte de référence. C'est là que
@@ -434,11 +432,25 @@ fn compute_stacked_bumper_pins(
 /// remettre à la quincaillerie de l'enceinte (charnière haute, trou d'ancrage)
 /// donnait des bras de levier qui n'étaient pas ceux du montage, et qui
 /// bougeaient avec le modèle d'enceinte monté dessous.
+///
+/// Deux pions goupillés dans un même corps rigide, ce sont 4 inconnues pour 3
+/// équations : il faut une hypothèse de plus. C'est **la même** qu'en stack
+/// (`compute_stacked_bumper_pins`) et qu'à toute autre paire de quincaillerie
+/// (`split_over_pair`) : répartition élastique à raideurs égales — mêmes
+/// goupilles, même perçage, même flanc.
+///
+/// Elle remplace un « bras arrière à deux forces » supposé **d'aplomb** du pion
+/// arrière. Cette direction-là était fabriquée, pas mesurée : elle rendait
+/// l'effort du pion arrière vertical quoi qu'il arrive, donc insensible au
+/// déport réel de la manille, et colinéaire à la barre qui descend vers la paire
+/// ancrage/verrou — d'où un couple quasi nul déversé dans l'enceinte de
+/// référence (~60 N·m) là où toutes les jonctions voisines en passaient dix fois
+/// plus. Le bumper se résolvait en vase clos ; il fait maintenant partie du même
+/// ensemble que la manille, les enceintes et la tirette.
 fn compute_bumper_loads(
     chain: &[ChainSpeaker],
     speakers: &[SpeakerInstance],
     pins_local: [Vec2; 2],
-    pickup_local: Vec2,
     settings: &Settings,
     tie: Option<TieForce>,
 ) -> BumperLoads {
@@ -450,12 +462,10 @@ fn compute_bumper_loads(
     let b0 = speakers[0];
     let [front_pin_local, rear_pin_local] = pins_local;
     let pvg = b0.o + front_pin_local.rotate(b0.phi);
-    let an_local = rear_pin_local;
-    // Le bras arrière monte du pion arrière jusqu'à la hauteur d'accroche, à
-    // son aplomb : c'est lui qui fixe la direction de l'effort de ce pion.
-    let bo_local = Vec2::new(an_local.x, pickup_local.y);
-    let bo = b0.o + bo_local.rotate(b0.phi);
-    let an = b0.o + an_local.rotate(b0.phi);
+    let an = b0.o + rear_pin_local.rotate(b0.phi);
+    // Barycentre des deux pions : c'est en ce point que le torseur se réduit,
+    // donc en ce point que le moment extérieur doit être pris.
+    let pins_g = (an + pvg) * 0.5;
 
     // Poids enceinte par enceinte (grappe hétérogène).
     let mut w_total = 0.0;
@@ -468,19 +478,17 @@ fn compute_bumper_loads(
     let cm = sum * (1.0 / w_total);
 
     let mut rext = Vec2::new(0.0, -w_total);
-    let mut mext = (cm - pvg).cross(rext);
+    let mut mext = (cm - pins_g).cross(rext);
     if let Some(tie) = tie {
         let last = speakers[speakers.len() - 1];
         let q = last.o + tie.point_local.rotate(last.phi);
         rext = rext + tie.force;
-        mext += (q - pvg).cross(tie.force);
+        mext += (q - pins_g).cross(tie.force);
     }
 
-    let u = (bo - an).normalize();
-    let lever = (an - pvg).cross(u);
-    let lambda = -mext / lever;
-    let f_ori = u * lambda;
-    let f_piv = -rext - f_ori;
+    // Les deux pions équilibrent à eux seuls tout ce que subit le corps libre :
+    // ils délivrent `−rext` et le moment `−mext`.
+    let (f_ori, f_piv) = split_wrench_over_pair(an, pvg, -rext, -mext);
 
     // La barre qui descend du pion arrière est boulonnée au caisson par sa paire
     // ancrage/verrou — c'est elle qui verrouille la rotation de l'enceinte de
@@ -775,7 +783,7 @@ pub fn compute_cluster(
             // référence : en vol le bumper est rigidement fixé à elle.
             let pins_local = bumper_pin_points(&outline_local, bumper_model);
             let loads =
-                compute_bumper_loads(chain, &speakers, pins_local, pickup, settings, tie_force);
+                compute_bumper_loads(chain, &speakers, pins_local, settings, tie_force);
             let of_local = loads.orientation_force.rotate_transpose(attach.phi);
             let pf_local = loads.pivot_force.rotate_transpose(attach.phi);
             let pickup_g = attach.o + pickup.rotate(attach.phi);

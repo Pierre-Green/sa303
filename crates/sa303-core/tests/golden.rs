@@ -2321,6 +2321,53 @@ fn the_bumper_carries_exactly_what_hangs_below_it() {
     assert!(residual < 1e-6 * bv.support_force_n, "résidu {residual} N");
 }
 
+/// Deux pions goupillés dans un même corps rigide, ce sont 4 inconnues pour 3
+/// équations : l'équilibre seul ne suffit pas à les départager. En vol, le
+/// solveur levait cette indétermination avec un « bras arrière à deux forces »
+/// supposé d'aplomb du pion arrière — une direction fabriquée, pas mesurée, et
+/// qui n'était pas celle utilisée en stack.
+///
+/// La règle est maintenant unique : répartition élastique à raideurs égales,
+/// comme à toute autre paire de quincaillerie. Sa signature est que l'écart
+/// entre les deux efforts de pion est **perpendiculaire** à la ligne des pions
+/// — c'est la part de couple, et rien d'autre ne s'y ajoute. Un équilibre de
+/// forces ou de moments ne l'aurait pas vu : l'ancien schéma les satisfaisait
+/// tous les deux, il choisissait simplement une autre solution.
+#[test]
+fn the_two_bumper_pins_share_the_load_the_same_way_in_the_air_as_on_the_ground() {
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let settings = default_settings();
+
+    // Assiette imposée : l'accroche est déportée, donc les pions voient un vrai
+    // moment — c'est le cas où la répartition choisie change les chiffres.
+    let cluster = flown_cluster("paire de pions", &[1.0, 2.0, 5.0, 10.5], Some(8.5), &bumper.id);
+    let r = compute_cluster(std::slice::from_ref(&sm), &cluster, &settings, &bumper, &[])
+        .expect("configuration possible");
+
+    let bv = &r.bumper_view;
+    let rear = bv.orientation_point_global.expect("pion arrière");
+    let front = bv.pivot_point_global.expect("pion avant");
+    let f_rear = bv.orientation_force_global.expect("effort pion arrière");
+    let f_front = bv.pivot_force_global.expect("effort pion avant");
+
+    let span = rear - front;
+    let couple = (f_rear - f_front) * 0.5;
+    let along = couple.dot(span.normalize());
+    assert!(
+        along.abs() < 1e-6 * couple.norm().max(1.0),
+        "la part de couple a une composante {along} N le long de la ligne des pions : \
+         la répartition n'est plus celle à raideurs égales"
+    );
+    // Et elle n'est pas nulle : sans moment à reprendre, le test ci-dessus
+    // passerait pour de mauvaises raisons.
+    assert!(
+        couple.norm() > 0.05 * bv.support_force_n,
+        "couple de {} N, trop faible pour que ce test prouve quoi que ce soit",
+        couple.norm()
+    );
+}
+
 /// En stack, le bumper porte ET il est goupillé : la réaction du sol remonte le
 /// poids entier, et les deux pions qui le tiennent à l'enceinte du bas se
 /// partagent cette charge. Sans cette répartition, le stack n'avait aucune

@@ -208,13 +208,12 @@ function onStageClick(e: Konva.KonvaEventObject<MouseEvent>) {
 
     <ViewerPopup
       v-if="popupData && popupAnchor"
+      :key="popupAnchor.idx"
       :data="popupData"
       :at="popupAnchor"
       :size="size"
       :compartment="compartment"
       @close="hover.close"
-      @hold="hover.clearHideTimer"
-      @release="hover.scheduleHide"
     />
 
     <ElevationReadout :elevation="result.elevation" />

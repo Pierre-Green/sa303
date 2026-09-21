@@ -21,12 +21,31 @@ pub(super) fn split_over_pair(
     apply_at: Vec2,
     force: Vec2,
 ) -> (Vec2, Vec2, f64) {
-    let ab = anchor - latch;
-    let d = ab.norm();
     let g_point = (anchor + latch) * 0.5;
     let m_g = (apply_at - g_point).cross(force);
+    let (f_anchor, f_latch) = split_wrench_over_pair(anchor, latch, force, m_g);
+    (f_anchor, f_latch, m_g)
+}
+
+/// Même répartition, mais à partir du **torseur** à transmettre plutôt que d'une
+/// force et de son point d'application : résultante `force` et moment `m_g`
+/// réduit au barycentre de la paire.
+///
+/// C'est la forme générale — `split_over_pair` n'en est que le cas où le torseur
+/// vient d'une force unique. Elle est nécessaire dès que ce qu'il faut faire
+/// passer par la paire ne se ramène pas à un point : les deux pions du bumper
+/// reprennent le poids de toutes les enceintes **et** la tirette, deux actions
+/// appliquées en des points différents.
+pub(super) fn split_wrench_over_pair(
+    anchor: Vec2,
+    latch: Vec2,
+    force: Vec2,
+    m_g: f64,
+) -> (Vec2, Vec2) {
+    let ab = anchor - latch;
+    let d = ab.norm();
     // perp(ab) tourné d'un quart de tour : (x, y) -> (−y, x).
     let perp = Vec2::new(-ab.y, ab.x) * (1.0 / d);
     let p = perp * (m_g / d);
-    (force * 0.5 + p, force * 0.5 - p, m_g)
+    (force * 0.5 + p, force * 0.5 - p)
 }
