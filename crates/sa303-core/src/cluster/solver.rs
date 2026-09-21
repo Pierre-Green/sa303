@@ -4,15 +4,16 @@
 //! jonction, et rend le tout exploitable par le front (`ClusterResult`) sans
 //! qu'il ait jamais à recalculer quoi que ce soit.
 
-use super::joint::{compute_joint, JointInput, JointResult};
+use super::joint::{compute_joint, JointInput, JointResult, MIN_BIELLE_LEVER_MM};
 use super::kinematics::{
     build_cluster, phi_initial_free_hang, phi_initial_stack, solve_pickup_x_for_imposed_tilt,
     weighted_cg, ChainSpeaker, SpeakerInstance,
 };
 use super::model::{Cluster, Compartment};
-use super::pair::{split_over_pair, split_wrench_over_pair};
+use super::pair::split_over_pair;
 use crate::bumper::{
     bumper_outline_top, bumper_pickup_height, bumper_pin_points, BumperBarModel, BumperModel,
+    BumperRearBar,
 };
 use crate::settings::Settings;
 use crate::speaker::{SpeakerModel, SplayRange};
@@ -124,9 +125,9 @@ pub struct BumperView {
     pub tie_angle_range_deg: Option<[f64; 2]>,
     /// Efforts transmis par le bumper à l'enceinte de référence, repère de
     /// cette enceinte : ce que chacun de ses **deux pions** encaisse.
-    /// `orientation` est le pion arrière, `pivot` le pion avant — les noms
-    /// datent d'un schéma antérieur, la répartition est aujourd'hui symétrique
-    /// entre les deux. Vol uniquement. Par flanc, comme les efforts de
+    /// `orientation` est le pion arrière (celui qui alimente la barre),
+    /// `pivot` le pion avant (celui de la bielle) — mêmes rôles et mêmes noms
+    /// qu'à une jonction. Vol uniquement. Par flanc, comme les efforts de
     /// jonction.
     pub orientation_force_n: Option<f64>,
     pub orientation_angle_deg: Option<f64>,
@@ -426,46 +427,80 @@ fn compute_stacked_bumper_pins(
 /// Efforts transmis par le bumper à l'enceinte de référence (`speakers[0]`).
 /// Corps libre = toutes les enceintes, puisque tout pend de ce point.
 ///
-/// `pins_local` est le perçage **déclaré** du bumper (`BumperModel::pins`),
-/// avant puis arrière, dans le repère de l'enceinte de référence. C'est là que
-/// la barre est réellement boulonnée, donc là que la statique se résout : s'en
-/// remettre à la quincaillerie de l'enceinte (charnière haute, trou d'ancrage)
-/// donnait des bras de levier qui n'étaient pas ceux du montage, et qui
-/// bougeaient avec le modèle d'enceinte monté dessous.
+/// Le bumper est placé par ses **deux liaisons réelles** — la bielle avant et
+/// la barre arrière — et non par le perçage coté depuis ses bords
+/// (`BumperModel::pins`). Les deux placements décrivent les mêmes trous, mais
+/// seul celui-ci ferme : les cotes de bords sont arrondies au mm, et la
+/// fermeture se joue au centième.
 ///
-/// Deux pions goupillés dans un même corps rigide, ce sont 4 inconnues pour 3
-/// équations : il faut une hypothèse de plus. C'est **la même** qu'en stack
-/// (`compute_stacked_bumper_pins`) et qu'à toute autre paire de quincaillerie
-/// (`split_over_pair`) : répartition élastique à raideurs égales — mêmes
-/// goupilles, même perçage, même flanc.
+/// La liaison est **celle d'une jonction**, pas une paire de goupilles libres :
 ///
-/// Elle remplace un « bras arrière à deux forces » supposé **d'aplomb** du pion
-/// arrière. Cette direction-là était fabriquée, pas mesurée : elle rendait
-/// l'effort du pion arrière vertical quoi qu'il arrive, donc insensible au
-/// déport réel de la manille, et colinéaire à la barre qui descend vers la paire
-/// ancrage/verrou — d'où un couple quasi nul déversé dans l'enceinte de
-/// référence (~60 N·m) là où toutes les jonctions voisines en passaient dix fois
-/// plus. Le bumper se résolvait en vase clos ; il fait maintenant partie du même
-/// ensemble que la manille, les enceintes et la tirette.
+/// * à l'avant, une bielle bi-goupillée relie le trou avant du bumper à la
+///   charnière haute de l'enceinte (`geo.ht`). Élément à deux forces : sa
+///   direction est imposée par ses deux goupilles, donc une seule inconnue
+///   scalaire, exactement comme la bielle avant de `compute_joint` ;
+/// * à l'arrière, la barre du bumper descend du pion arrière et se boulonne au
+///   caisson par sa paire ancrage/verrou.
+///
+/// Ce sont 3 inconnues pour 3 équations : la liaison est déterminée, sans
+/// hypothèse de raideur à inventer.
+///
+/// Elle remplace une répartition élastique 50/50 sur les deux pions
+/// (`split_wrench_over_pair`). Cette hypothèse-là laissait le pion avant
+/// reprendre la moitié de la verticale, et envoyait le couple perpendiculaire à
+/// l'entraxe des pions — c'est-à-dire, l'entraxe étant l'axe du caisson,
+/// **quasi le long de l'axe de la barre**. L'effort du pion arrière en sortait
+/// presque purement axial : la barre travaillait en compression au lieu de la
+/// flexion. Vérifié par `the_front_bumper_pin_pulls_along_its_bielle` et
+/// `the_reference_bar_takes_more_than_the_next_one`.
+///
+/// Le point d'application arrière est le **trou haut de la barre**
+/// (`BumperRearBar`), construit depuis la paire ancrage/verrou du caisson — pas
+/// le pion déduit de la silhouette du bumper par `bumper_pin_points`. Ce
+/// dernier repose sur `height_from_bottom_mm`, une cote approchée qui place le
+/// point à quelques millimètres près et, surtout, ne connaît pas la longueur de
+/// la barre réellement montée : c'est pourtant elle qui fixe le bras, donc ce
+/// que la paire encaisse. Vérifié par `the_bumper_bar_sets_the_pair_lever`.
 fn compute_bumper_loads(
     chain: &[ChainSpeaker],
     speakers: &[SpeakerInstance],
-    pins_local: [Vec2; 2],
+    pivot_bar_usable_length_mm: f64,
+    rear_bar: &BumperRearBar,
     settings: &Settings,
     tie: Option<TieForce>,
-) -> BumperLoads {
+) -> Result<BumperLoads, ImpossibleConfiguration> {
     let (g, k_dyn, share_per_flank) = (
         settings.gravity,
         settings.dynamic_factor,
         settings.share_per_flank,
     );
     let b0 = speakers[0];
-    let [front_pin_local, rear_pin_local] = pins_local;
-    let pvg = b0.o + front_pin_local.rotate(b0.phi);
-    let an = b0.o + rear_pin_local.rotate(b0.phi);
-    // Barycentre des deux pions : c'est en ce point que le torseur se réduit,
-    // donc en ce point que le moment extérieur doit être pris.
-    let pins_g = (an + pvg) * 0.5;
+    let geo = &chain[0].geo;
+    // Goupille basse de la bielle avant : la charnière haute du caisson.
+    let bielle_low = b0.o + geo.ht.rotate(b0.phi);
+    // Goupille haute : au bout de la bielle, d'aplomb **dans le repère du
+    // caisson** — le bumper est rigidement fixé à lui en vol, donc la bielle
+    // garde la même orientation relative quelle que soit l'assiette. C'est la
+    // bielle qui place ce point, pas `height_from_bottom_mm` : cette cote-là est
+    // arrondie et laissait le pion 6,3 mm au-dessus du trou haut de la barre,
+    // alors que les deux sont percés dans la même pièce.
+    let pvg = b0.o + (geo.ht + Vec2::new(0.0, pivot_bar_usable_length_mm)).rotate(b0.phi);
+
+    // La paire ancrage/verrou par laquelle la barre est boulonnée, et le repère
+    // de barre qu'elle définit : abscisse du verrou vers l'ancrage, latéral vers
+    // l'avant du caisson — exactement la construction de `compute_joint`.
+    let pair_anchor_point = b0.o + geo.anchor_local.rotate(b0.phi);
+    let pair_latch_point = b0.o + geo.latch_local.rotate(b0.phi);
+    let e_axis = (pair_anchor_point - pair_latch_point).normalize();
+    let e_front = Vec2::new(-e_axis.y, e_axis.x);
+    // Trou haut de la barre : c'est lui qui reçoit l'effort, et son éloignement
+    // de la paire est le bras qui décide de ce qu'elle encaisse.
+    let an = pair_anchor_point
+        + e_axis * rear_bar.top_hole_along_mm
+        + e_front * rear_bar.top_hole_lateral_mm;
+    // Moment extérieur pris au pion arrière : c'est lui qui porte l'inconnue
+    // vectorielle, donc c'est là qu'elle disparaît de l'équation de moment.
+    let pins_g = an;
 
     // Poids enceinte par enceinte (grappe hétérogène).
     let mut w_total = 0.0;
@@ -486,23 +521,37 @@ fn compute_bumper_loads(
         mext += (q - pins_g).cross(tie.force);
     }
 
-    // Les deux pions équilibrent à eux seuls tout ce que subit le corps libre :
-    // ils délivrent `−rext` et le moment `−mext`.
-    let (f_ori, f_piv) = split_wrench_over_pair(an, pvg, -rext, -mext);
+    // Bielle avant, élément à deux forces : direction imposée par ses deux
+    // goupilles, donc une seule inconnue scalaire.
+    let u = (pvg - bielle_low).normalize();
+    let bielle_lever = (pvg - an).cross(u);
+    // Même garde qu'en jonction : si la ligne d'action de la bielle passe par le
+    // pion arrière, `lambda` part à l'infini et des NaN traverseraient tout le
+    // calcul sans qu'aucun seuil ne les arrête (les comparaisons sur NaN sont
+    // fausses). Ce n'est atteignable que sur un perçage aberrant.
+    if bielle_lever.abs() < MIN_BIELLE_LEVER_MM {
+        return Err(ImpossibleConfiguration {
+            reason: format!(
+                "Bumper : bras de bielle {bielle_lever:.4} mm — la ligne d'action de la \
+                 bielle avant passe par le pion arrière, la liaison n'a pas de solution."
+            ),
+        });
+    }
+    let f_piv = u * (-mext / bielle_lever);
+    // Le pion arrière reprend tout le reste : c'est par lui que la barre du
+    // bumper, encastrée sur le caisson, passe son effort.
+    let f_ori = -rext - f_piv;
 
     // La barre qui descend du pion arrière est boulonnée au caisson par sa paire
     // ancrage/verrou — c'est elle qui verrouille la rotation de l'enceinte de
     // référence, exactement comme la barre d'une jonction. On lui applique donc
     // la même répartition : `f_ori` arrive à son extrémité haute (le pion
     // arrière), et les deux goupilles s'en partagent la résultante et le moment.
-    let geo = &chain[0].geo;
-    let pair_anchor_point = b0.o + geo.anchor_local.rotate(b0.phi);
-    let pair_latch_point = b0.o + geo.latch_local.rotate(b0.phi);
     let (f_anchor_g, f_latch_g, m_g) =
         split_over_pair(pair_anchor_point, pair_latch_point, an, f_ori);
 
     let sg = -share_per_flank;
-    BumperLoads {
+    Ok(BumperLoads {
         // Sens de la paire : `+share_per_flank`, comme dans une jonction — la
         // répartition part déjà de ce que la barre délivre aux goupilles, là où
         // `f_ori`/`f_piv` ci-dessous partent du corps libre et doivent être
@@ -522,7 +571,7 @@ fn compute_bumper_loads(
         // entière. `rext` est l'effort extérieur sur le corps libre (poids vers
         // le bas, plus la tirette) ; ce que la manille tire est son opposé.
         support_force: -rext,
-    }
+    })
 }
 
 /// Calcule la géométrie, la statique de chaque jonction et la tension de tirette
@@ -779,11 +828,31 @@ pub fn compute_cluster(
                 let edge_x = threshold * pickup.x.signum();
                 attach.o + Vec2::new(edge_x, pickup.y).rotate(attach.phi)
             });
-            // Perçage déclaré du bumper, exprimé dans le repère de l'enceinte de
-            // référence : en vol le bumper est rigidement fixé à elle.
-            let pins_local = bumper_pin_points(&outline_local, bumper_model);
-            let loads =
-                compute_bumper_loads(chain, &speakers, pins_local, settings, tie_force);
+            // En vol, le bumper est calé par ses deux liaisons réelles — la
+            // bielle avant et la barre arrière — et non par le perçage coté
+            // depuis ses bords (`bumper_pin_points`), qui reste le tracé du
+            // dessin et le placement du stack.
+            //
+            // En vol, c'est la barre d'aplomb qui est montée : les barres
+            // inclinées servent à pencher la première tête en stack.
+            let rear_bar =
+                bumper_model
+                    .rear_bar_at_tilt(0.0)
+                    .ok_or_else(|| ImpossibleConfiguration {
+                        reason: format!(
+                            "Le bumper {} ne déclare pas de barre arrière à 0° : \
+                             impossible de le monter en vol.",
+                            bumper_model.name
+                        ),
+                    })?;
+            let loads = compute_bumper_loads(
+                chain,
+                &speakers,
+                bumper_model.pivot_bar_usable_length_mm,
+                rear_bar,
+                settings,
+                tie_force,
+            )?;
             let of_local = loads.orientation_force.rotate_transpose(attach.phi);
             let pf_local = loads.pivot_force.rotate_transpose(attach.phi);
             let pickup_g = attach.o + pickup.rotate(attach.phi);

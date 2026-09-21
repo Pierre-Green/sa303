@@ -14,7 +14,12 @@ import { useBumperModelsStore } from "@/stores/bumperModels";
 import { useBumperBarModelsStore } from "@/stores/bumperBarModels";
 import { useBuiltinsStore } from "@/stores/builtins";
 import { api } from "@/lib/api";
-import type { BumperBarModel, BumperModel, SpeakerGeometryReport } from "@/lib/types";
+import type {
+  BumperBarModel,
+  BumperModel,
+  BumperRearBar,
+  SpeakerGeometryReport,
+} from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -93,6 +98,11 @@ interface BumperFormState {
   pinFrontFromFrontMm: number;
   pinRearFromRearMm: number;
   pinHeightFromBottomMm: number;
+  pivotBarUsableLengthMm: number;
+  /** Barres arrière : reportées telles quelles, pas éditables ici. Les coter
+   * demande un relevé de plan par inclinaison ; les perdre au passage d'une
+   * édition de nom fausserait silencieusement toute la statique du bumper. */
+  rearBars: BumperRearBar[];
   compatibility: Record<string, { flown: boolean; stacked: boolean }>;
 }
 
@@ -108,7 +118,10 @@ function blankBumperForm(): BumperFormState {
     // Perçage de la SA303-BUMPER : deux pions à mi-épaisseur.
     pinFrontFromFrontMm: 12.567,
     pinRearFromRearMm: 32.604,
-    pinHeightFromBottomMm: 50,
+    pinHeightFromBottomMm: 60,
+    pivotBarUsableLengthMm: 71.6,
+    // Barre arrière de la SA303-BUMPER, la seule cotée à ce jour.
+    rearBars: [{ tiltDeg: 0, topHoleAlongMm: 224.626, topHoleLateralMm: 1.822 }],
     compatibility: {},
   };
 }
@@ -131,6 +144,8 @@ function loadIntoBumperForm(b: BumperModel) {
     pinFrontFromFrontMm: b.pins.frontFromFrontMm,
     pinRearFromRearMm: b.pins.rearFromRearMm,
     pinHeightFromBottomMm: b.pins.heightFromBottomMm,
+    pivotBarUsableLengthMm: b.pivotBarUsableLengthMm,
+    rearBars: b.rearBars,
     compatibility,
   });
 }
@@ -173,6 +188,8 @@ function buildBumper(): BumperModel {
       rearFromRearMm: bumperForm.pinRearFromRearMm,
       heightFromBottomMm: bumperForm.pinHeightFromBottomMm,
     },
+    pivotBarUsableLengthMm: bumperForm.pivotBarUsableLengthMm,
+    rearBars: bumperForm.rearBars,
     compatibleSpeakers: Object.entries(bumperForm.compatibility)
       .filter(([, c]) => c.flown || c.stacked)
       .map(([speakerModelId, c]) => ({ speakerModelId, flown: c.flown, stacked: c.stacked })),

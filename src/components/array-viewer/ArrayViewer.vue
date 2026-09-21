@@ -22,8 +22,11 @@ import { useThemeColors } from "./composables/useThemeColors";
 import { useStageView } from "./composables/useStageView";
 import { useHoverPin } from "./composables/useHoverPin";
 import { usePopupData } from "./composables/usePopupData";
+import { useListeningLine } from "./composables/useListeningLine";
 
 import GroundLine from "./layers/GroundLine.vue";
+import ListeningLine from "./layers/ListeningLine.vue";
+import ListeningRays from "./layers/ListeningRays.vue";
 import GuideDashes from "./layers/GuideDashes.vue";
 import SpeakersLayer from "./layers/SpeakersLayer.vue";
 import BumperOutline from "./layers/BumperOutline.vue";
@@ -34,6 +37,7 @@ import CgMarker from "./layers/CgMarker.vue";
 import ViewerPopup from "./popup/ViewerPopup.vue";
 import ElevationReadout from "./overlays/ElevationReadout.vue";
 import CursorReadout from "./overlays/CursorReadout.vue";
+import ListeningHeightControl from "./overlays/ListeningHeightControl.vue";
 
 // Tout vient de `result` : silhouette par enceinte (une grappe est hétérogène)
 // et masse totale déjà sommée côté Rust — le front ne recompose rien, il
@@ -107,6 +111,8 @@ const hover = useHoverPin({
   setPointerCursor: view.setPointerCursor,
 });
 
+const listening = useListeningLine(computed(() => props.result));
+
 const viewer: ViewerContext = {
   result: computed(() => props.result),
   compartment: computed(() => props.compartment),
@@ -115,6 +121,7 @@ const viewer: ViewerContext = {
   maxForceN,
   dashTopY: view.dashTopY,
   hover,
+  listening,
   px: scale.px,
   annotation: scale.annotation,
 };
@@ -126,10 +133,16 @@ const { popupData } = usePopupData(viewer);
 
 // Sortis du composable pour le template : seules les refs de premier niveau y
 // sont déballées automatiquement.
-const { groundLineY, cursorPos, viewport, handleWheel, updateCursorPos, clearCursorPos, onDragMove } =
+const { groundLineY, fitOffsetY, cursorPos, viewport, handleWheel, updateCursorPos, clearCursorPos, onDragMove } =
   view;
 const { stageScale } = scale;
 const popupAnchor = hover.anchor;
+
+// Même transform que le sol, appliquée à l'altitude d'écoute : recalculée à
+// chaque réglage, sans repasser par un cadrage que la ligne ne doit pas dicter.
+const listeningLineY = computed(() =>
+  fitOffsetY.value === null ? null : fitOffsetY.value + listening.localY.value * scale.fitScale.value,
+);
 
 const stageConfig = computed(() => ({
   width: size.value.width,
@@ -188,8 +201,16 @@ function onStageClick(e: Konva.KonvaEventObject<MouseEvent>) {
             :stage-scale="stageScale"
           />
 
+          <ListeningLine
+            :y="listeningLineY"
+            :viewport="viewport"
+            :stage-scale="stageScale"
+            :height-mm="listening.heightMm.value"
+          />
+
           <v-group ref="fitGroupRef" :config="{}">
             <GuideDashes />
+            <ListeningRays />
 
             <!-- Ce qui dicte le cadrage : le matériel et ses annotations, pas
                  les pointillés ci-dessus. -->
@@ -216,6 +237,7 @@ function onStageClick(e: Konva.KonvaEventObject<MouseEvent>) {
       @close="hover.close"
     />
 
+    <ListeningHeightControl v-model="listening.heightMm.value" />
     <ElevationReadout :elevation="result.elevation" />
     <CursorReadout
       v-if="cursorPos"

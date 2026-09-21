@@ -3,14 +3,22 @@
   "name": "SA303-BUMPER",
   "schemaVersion": 1,
   "depth": 702.0,
-  "height": 100.0,
+  "height": 120.0,
   "shackleHeightAboveBumper": 40.0,
-  "maxDirectDeportMm": 351.0,
+  "maxDirectDeportMm": 130.23,
   "pins": {
     "frontFromFrontMm": 12.567,
     "rearFromRearMm": 32.604,
-    "heightFromBottomMm": 50.0
+    "heightFromBottomMm": 60.0
   },
+  "pivotBarUsableLengthMm": 71.6,
+  "rearBars": [
+    {
+      "tiltDeg": 0.0,
+      "topHoleAlongMm": 224.626,
+      "topHoleLateralMm": 1.822
+    }
+  ],
   "compatibleSpeakers": [
     {
       "speakerModelId": "sa303-isophase",

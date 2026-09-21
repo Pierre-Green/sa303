@@ -292,7 +292,10 @@ fn dump_audit_export_file() {
         &settings,
     );
     // Écrit dans docs/audit/, à côté du dossier d'audit qu'il accompagne.
-    let name = format!("../docs/audit/sa303-audit-{}-grappes-{date}.json", clusters.len());
+    let name = format!(
+        "../docs/audit/sa303-audit-{}-grappes-{date}.json",
+        clusters.len()
+    );
     let json = serde_json::to_string_pretty(&export).expect("sérialisable");
     std::fs::write(&name, &json).expect("écriture");
     println!("écrit {name} ({} Ko)", json.len() / 1024);

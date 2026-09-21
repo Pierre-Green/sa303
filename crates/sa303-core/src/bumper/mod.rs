@@ -10,4 +10,4 @@ mod model;
 
 pub use bumper_bar::{BumperBarCompatibility, BumperBarModel};
 pub use geometry::{bumper_outline_top, bumper_pickup_height, bumper_pin_points};
-pub use model::{BumperCompatibility, BumperModel, BumperPins};
+pub use model::{BumperCompatibility, BumperModel, BumperPins, BumperRearBar};

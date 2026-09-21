@@ -202,8 +202,16 @@ fn default_bumper() -> BumperModel {
         pins: BumperPins {
             front_from_front_mm: 12.567,
             rear_from_rear_mm: 32.604,
-            height_from_bottom_mm: 50.0,
+            height_from_bottom_mm: 60.0,
         },
+        // Bielle de pivot avant relevée de la SA303-BUMPER.
+        pivot_bar_usable_length_mm: 71.6,
+        // Barre arrière relevée de la SA303-BUMPER, inclinaison 0 (celle du vol).
+        rear_bars: vec![sa303_core::bumper::BumperRearBar {
+            tilt_deg: 0.0,
+            top_hole_along_mm: 224.626,
+            top_hole_lateral_mm: 1.822,
+        }],
         compatible_speakers: vec![BumperCompatibility {
             speaker_model_id: "sa303".into(),
             flown: true,
@@ -224,12 +232,12 @@ fn bumper_pins_sit_where_the_drawing_says_and_not_on_the_speaker_hardware() {
 
     // Repère enceinte : avant = x négatif, bumper posé sur la face supérieure.
     // Avant à 12,567 mm de la face avant, arrière à 32,604 mm de la face
-    // arrière, tous deux à mi-épaisseur (50 sur 100).
+    // arrière, tous deux à 60 mm du dessous du bumper.
     let half_d = bumper.depth / 2.0;
     let bottom = sm.mechanical.height / 2.0;
     assert!((front.x - (-half_d + 12.567)).abs() < 1e-9, "{front:?}");
     assert!((rear.x - (half_d - 32.604)).abs() < 1e-9, "{rear:?}");
-    assert!((front.y - (bottom + 50.0)).abs() < 1e-9, "{front:?}");
+    assert!((front.y - (bottom + 60.0)).abs() < 1e-9, "{front:?}");
     assert!(
         (rear.y - front.y).abs() < 1e-9,
         "les deux pions sont sur la même ligne"
@@ -2321,50 +2329,95 @@ fn the_bumper_carries_exactly_what_hangs_below_it() {
     assert!(residual < 1e-6 * bv.support_force_n, "résidu {residual} N");
 }
 
-/// Deux pions goupillés dans un même corps rigide, ce sont 4 inconnues pour 3
-/// équations : l'équilibre seul ne suffit pas à les départager. En vol, le
-/// solveur levait cette indétermination avec un « bras arrière à deux forces »
-/// supposé d'aplomb du pion arrière — une direction fabriquée, pas mesurée, et
-/// qui n'était pas celle utilisée en stack.
+/// En vol, le bumper est tenu comme une jonction : bielle bi-goupillée à
+/// l'avant (trou avant du bumper ↔ charnière haute du caisson), barre à
+/// l'arrière. La bielle est un élément à **deux forces** : sa signature est que
+/// l'effort du pion avant est colinéaire à ses deux goupilles, et à rien
+/// d'autre.
 ///
-/// La règle est maintenant unique : répartition élastique à raideurs égales,
-/// comme à toute autre paire de quincaillerie. Sa signature est que l'écart
-/// entre les deux efforts de pion est **perpendiculaire** à la ligne des pions
-/// — c'est la part de couple, et rien d'autre ne s'y ajoute. Un équilibre de
-/// forces ou de moments ne l'aurait pas vu : l'ancien schéma les satisfaisait
-/// tous les deux, il choisissait simplement une autre solution.
+/// Le solveur y répartissait auparavant la charge sur les deux pions à
+/// raideurs égales, comme sur une paire de quincaillerie. Un équilibre de
+/// forces ou de moments ne distingue pas les deux : l'ancien schéma les
+/// satisfaisait tous les deux, il choisissait simplement une autre solution —
+/// celle où le pion avant reprend la moitié de la verticale.
 #[test]
-fn the_two_bumper_pins_share_the_load_the_same_way_in_the_air_as_on_the_ground() {
+fn the_front_bumper_pin_pulls_along_its_bielle() {
     let sm = default_speaker();
     let bumper = default_bumper();
     let settings = default_settings();
 
     // Assiette imposée : l'accroche est déportée, donc les pions voient un vrai
     // moment — c'est le cas où la répartition choisie change les chiffres.
-    let cluster = flown_cluster("paire de pions", &[1.0, 2.0, 5.0, 10.5], Some(8.5), &bumper.id);
+    let cluster = flown_cluster(
+        "paire de pions",
+        &[1.0, 2.0, 5.0, 10.5],
+        Some(8.5),
+        &bumper.id,
+    );
     let r = compute_cluster(std::slice::from_ref(&sm), &cluster, &settings, &bumper, &[])
         .expect("configuration possible");
 
     let bv = &r.bumper_view;
-    let rear = bv.orientation_point_global.expect("pion arrière");
     let front = bv.pivot_point_global.expect("pion avant");
-    let f_rear = bv.orientation_force_global.expect("effort pion arrière");
     let f_front = bv.pivot_force_global.expect("effort pion avant");
 
-    let span = rear - front;
-    let couple = (f_rear - f_front) * 0.5;
-    let along = couple.dot(span.normalize());
+    let s0 = r.speakers[0];
+    let ht = s0.o
+        + sa303_core::speaker::SpeakerGeometry::compute(&sm)
+            .ht
+            .rotate(s0.phi);
+    let u = (front - ht).normalize();
+    // Composante transverse : nulle pour un élément à deux forces.
+    let across = f_front.x * u.y - f_front.y * u.x;
     assert!(
-        along.abs() < 1e-6 * couple.norm().max(1.0),
-        "la part de couple a une composante {along} N le long de la ligne des pions : \
-         la répartition n'est plus celle à raideurs égales"
+        across.abs() < 1e-6 * f_front.norm().max(1.0),
+        "l'effort du pion avant a une composante {across} N en travers de sa bielle : \
+         ce n'est plus un élément à deux forces"
     );
-    // Et elle n'est pas nulle : sans moment à reprendre, le test ci-dessus
-    // passerait pour de mauvaises raisons.
     assert!(
-        couple.norm() > 0.05 * bv.support_force_n,
-        "couple de {} N, trop faible pour que ce test prouve quoi que ce soit",
-        couple.norm()
+        f_front.norm() > 1e-3,
+        "bielle à vide, le test ne prouve rien"
+    );
+}
+
+/// L'enceinte de référence porte **toute** la grappe, l'enceinte suivante une
+/// de moins : l'effort déversé dans sa barre doit donc être le plus élevé des
+/// deux.
+///
+/// C'est la comparaison qui tient quelle que soit la barre. Ce qu'ensuite la
+/// paire ancrage/verrou en retient dépend, lui, du bras entre le trou haut de
+/// la barre et la paire — donc de la barre montée, qui n'est pas la même à la
+/// référence et aux jonctions.
+///
+/// C'était inversé tant que les deux pions du bumper se partageaient la charge
+/// à raideurs égales : le couple sortait perpendiculaire à l'entraxe des pions,
+/// donc — cet entraxe étant l'axe du caisson — quasi le long de l'axe de la
+/// barre. L'effort du pion arrière en devenait presque purement axial et la
+/// barre travaillait en compression au lieu de la flexion.
+#[test]
+fn the_reference_bar_takes_more_than_the_next_one() {
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let settings = default_settings();
+
+    let cluster = flown_cluster(
+        "décroissance",
+        &[1.0, 2.0, 3.0, 5.0, 5.0, 10.5],
+        None,
+        &bumper.id,
+    );
+    let r = compute_cluster(std::slice::from_ref(&sm), &cluster, &settings, &bumper, &[])
+        .expect("configuration possible");
+
+    let first = r
+        .bumper_view
+        .orientation_force_n
+        .expect("effort pion arrière");
+    let second = r.joints[0].mag_orientation();
+    assert!(
+        first > second,
+        "barre de l'enceinte 1 chargée à {first} N, celle de l'enceinte 2 à {second} N : \
+         l'enceinte qui porte toute la grappe ne peut pas déverser moins que la suivante"
     );
 }
 
@@ -2503,41 +2556,143 @@ fn the_export_carries_the_sampled_stress_profile_and_its_critical_section() {
 }
 
 /// Le perçage déclaré doit **piloter** la statique, pas seulement le dessin :
-/// déplacer un pion change les bras de levier, donc les efforts. Sans ça, la
-/// déclaration serait décorative et le solveur garderait sa propre idée du
+/// déplacer une goupille change les bras de levier, donc les efforts. Sans ça,
+/// la déclaration serait décorative et le solveur garderait sa propre idée du
 /// montage.
+///
+/// En vol, la déclaration qui pilote les efforts est le **trou haut de la
+/// barre**. Le perçage `BumperModel::pins`, lui, ne sert plus qu'au dessin et
+/// au stack : c'est la barre qui dit où l'effort arrive.
+///
+/// La bielle avant, elle, place le bumper sans rien changer aux efforts : la
+/// rallonger déplace sa goupille haute **le long de sa propre ligne d'action**,
+/// et un élément à deux forces ne se juge qu'à cette ligne. C'est la contrepartie
+/// exacte de la fermeture géométrique — sa longueur doit être juste pour que la
+/// pièce rentre, pas pour que les chiffres sortent.
 #[test]
-fn moving_a_declared_pin_moves_the_bumper_loads() {
+fn the_declared_bar_drives_the_bumper_loads() {
     let sm = default_speaker();
     let settings = default_settings();
     let bumper = default_bumper();
     let cluster = flown_cluster("banane", &[1.0, 5.0, 10.5], None, &bumper.id);
 
-    let reference = compute_cluster(std::slice::from_ref(&sm), &cluster, &settings, &bumper, &[])
-        .expect("configuration possible");
-
-    // Même grappe, pion arrière reculé de 100 mm : le bras du couple s'allonge,
-    // l'effort de pion doit baisser.
-    let mut moved = default_bumper();
-    moved.pins.rear_from_rear_mm -= 100.0;
-    let after = compute_cluster(std::slice::from_ref(&sm), &cluster, &settings, &moved, &[])
-        .expect("configuration possible");
-
+    let run = |b: &sa303_core::bumper::BumperModel| {
+        compute_cluster(std::slice::from_ref(&sm), &cluster, &settings, b, &[])
+            .expect("configuration possible")
+    };
+    let reference = run(&bumper);
     let before_n = reference
         .bumper_view
         .orientation_force_n
-        .expect("vol : pions renseignés");
-    let after_n = after
+        .expect("vol : efforts renseignés");
+
+    // Bielle rallongée de 100 mm : même ligne d'action, donc mêmes efforts.
+    let mut longer_bielle = default_bumper();
+    longer_bielle.pivot_bar_usable_length_mm += 100.0;
+    let bielle_n = run(&longer_bielle)
         .bumper_view
         .orientation_force_n
-        .expect("vol : pions renseignés");
+        .expect("vol : efforts renseignés");
     assert!(
-        (before_n - after_n).abs() > 1.0,
-        "le perçage déclaré ne pilote pas la statique : {before_n} N inchangé"
+        (before_n - bielle_n).abs() < 1e-9,
+        "rallonger la bielle a changé les efforts ({before_n} N → {bielle_n} N) : \
+         elle n'est plus traitée comme un élément à deux forces"
+    );
+
+    // Barre rallongée de 100 mm : le trou haut s'éloigne de la paire, donc le
+    // bras s'allonge et la paire encaisse davantage.
+    let mut longer_bar = default_bumper();
+    longer_bar.rear_bars[0].top_hole_along_mm += 100.0;
+    let after_bar = run(&longer_bar);
+    assert!(
+        after_bar.bumper_view.f_pair_anchor_n.expect("ancrage")
+            > reference.bumper_view.f_pair_anchor_n.expect("ancrage"),
+        "rallonger la barre doit charger davantage la paire"
     );
     assert!(
-        after.bumper_view.pin_span_mm > reference.bumper_view.pin_span_mm,
-        "l'entraxe des pions doit suivre la déclaration"
+        after_bar.bumper_view.pin_span_mm > reference.bumper_view.pin_span_mm,
+        "le point d'application arrière doit suivre la barre déclarée"
+    );
+}
+
+/// La géométrie du bumper doit **fermer** sur celle de l'enceinte.
+///
+/// Les deux goupilles hautes — celle de la bielle avant et le trou haut de la
+/// barre arrière — sont percées dans la même pièce, sur la même ligne de flanc.
+/// Or le solveur les construit par deux chemins indépendants : la bielle depuis
+/// la charnière haute du caisson, la barre depuis la paire ancrage/verrou. Leur
+/// écart doit donc retomber sur l'entraxe des pions du plan, et leur
+/// désalignement être nul.
+///
+/// Rien d'autre ne le vérifie : chacun des deux chemins est cohérent avec
+/// lui-même, et les efforts sortent plausibles même quand la pièce ne rentre
+/// pas. Placer le pion avant à `height_from_bottom_mm` — une cote arrondie au
+/// mm — laissait 6,3 mm de désalignement sans que rien ne bronche.
+#[test]
+fn the_bumper_geometry_closes_on_the_speaker() {
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let geo = sa303_core::speaker::SpeakerGeometry::compute(&sm);
+
+    // Repère enceinte, bumper rigidement fixé à elle : pas besoin de la monter
+    // en grappe, la fermeture ne dépend pas de l'assiette.
+    let bielle_top = geo.ht + sa303_core::vector::Vec2::new(0.0, bumper.pivot_bar_usable_length_mm);
+    let bar = &bumper.rear_bars[0];
+    let e_axis = (geo.anchor_local - geo.latch_local).normalize();
+    let e_front = sa303_core::vector::Vec2::new(-e_axis.y, e_axis.x);
+    let bar_top =
+        geo.anchor_local + e_axis * bar.top_hole_along_mm + e_front * bar.top_hole_lateral_mm;
+
+    let span = bar_top - bielle_top;
+    // Entraxe du plan : profondeur du bumper moins les deux reculs cotés.
+    let declared = bumper.depth - bumper.pins.front_from_front_mm - bumper.pins.rear_from_rear_mm;
+    assert!(
+        (span.x - declared).abs() < 0.05,
+        "entraxe des deux goupilles hautes {} mm contre {declared} mm au plan",
+        span.x
+    );
+    // Même ligne de flanc : c'est un perçage traversant, il n'y a pas de marche.
+    assert!(
+        span.y.abs() < 0.05,
+        "les deux goupilles hautes sont désalignées de {} mm : \
+         la pièce ne rentre pas",
+        span.y
+    );
+}
+
+/// C'est la barre montée, et elle seule, qui fixe le bras entre le trou haut et
+/// la paire ancrage/verrou — donc ce que cette paire encaisse. Le pion arrière
+/// déduit de la silhouette du bumper (`height_from_bottom_mm`) ne le sait pas :
+/// il tombait au bon endroit à quelques millimètres près sur la SA303-BUMPER,
+/// par coïncidence, et n'aurait plus rien voulu dire sur une autre barre.
+#[test]
+fn the_bumper_bar_sets_the_pair_lever() {
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let settings = default_settings();
+    let cluster = flown_cluster("banane", &[1.0, 5.0, 10.5], None, &bumper.id);
+    let r = compute_cluster(std::slice::from_ref(&sm), &cluster, &settings, &bumper, &[])
+        .expect("configuration possible");
+
+    let s0 = r.speakers[0];
+    let geo = sa303_core::speaker::SpeakerGeometry::compute(&sm);
+    let anchor = s0.o + geo.anchor_local.rotate(s0.phi);
+    let latch = s0.o + geo.latch_local.rotate(s0.phi);
+    let top = r.bumper_view.orientation_point_global.expect("trou haut");
+
+    // Distance trou haut → ancrage : exactement l'entraxe déclaré de la barre,
+    // déport latéral compris.
+    let bar = &bumper.rear_bars[0];
+    let expected = (bar.top_hole_along_mm.powi(2) + bar.top_hole_lateral_mm.powi(2)).sqrt();
+    let got = (top - anchor).norm();
+    assert!(
+        (got - expected).abs() < 1e-9,
+        "entraxe haut-ancrage {got} mm au lieu de {expected} mm"
+    );
+    // Et du bon côté : le trou haut est au-dessus de l'ancrage, pas du verrou.
+    assert!(
+        (top - latch).norm() > got,
+        "le trou haut doit être construit depuis l'ancrage"
     );
 }
 

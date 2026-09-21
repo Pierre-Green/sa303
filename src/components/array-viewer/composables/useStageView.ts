@@ -34,6 +34,10 @@ export function useStageView(opts: StageViewOptions) {
    * est une altitude, pas le bas d'un caisson. On applique donc simplement au
    * `y` local de l'altitude 0 la transform que le cadrage vient de poser. */
   const groundLineY = ref<number | null>(null);
+  /** Décalage vertical posé par le cadrage, en coordonnées de stage. De quoi
+   * situer n'importe quelle autre altitude dessinée hors du groupe cadré — la
+   * ligne d'écoute, elle, bouge sans qu'on recadre. */
+  const fitOffsetY = ref<number | null>(null);
   /** Sommet des pointillés CG/accroche, en coordonnées locales (avant mise à
    * l'échelle) — juste au-dessus du contenu réellement mesuré, jamais un
    * multiple arbitraire qui fausserait le cadrage. */
@@ -85,6 +89,7 @@ export function useStageView(opts: StageViewOptions) {
     });
     scale.fitScale.value = fitted;
 
+    fitOffsetY.value = offsetY;
     groundLineY.value = offsetY + opts.groundLocalY() * fitted;
     updateViewport();
     stage.batchDraw();
@@ -163,6 +168,7 @@ export function useStageView(opts: StageViewOptions) {
 
   return {
     groundLineY,
+    fitOffsetY,
     dashTopY,
     cursorPos,
     viewport,

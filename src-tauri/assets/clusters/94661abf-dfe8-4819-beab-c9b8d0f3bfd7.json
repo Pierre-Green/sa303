@@ -3,11 +3,11 @@
   "name": "Stack isophase5-0 - 5u -5m",
   "schemaVersion": 2,
   "speakerModelIds": [
-    "sa303-cca",
-    "sa303-cca",
-    "sa303-cca",
-    "sa303-cca",
-    "sa303-cca"
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase",
+    "sa303-isophase"
   ],
   "compartment": "stacked",
   "joints": [

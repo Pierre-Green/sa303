@@ -8,6 +8,7 @@ import type { ClusterResult, Compartment } from "@/lib/types";
 import type { ThemeColors } from "./types";
 import type { Scale } from "./composables/useScale";
 import type { HoverPin } from "./composables/useHoverPin";
+import type { ListeningLine } from "./composables/useListeningLine";
 
 export interface ViewerContext {
   result: ComputedRef<ClusterResult>;
@@ -21,6 +22,8 @@ export interface ViewerContext {
   /** Sommet des pointillés CG/accroche, en coordonnées locales. */
   dashTopY: Ref<number | null>;
   hover: HoverPin;
+  /** Ligne d'écoute réglable et croisement de l'axe de chaque enceinte. */
+  listening: ListeningLine;
   px: Scale["px"];
   annotation: Scale["annotation"];
 }

@@ -32,16 +32,8 @@ pub(super) fn split_over_pair(
 /// réduit au barycentre de la paire.
 ///
 /// C'est la forme générale — `split_over_pair` n'en est que le cas où le torseur
-/// vient d'une force unique. Elle est nécessaire dès que ce qu'il faut faire
-/// passer par la paire ne se ramène pas à un point : les deux pions du bumper
-/// reprennent le poids de toutes les enceintes **et** la tirette, deux actions
-/// appliquées en des points différents.
-pub(super) fn split_wrench_over_pair(
-    anchor: Vec2,
-    latch: Vec2,
-    force: Vec2,
-    m_g: f64,
-) -> (Vec2, Vec2) {
+/// vient d'une force unique, et le seul appelant à ce jour.
+fn split_wrench_over_pair(anchor: Vec2, latch: Vec2, force: Vec2, m_g: f64) -> (Vec2, Vec2) {
     let ab = anchor - latch;
     let d = ab.norm();
     // perp(ab) tourné d'un quart de tour : (x, y) -> (−y, x).

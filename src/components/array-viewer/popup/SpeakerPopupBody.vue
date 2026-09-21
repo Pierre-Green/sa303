@@ -28,6 +28,11 @@ const hasLoads = computed(
       {{ data.splay !== null ? `${data.splay}°` : "— (référence)" }}
     </PopupRow>
     <PopupRow label="Bas de caisse">{{ data.bottomElevationMm.toFixed(0) }} mm</PopupRow>
+    <!-- Le trait tracé depuis sa face avant : sa longueur jusqu'à la ligne
+         d'écoute, la cote qu'on vient lire en survolant. -->
+    <PopupRow label="Distance écoute" tone="text-zone-lift">
+      {{ data.listeningDistanceM !== null ? `${data.listeningDistanceM.toFixed(2)} m` : "— (hors ligne)" }}
+    </PopupRow>
 
     <div v-if="hasLoads" class="mt-1 text-xs text-muted-foreground">Efforts sur ses perçages</div>
 

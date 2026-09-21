@@ -36,6 +36,9 @@ export interface SpeakerPopupData {
   bumperBarPair: BumperBarPairLoads | null;
   tie: TieLoads | null;
   bottomElevationMm: number;
+  /** Distance, en mètres, entre la face avant et le croisement de son axe avec
+   * la ligne d'écoute. `null` quand l'axe ne la croise pas. */
+  listeningDistanceM: number | null;
 }
 
 export interface BumperPopupData {
@@ -60,7 +63,7 @@ export type PopupData = SpeakerPopupData | BumperPopupData;
 
 export function usePopupData(ctx?: ViewerContext) {
   const viewer = useViewer(ctx);
-  const { result, compartment, hover } = viewer;
+  const { result, compartment, hover, listening } = viewer;
   const displayNumber = useDisplayNumber(viewer);
 
   /** Splay associé à une enceinte : celui qui la relie à l'enceinte du dessus
@@ -157,6 +160,7 @@ export function usePopupData(ctx?: ViewerContext) {
       bumperBarPair: bumperBarPairLoads(idx),
       tie: tieLoads(idx),
       bottomElevationMm: result.value.elevation.speakerBottomMm[idx],
+      listeningDistanceM: listening.rays.value[idx]?.distanceM ?? null,
     };
   });
 

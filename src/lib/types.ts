@@ -190,8 +190,24 @@ export interface BumperPins {
   frontFromFrontMm: number;
   /** Avancée du pion arrière depuis la face arrière, mm. */
   rearFromRearMm: number;
-  /** Hauteur des deux pions au-dessus du dessous du bumper, mm. */
+  /** Hauteur des deux pions au-dessus du dessous du bumper, mm. Cote de
+   * dessin et de stack : en vol, c'est la bielle qui place le bumper. */
   heightFromBottomMm: number;
+}
+
+/** Barre arrière du bumper : elle descend de son trou haut et se boulonne au
+ * caisson de référence par sa paire ancrage/verrou, comme la barre arrière
+ * d'une jonction. C'est son bras qui fixe ce que la paire encaisse.
+ *
+ * Elle existe en plusieurs longueurs, une par inclinaison — c'est ainsi qu'on
+ * penche la première tête en stack. Le vol monte toujours celle à 0°. */
+export interface BumperRearBar {
+  /** Inclinaison de la barre par rapport au bumper, degrés. 0° en vol. */
+  tiltDeg: number;
+  /** Abscisse du trou haut depuis l'ancrage, le long de l'axe de la paire, mm. */
+  topHoleAlongMm: number;
+  /** Déport du trou haut en travers de cet axe, mm, positif vers l'avant. */
+  topHoleLateralMm: number;
 }
 
 export interface BumperModel {
@@ -204,6 +220,13 @@ export interface BumperModel {
   /** Décalage max avant qu'une SA303-BUMPER-BAR ne soit nécessaire, mm (déf. depth/2). */
   maxDirectDeportMm: number;
   pins: BumperPins;
+  /** Longueur utile de la bielle de pivot avant, mm : entraxe entre la
+   * charnière haute du caisson et la goupille haute, dans le bumper. Avec le
+   * trou haut de la barre, c'est elle qui place le bumper en vol — le perçage
+   * coté depuis les bords ne sert plus qu'au dessin et au stack. */
+  pivotBarUsableLengthMm: number;
+  /** Barres arrière disponibles, une par inclinaison. */
+  rearBars: BumperRearBar[];
   compatibleSpeakers: BumperCompatibility[];
 }
 
