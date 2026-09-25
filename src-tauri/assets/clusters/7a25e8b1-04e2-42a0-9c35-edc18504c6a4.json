@@ -23,7 +23,7 @@
       "splay": 1.0
     },
     {
-      "splay": 10.5
+      "splay": 1.0
     },
     {
       "splay": 1.0
@@ -45,7 +45,7 @@
     }
   ],
   "imposedTilt": -2.0,
-  "tieAngle": null,
+  "pullBackAngle": null,
   "bumperModelId": "sa303-bumper",
   "bumperHeight": 12000.0
 }

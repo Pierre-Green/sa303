@@ -34,7 +34,7 @@ const error = ref<string | null>(null);
 const saving = ref(false);
 
 // Dernier bumperView valide connu : une saisie transitoire invalide (ex. un
-// angle de tirette en cours de frappe, momentanément hors plage) fait échouer
+// angle de pull-back en cours de frappe, momentanément hors plage) fait échouer
 // le calcul le temps d'un caractère — sans ce cache, le bloc "accroche
 // calculée" (et son champ d'angle) disparaîtrait à ce moment précis,
 // empêchant de finir de taper la valeur voulue.
@@ -57,8 +57,9 @@ interface FormState {
   imposedTiltEnabled: boolean;
   imposedTilt: number;
   /** `null` tant que l'utilisateur n'a pas choisi sa propre direction de
-   * tirette : le solveur suggère alors celle qui minimise la tension. */
-  tieAngle: number | null;
+   * pull-back : le solveur suggère alors la verticale (180°, convention §2),
+   * ou la borne la plus proche dans 180° ± tolérance. */
+  pullBackAngle: number | null;
   /** Altitude du dessous du bumper, mm. Situe la grappe dans l'espace sans
    * rien changer aux efforts. */
   bumperHeight: number;
@@ -82,7 +83,7 @@ function blankForm(): FormState {
     bumperModelId: null,
     imposedTiltEnabled: false,
     imposedTilt: 0,
-    tieAngle: null,
+    pullBackAngle: null,
     bumperHeight: 0,
   };
 }
@@ -100,7 +101,7 @@ function loadIntoForm(c: Cluster) {
     bumperModelId: c.bumperModelId,
     imposedTiltEnabled: c.imposedTilt != null,
     imposedTilt: c.imposedTilt ?? 0,
-    tieAngle: c.tieAngle ?? null,
+    pullBackAngle: c.pullBackAngle ?? null,
     bumperHeight: c.bumperHeight,
   });
 }
@@ -125,18 +126,65 @@ watch(selectedClusterId, (id) => {
   lastBumperView.value = null;
 });
 
-// Suggestion de départ pour la direction de tirette, posée une seule fois au
+// Suggestion de départ pour la direction du pull-back, posée une seule fois au
 // moment où elle devient nécessaire (jamais si l'utilisateur a déjà choisi,
 // jamais recopiée ensuite) — même principe que pour l'assiette imposée :
 // une valeur de départ pratique, pas un couplage permanent.
 watch(
   () => effectiveBumperView.value?.bumperBarExceeded,
   (needed, wasNeeded) => {
-    if (needed && !wasNeeded && form.tieAngle === null && clusterResult.value?.tieDirectionAngleDeg != null) {
-      form.tieAngle = Number(clusterResult.value.tieDirectionAngleDeg.toFixed(1));
+    if (needed && !wasNeeded && form.pullBackAngle === null && clusterResult.value?.pullBackDirectionAngleDeg != null) {
+      form.pullBackAngle = Number(clusterResult.value.pullBackDirectionAngleDeg.toFixed(1));
     }
   },
 );
+
+/** Plage utilisable du pull-back, arrondie vers l'intérieur au dixième de
+ * degré pour que les bornes affichées dans le champ restent valables. */
+const pullBackAngleRange = computed<[number, number] | null>(() => {
+  const r = effectiveBumperView.value?.pullBackAngleRangeDeg;
+  if (!r) return null;
+  return [Math.ceil(r[0] * 10) / 10, Math.floor(r[1] * 10) / 10];
+});
+
+/** Force le champ à se redessiner quand la valeur bornée égale la valeur
+ * déjà en place : sans ça, le texte hors plage tapé resterait affiché. */
+const pullBackAngleInputKey = ref(0);
+
+function clampPullBackAngle(v: number): number {
+  const r = pullBackAngleRange.value;
+  return r ? Math.min(r[1], Math.max(r[0], v)) : v;
+}
+
+/** Pendant la frappe : seule une valeur dans la plage part au solveur. Un
+ * « 1 » ou un « 17 » intermédiaire n'est pas ramené de force à 170°. */
+function onPullBackAngleInput(v: string | number) {
+  if (v === "") return;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return;
+  if (clampPullBackAngle(n) === n) form.pullBackAngle = n;
+}
+
+/** En sortie de champ (ou Entrée) : la valeur est ramenée dans la plage. */
+function onPullBackAngleCommit(e: Event) {
+  const raw = (e.target as HTMLInputElement).value;
+  const n = Number(raw);
+  if (raw === "" || !Number.isFinite(n)) {
+    pullBackAngleInputKey.value += 1;
+    return;
+  }
+  form.pullBackAngle = clampPullBackAngle(n);
+  pullBackAngleInputKey.value += 1;
+}
+
+// Quand l'assiette change, la plage bouge : l'angle déjà saisi y est ramené,
+// pour que le champ affiche ce que le solveur calcule réellement.
+watch(pullBackAngleRange, (r) => {
+  if (r && form.pullBackAngle !== null) {
+    const c = clampPullBackAngle(form.pullBackAngle);
+    if (c !== form.pullBackAngle) form.pullBackAngle = c;
+  }
+});
 
 function speakerModelById(id: string) {
   return speakerModelsStore.items.find((s) => s.id === id) ?? null;
@@ -406,7 +454,7 @@ function buildCluster(): Cluster {
         : form.imposedTiltEnabled
           ? form.imposedTilt
           : null,
-    tieAngle: form.tieAngle,
+    pullBackAngle: form.pullBackAngle,
     bumperHeight: form.bumperHeight,
   };
 }
@@ -600,7 +648,7 @@ watch(form, recomputeViewer, { deep: true, immediate: true });
           <div class="flex items-center text-muted-foreground">
             Accroche calculée
             <InfoTip
-              text="Toujours calculée, jamais saisie : centrée sur le bumper par défaut, décalée le long de la barre si l'assiette imposée l'exige. Si même la barre ne suffit plus, le solveur active lui-même une tirette (accrochée au point 0° arrière-bas de l'enceinte du bas) — choisis sa direction dans la plage indiquée, selon où se trouve un point d'ancrage réel : ce n'est pas à l'algorithme de le deviner."
+              text="Toujours calculée, jamais saisie : centrée sur le bumper par défaut, décalée le long de la barre si l'assiette imposée l'exige. Si même la barre ne suffit plus, le solveur active lui-même un pull-back : un second moteur accroché au trou de couronne 0° de l'enceinte du bas, qui tire verticalement vers le haut. Il porte le bas de la grappe, met une partie de la chaîne en compression et décharge la manille principale. Sa direction reste dans 180° ± la tolérance des réglages (10° par défaut), 180° étant la verticale."
             />
           </div>
           <!-- Deux cotes distinctes : où se trouve l'accroche sur le bumper, et
@@ -622,17 +670,30 @@ watch(form, recomputeViewer, { deep: true, immediate: true });
           </div>
           <div v-else class="text-muted-foreground">Dans l'aplomb du bumper : pas de barre.</div>
           <div v-if="effectiveBumperView.bumperBarExceeded" class="flex flex-col gap-1.5 text-status-alarm">
-            <div v-if="clusterResult">Tirette automatique : {{ (clusterResult.tieTensionN / 1000).toFixed(2) }} kN</div>
+            <div v-if="clusterResult">Pull-back (compression) : {{ (clusterResult.pullBackTensionN / 1000).toFixed(2) }} kN</div>
             <div class="flex items-center gap-2">
-              <Label class="shrink-0 text-[11px]">
-                Direction (entre {{ effectiveBumperView.tieAngleRangeDeg![0].toFixed(0) }}° et
-                {{ effectiveBumperView.tieAngleRangeDeg![1].toFixed(0) }}°)
+              <Label class="flex shrink-0 items-center text-[11px]">
+                Direction (entre {{ pullBackAngleRange?.[0].toFixed(1) }}° et
+                {{ pullBackAngleRange?.[1].toFixed(1) }}°)
+                <InfoTip
+                  text="180° = verticale vers le haut. Le pull-back reste dans 180° ± la tolérance des réglages (10° par défaut, comme Meyer Sound). La suggestion par défaut est 180°."
+                />
               </Label>
+              <!-- Borné à la plage utilisable : les flèches s'arrêtent aux
+                   bornes, une valeur hors plage n'est pas envoyée au solveur
+                   pendant la frappe, et elle est ramenée sur la borne en
+                   sortie de champ. Seule la traversée d'une enceinte reste
+                   une erreur. -->
               <Input
+                :key="pullBackAngleInputKey"
                 class="h-7 w-20"
                 type="number"
-                :model-value="form.tieAngle ?? undefined"
-                @update:model-value="(v) => (form.tieAngle = v === '' ? null : Number(v))"
+                step="0.5"
+                :min="pullBackAngleRange?.[0]"
+                :max="pullBackAngleRange?.[1]"
+                :model-value="form.pullBackAngle ?? undefined"
+                @update:model-value="onPullBackAngleInput"
+                @change="onPullBackAngleCommit"
               />
             </div>
           </div>

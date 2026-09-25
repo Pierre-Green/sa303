@@ -16,19 +16,19 @@ export function useKeyPoints() {
     result.value.pickupGlobal ? toLocal(result.value.pickupGlobal) : null,
   );
 
-  const tiePointLocal = computed(() =>
-    result.value.tiePointGlobal ? toLocal(result.value.tiePointGlobal) : null,
+  const pullBackPointLocal = computed(() =>
+    result.value.pullBackPointGlobal ? toLocal(result.value.pullBackPointGlobal) : null,
   );
 
-  /** Bout de la flèche de tirette : une longueur d'annotation dans la direction
+  /** Bout de la flèche de pull-back : une longueur d'annotation dans la direction
    * de traction, pas une dimension du modèle. */
-  const tieEndLocal = computed(() => {
-    const from = result.value.tiePointGlobal;
-    const dir = result.value.tieDirectionGlobal;
+  const pullBackEndLocal = computed(() => {
+    const from = result.value.pullBackPointGlobal;
+    const dir = result.value.pullBackDirectionGlobal;
     if (!from || !dir) return null;
     const len = annotation(referenceDepth.value);
     return toLocal({ x: from.x + dir.x * len, y: from.y + dir.y * len });
   });
 
-  return { cgLocal, pickupLocal, tiePointLocal, tieEndLocal };
+  return { cgLocal, pickupLocal, pullBackPointLocal, pullBackEndLocal };
 }

@@ -24,7 +24,7 @@ defineProps<{ data: BumperPopupData; compartment: Compartment }>();
     </PopupRow>
 
     <div v-if="data.bumperBarExceeded" class="text-status-alarm">
-      Portée barre dépassée : tirette active.
+      Portée barre dépassée : pull-back actif.
     </div>
 
     <PopupRow

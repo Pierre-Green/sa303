@@ -27,7 +27,7 @@ use super::kinematics::{ChainSpeaker, SpeakerInstance};
 use super::model::Compartment;
 use super::pair::split_over_pair;
 use crate::speaker::{CrownRow, JointOffset, RearBar, SpeakerGeometry, SplayRange};
-use crate::tie::TieForce;
+use crate::pull_back::PullBackForce;
 use crate::vector::{angle_of, Vec2};
 use serde::Serialize;
 
@@ -55,8 +55,8 @@ pub struct JointInput<'a> {
     pub g: f64,
     pub k_dyn: f64,
     pub share_per_flank: f64,
-    /// Tirette active, vol uniquement.
-    pub tie: Option<TieForce>,
+    /// Pull-back actif, vol uniquement.
+    pub pull_back: Option<PullBackForce>,
     /// Splay recommandé pour cette paire de modèles, s'il y en a un déclaré.
     pub recommended_splay: Option<SplayRange>,
 }
@@ -303,17 +303,17 @@ pub fn compute_joint(input: &JointInput) -> Result<JointResult, JointInconsisten
     let mut rext = Vec2::new(0.0, -w_total);
     let mut mext = (cm - bo).cross(rext);
 
-    // La tirette s'ajoute **sans** `k_dyn`, contrairement aux poids juste
+    // Le pull-back s'ajoute **sans** `k_dyn`, contrairement aux poids juste
     // au-dessus. Ce n'est pas un oubli : sa tension est calculée en amont
     // (`solver::compute_cluster`) pour tenir une grappe dont le poids est déjà
     // dynamisé — `total_weight_n = masse × g × k_dyn` — donc le facteur y est
     // déjà. Le réappliquer ici le compterait deux fois.
-    // Vérifié par `the_tie_tension_already_carries_the_dynamic_factor`.
-    if let (Compartment::Flown, Some(tie)) = (input.compartment, input.tie) {
+    // Vérifié par `the_pull_back_tension_already_carries_the_dynamic_factor`.
+    if let (Compartment::Flown, Some(pull_back)) = (input.compartment, input.pull_back) {
         let last = input.speakers[n - 1];
-        let q = last.o + tie.point_local.rotate(last.phi);
-        rext = rext + tie.force;
-        mext += (q - bo).cross(tie.force);
+        let q = last.o + pull_back.point_local.rotate(last.phi);
+        rext = rext + pull_back.force;
+        mext += (q - bo).cross(pull_back.force);
     }
 
     // Bielle avant, élément à deux forces : direction imposée par ses deux

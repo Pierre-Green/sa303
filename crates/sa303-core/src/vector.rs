@@ -1,7 +1,11 @@
 //! Vecteur 2D partagé par tous les modules métier (`speaker`, `bumper`,
-//! `cluster`, `tie`) et convention angulaire du brief (§2 : origine au centre
+//! `cluster`, `pull_back`) et convention angulaire du brief (§2 : origine au centre
 //! de l'enceinte, x -> arrière, y -> haut ; angle de sortie 0° vers le bas,
-//! sens horaire, 90° vers l'avant). Le calcul vectoriel non trivial
+//! sens horaire, **90° vers l'avant, 180° vers le haut, 270° vers l'arrière**).
+//! Cette convention est la même pour tous les `…_angle_deg` exportés, la
+//! direction de pull-back comprise : un pull-back « à 180° » tire
+//! **verticalement vers le haut** (audit 2026-09, C4).
+//! Le calcul vectoriel non trivial
 //! (rotation, produit vectoriel, normalisation sûre) est délégué à
 //! `glam::DVec2` ; le type reste néanmoins le nôtre, pas un simple alias,
 //! pour garder la forme JSON `{x, y}` attendue par le front, indépendante du
@@ -94,7 +98,8 @@ pub fn polar(center: Vec2, r: f64, angle_deg: f64) -> Vec2 {
     Vec2::new(center.x + r * a.cos(), center.y + r * a.sin())
 }
 
-/// Convention angulaire de sortie (brief §2) : 0° vers le bas, horaire, 90° vers l'avant.
+/// Convention angulaire de sortie (brief §2) : 0° vers le bas, horaire,
+/// 90° vers l'avant (−x), 180° vers le haut (+y), 270° vers l'arrière (+x).
 pub fn dir_from_angle(theta_deg: f64) -> Vec2 {
     let t = theta_deg.to_radians();
     Vec2::new(-t.sin(), -t.cos())
@@ -121,7 +126,7 @@ fn ray_hits_segment(origin: Vec2, dir: Vec2, a: Vec2, b: Vec2) -> bool {
     t > 1e-6 && (-1e-9..=1.0 + 1e-9).contains(&u)
 }
 
-/// Collision rayon/polygone : sert à vérifier qu'une tirette ne traverse
+/// Collision rayon/polygone : sert à vérifier qu'un pull-back ne traverse
 /// aucune enceinte de la grappe avant d'atteindre son ancrage (brief,
 /// correction utilisateur — "juste un vecteur avec un calcul de collision").
 /// `true` si le rayon (origine + direction) croise le contour fermé `poly`
@@ -147,6 +152,30 @@ mod tests {
             Vec2::new(cx + half, cy - half),
             Vec2::new(cx - half, cy - half),
         ]
+    }
+
+    /// Fige la convention §2 des quatre directions cardinales. C'est elle
+    /// que lisent tous les commentaires et libellés parlant d'un angle ; un
+    /// pull-back à 180° tire vers le haut.
+    #[test]
+    fn angle_convention_cardinal_directions() {
+        let close = |v: Vec2, x: f64, y: f64| (v.x - x).abs() < 1e-12 && (v.y - y).abs() < 1e-12;
+        assert!(close(dir_from_angle(0.0), 0.0, -1.0), "0° = vers le bas");
+        assert!(close(dir_from_angle(90.0), -1.0, 0.0), "90° = vers l'avant");
+        assert!(
+            close(dir_from_angle(180.0), 0.0, 1.0),
+            "180° = vers le haut"
+        );
+        assert!(
+            close(dir_from_angle(270.0), 1.0, 0.0),
+            "270° = vers l'arrière"
+        );
+        for a in [0.0, 90.0, 180.0, 270.0, 37.5, 312.0] {
+            assert!(
+                (angle_of(dir_from_angle(a)) - a).abs() < 1e-9,
+                "aller-retour à {a}°"
+            );
+        }
     }
 
     #[test]

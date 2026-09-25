@@ -24,7 +24,7 @@ pub struct BumperBarModel {
     pub name: String,
     pub schema_version: u32,
     /// Portée maximale de déport depuis le centre du bumper, mm. Au-delà,
-    /// même cette barre ne suffit plus : il faut une tirette en renfort.
+    /// même cette barre ne suffit plus : il faut un pull-back en renfort.
     pub max_deport_mm: f64,
     pub compatible_bumpers: Vec<BumperBarCompatibility>,
 }

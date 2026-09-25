@@ -1,6 +1,6 @@
 //! Une grappe (vol) ou un stack (sol) : la chaîne de splays entre enceintes,
 //! plus tout ce qui peut être imposé ou dérivé pour ce compartiment
-//! (assiette, bumper, direction de tirette). Référence sa `SpeakerModel` et
+//! (assiette, bumper, direction de pull-back). Référence sa `SpeakerModel` et
 //! son `BumperModel` par id plutôt que par valeur : c'est
 //! `super::solver::compute_cluster` qui résout ces références au moment du
 //! calcul. Un bumper est obligatoire, en vol comme en stack : le point
@@ -44,14 +44,14 @@ pub struct Cluster {
     pub joints: Vec<JointSetting>,
     /// Vol : assiette imposée. Stack : angle de l'enceinte du bas.
     pub imposed_tilt: Option<f64>,
-    /// Direction de traction choisie par l'utilisateur pour la tirette
-    /// automatique (degrés, convention §2), quand le bumper et sa barre ne
-    /// suffisent plus. `None` tant qu'il n'a pas encore choisi : le solveur
-    /// utilise alors la direction qui minimise la tension, mais ce n'est
-    /// qu'un point de départ affiché — le point d'ancrage réel dépend du
-    /// terrain, ce n'est pas à l'algorithme de le décider seul.
+    /// Direction du pull-back automatique (degrés, convention §2 : **180° =
+    /// vers le haut**), quand le bumper et sa barre ne suffisent plus. Le
+    /// pull-back est un second point de levage qui tire verticalement : la
+    /// direction doit rester dans 180° ± `Settings::pull_back_tolerance_deg`.
+    /// `None` tant que l'utilisateur n'a pas choisi : le solveur suggère alors
+    /// la verticale, ou la borne la plus proche dans la plage utilisable.
     #[serde(default)]
-    pub tie_angle: Option<f64>,
+    pub pull_back_angle: Option<f64>,
     /// Bumper utilisé pour dériver le point d'accroche en vol ou comme support en stack.
     pub bumper_model_id: String,
     /// Altitude du **dessous** du bumper au-dessus du sol, mm. En stack, 0 =

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// La tirette : son point d'accroche sur l'enceinte du bas, sa direction de
+// Le pull-back : son point d'accroche sur l'enceinte du bas, sa direction de
 // traction et sa tension. Vol uniquement.
 
 import { computed } from "vue";
@@ -7,16 +7,16 @@ import { useViewer } from "../context";
 import { useKeyPoints } from "../composables/useKeyPoints";
 
 const { result, compartment, colors, px } = useViewer();
-const { tiePointLocal, tieEndLocal } = useKeyPoints();
+const { pullBackPointLocal, pullBackEndLocal } = useKeyPoints();
 
 const visible = computed(
-  () => compartment.value === "flown" && !!tiePointLocal.value && !!tieEndLocal.value,
+  () => compartment.value === "flown" && !!pullBackPointLocal.value && !!pullBackEndLocal.value,
 );
 
 const arrowConfig = computed(() => {
   if (!visible.value) return null;
-  const from = tiePointLocal.value!;
-  const to = tieEndLocal.value!;
+  const from = pullBackPointLocal.value!;
+  const to = pullBackEndLocal.value!;
   return {
     points: [from.x, from.y, to.x, to.y],
     stroke: colors.value.lift,
@@ -31,8 +31,8 @@ const arrowConfig = computed(() => {
 const pointMarkerConfig = computed(() => {
   if (!visible.value) return null;
   return {
-    x: tiePointLocal.value!.x,
-    y: tiePointLocal.value!.y,
+    x: pullBackPointLocal.value!.x,
+    y: pullBackPointLocal.value!.y,
     radius: px(4),
     fill: colors.value.lift,
   };
@@ -41,9 +41,9 @@ const pointMarkerConfig = computed(() => {
 const labelConfig = computed(() => {
   if (!visible.value) return null;
   return {
-    x: tieEndLocal.value!.x,
-    y: tieEndLocal.value!.y + px(6),
-    text: `tirette ${(result.value.tieTensionN / 1000).toFixed(2)} kN`,
+    x: pullBackEndLocal.value!.x,
+    y: pullBackEndLocal.value!.y + px(6),
+    text: `pull-back (compression) ${(result.value.pullBackTensionN / 1000).toFixed(2)} kN`,
     fontSize: px(12),
     fill: colors.value.lift,
   };

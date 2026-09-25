@@ -240,15 +240,15 @@ vectorielle disparaît de l'équation de moment :
 let mut rext = Vec2::new(0.0, -w_total);
 let mut mext = (cm - bo).cross(rext);
 
-if let (Compartment::Flown, Some(tie)) = (input.compartment, input.tie) {
+if let (Compartment::Flown, Some(pull_back)) = (input.compartment, input.pull_back) {
     let last = input.speakers[n - 1];
-    let q = last.o + tie.point_local.rotate(last.phi);
-    rext = rext + tie.force;
-    mext += (q - bo).cross(tie.force);
+    let q = last.o + pull_back.point_local.rotate(last.phi);
+    rext = rext + pull_back.force;
+    mext += (q - bo).cross(pull_back.force);
 }
 ```
 
-La tirette basse n'existe qu'en vol, et s'applique au dernier caisson.
+Le pull-back n'existe qu'en vol, et s'applique au dernier caisson.
 
 ---
 
@@ -578,23 +578,20 @@ La face arrière du caisson est cotée **351 mm** et non `depth/2 = 350` : c'est
 cote du modèle, et c'est elle que le bord arrière de la barre ne doit pas
 franchir. Marge relevée : **4,84 mm**, au petit bout de la barre.
 
-### 9.4 bis Incohérence connue sur la plage de tirette
+### 9.4 bis Plage de pull-back et test de collision
 
-**Toujours ouverte** : le filtrage de la plage par le test de collision n'a pas
-été fait, donc le test `user_can_pick_their_own_angle_inside_the_reported_range`
-reste marqué `#[ignore]`.
+Depuis le 25 septembre 2026, le pull-back est restreint à la verticale :
+180° ± `Settings::pull_back_tolerance_deg` (10° par défaut, pratique Meyer
+Sound). La plage annoncée est cette fenêtre, rognée aux directions où le câble
+tire (`pull_back_usable_range_deg`). Il n'existe plus de pull-back tirant vers
+le bas ou en biais.
 
-`tie_valid_angle_range_deg` ne borne que la statique — les directions où la
-tension reste positive. Le test de collision est appliqué séparément, au moment
-de retenir l'angle. Les deux ne se parlent pas, et depuis que le point
-d'accroche est passé sur `crown(0)` — un vrai trou de l'enceinte, au lieu d'un
-point situé 170 mm sous son plancher — une partie des directions annoncées
-traverse les enceintes du dessus.
-
-Test `user_can_pick_their_own_angle_inside_the_reported_range`, marqué `#[ignore]`
-avec cette raison. Trancher demande de décider si la plage annoncée doit être
-filtrée par la collision avant d'être affichée, ou si le refus reste au moment
-du choix.
+Le test de collision reste appliqué après coup, au moment de retenir l'angle.
+Grappe nez vers le bas, la plage et la collision sont d'accord, et le test
+`user_can_pick_their_own_angle_inside_the_reported_range` n'est plus ignoré.
+Grappe nez en l'air, une plage peut encore être annoncée alors que le câble
+vertical remonte à travers les enceintes du dessus : la configuration est alors
+refusée au calcul, avec un message explicite.
 
 ### 9.5 Valeurs de référence de `golden.rs`
 
@@ -608,5 +605,5 @@ en moment, et les valeurs de barre du §7 (recoupées à la main).
 frottement, effets hors plan, flambement de la barre en compression. Le facteur
 dynamique `k_dyn = 1,3` et le coefficient 4:1 sont des réglages utilisateur.
 
-La tirette entre dans l'équilibre **sans** `k_dyn` : sa tension est calculée en
+Le pull-back entre dans l'équilibre **sans** `k_dyn` : sa tension est calculée en
 amont à partir d'un poids déjà dynamisé, donc le facteur y est déjà.

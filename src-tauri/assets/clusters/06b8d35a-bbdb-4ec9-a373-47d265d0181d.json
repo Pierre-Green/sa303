@@ -37,7 +37,7 @@
     }
   ],
   "imposedTilt": 10.0,
-  "tieAngle": null,
+  "pullBackAngle": null,
   "bumperModelId": "sa303-bumper",
   "bumperHeight": 5000.0
 }

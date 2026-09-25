@@ -2,7 +2,7 @@
 //! (`model`), géométrie dérivée — trous fixes, couronne, silhouette —
 //! (`geometry`), et rapport de cohérence géométrique affiché en lecture
 //! seule sur la page "Équipement et enceinte" (`report`). Jamais de statique
-//! (forces, tensions) ici : ça vit dans `crate::cluster` et `crate::tie`.
+//! (forces, tensions) ici : ça vit dans `crate::cluster` et `crate::pull_back`.
 
 mod geometry;
 mod model;

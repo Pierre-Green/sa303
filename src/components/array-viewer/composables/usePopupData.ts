@@ -17,8 +17,9 @@ export interface BumperBarPairLoads {
   momentNm: number;
 }
 
-export interface TieLoads {
+export interface PullBackLoads {
   tensionKn: number;
+  /** Convention §2 : 180° = verticale vers le haut. */
   angleDeg: number | null;
 }
 
@@ -34,7 +35,7 @@ export interface SpeakerPopupData {
   /** Le joint dont elle porte la paire ancrage/verrou. */
   pairJoint: JointResult | null;
   bumperBarPair: BumperBarPairLoads | null;
-  tie: TieLoads | null;
+  pullBack: PullBackLoads | null;
   bottomElevationMm: number;
   /** Distance, en mètres, entre la face avant et le croisement de son axe avec
    * la ligne d'écoute. `null` quand l'axe ne la croise pas. */
@@ -104,16 +105,16 @@ export function usePopupData(ctx?: ViewerContext) {
     };
   }
 
-  /// La tirette s'accroche sur l'enceinte du **bas** de la grappe suspendue.
+  /// Le pull-back s'accroche sur l'enceinte du **bas** de la grappe suspendue.
   /// C'est donc dans sa fiche qu'on attend sa tension et sa direction : c'est
   /// elle qui les encaisse.
-  function tieLoads(idx: number): TieLoads | null {
+  function pullBackLoads(idx: number): PullBackLoads | null {
     const last = result.value.speakers.length - 1;
     if (compartment.value !== "flown" || idx !== last) return null;
-    if (!result.value.tiePointGlobal || result.value.tieTensionN <= 0) return null;
+    if (!result.value.pullBackPointGlobal || result.value.pullBackTensionN <= 0) return null;
     return {
-      tensionKn: result.value.tieTensionN / 1000,
-      angleDeg: result.value.tieDirectionAngleDeg,
+      tensionKn: result.value.pullBackTensionN / 1000,
+      angleDeg: result.value.pullBackDirectionAngleDeg,
     };
   }
 
@@ -158,7 +159,7 @@ export function usePopupData(ctx?: ViewerContext) {
       // deux goupilles sont les siennes, au même titre que celles d'une
       // jonction. (Les efforts de pion, eux, restent au bumper : ils sont à lui.)
       bumperBarPair: bumperBarPairLoads(idx),
-      tie: tieLoads(idx),
+      pullBack: pullBackLoads(idx),
       bottomElevationMm: result.value.elevation.speakerBottomMm[idx],
       listeningDistanceM: listening.rays.value[idx]?.distanceM ?? null,
     };

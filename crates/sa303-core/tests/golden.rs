@@ -98,6 +98,7 @@ fn default_settings() -> Settings {
             tool_x: "X".into(),
             tool_y: "-Y".into(),
         },
+        pull_back_tolerance_deg: 10.0,
     }
 }
 
@@ -121,7 +122,7 @@ fn flown_cluster(
         compartment: Compartment::Flown,
         joints: joints(splays),
         imposed_tilt,
-        tie_angle: None,
+        pull_back_angle: None,
         bumper_model_id: bumper_id.into(),
         // Références figées : au sol, pour que l'altitude n'introduise aucune
         // variable dans des valeurs vérifiées à la main.
@@ -138,7 +139,7 @@ fn stack_cluster(name: &str, splays: &[f64], bottom_angle_deg: f64, bumper_id: &
         compartment: Compartment::Stacked,
         joints: joints(splays),
         imposed_tilt: Some(bottom_angle_deg),
-        tie_angle: None,
+        pull_back_angle: None,
         bumper_model_id: bumper_id.into(),
         // Références figées : au sol, pour que l'altitude n'introduise aucune
         // variable dans des valeurs vérifiées à la main.
@@ -627,7 +628,7 @@ fn bumper_free_hang_matches_manual_pickup_at_bumper_center() {
 #[test]
 fn bumper_imposed_tilt_solves_pickup_directly_above_cm() {
     // Propriété physique que le point d'accroche résolu doit vérifier : sans
-    // tirette, la grappe suspendue s'oriente pour que le CG passe sous
+    // pull-back, la grappe suspendue s'oriente pour que le CG passe sous
     // l'accroche — donc pickup_global.x == cg.x exactement.
     let sm = default_speaker();
     let bumper = default_bumper();
@@ -668,7 +669,7 @@ fn bumper_reports_deport_bar_only_when_pickup_exceeds_bumper_depth() {
     // Assiette imposée modérée, loin de l'assiette libre naturelle : le point
     // d'accroche résolu doit sortir de l'aplomb du bumper (±351 mm), mais
     // rester dans la portée de la SA303-BUMPER-BAR (1500 mm, dérivée automatiquement
-    // du bumper actif) : pas de tirette ici.
+    // du bumper actif) : pas de pull-back ici.
     let imposed = flown_cluster("imposée extrême", &splays, Some(-20.0), &bumper.id);
     let imposed_result = compute_cluster(
         std::slice::from_ref(&sm),
@@ -769,10 +770,10 @@ fn stack_bumper_front_top_corner_touches_bottom_speaker_front_bottom_corner() {
 }
 
 #[test]
-fn deport_beyond_bar_max_reach_auto_activates_a_tie_and_keeps_equilibrium() {
+fn deport_beyond_bar_max_reach_auto_activates_a_pull_back_and_keeps_equilibrium() {
     // Au-delà de la portée de la SA303-BUMPER-BAR (dérivée automatiquement du bumper
     // actif — pas de sélection manuelle), le solveur plafonne l'accroche et
-    // met lui-même en place une tirette — il n'y a pas de case à cocher, ni de
+    // met lui-même en place un pull-back — il n'y a pas de case à cocher, ni de
     // barre à choisir — sur le point 0° arrière-bas de l'enceinte du bas (même
     // référence que le bumper).
     let sm = default_speaker();
@@ -786,10 +787,10 @@ fn deport_beyond_bar_max_reach_auto_activates_a_tie_and_keeps_equilibrium() {
     let settings = default_settings();
     let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5]; // somme 65°
 
-    // Assiette imposée à -20°, direction de traction à 0° (connue tenable et
-    // dégagée à cette assiette, cf. probe manuel) : rien ne bloque le câble.
-    let mut cluster = flown_cluster("hors de portée", &splays, Some(-20.0), &bumper.id);
-    cluster.tie_angle = Some(0.0);
+    // Assiette imposée à +20° (nez vers le bas), pull-back vertical à 180° :
+    // le câble monte derrière la grappe sans rien traverser.
+    let mut cluster = flown_cluster("hors de portée", &splays, Some(20.0), &bumper.id);
+    cluster.pull_back_angle = Some(180.0);
     let result = compute_cluster(
         std::slice::from_ref(&sm),
         &cluster,
@@ -797,7 +798,7 @@ fn deport_beyond_bar_max_reach_auto_activates_a_tie_and_keeps_equilibrium() {
         &bumper,
         std::slice::from_ref(&bumper_bar),
     )
-    .expect("configuration possible via tirette");
+    .expect("configuration possible via pull-back");
     let view = result.bumper_view;
 
     assert!(
@@ -805,29 +806,29 @@ fn deport_beyond_bar_max_reach_auto_activates_a_tie_and_keeps_equilibrium() {
         "la barre aurait dû être jugée insuffisante"
     );
     assert!(
-        result.tie_tension_n > 0.0,
-        "une tirette aurait dû être activée automatiquement"
+        result.pull_back_tension_n > 0.0,
+        "un pull-back aurait dû être activé automatiquement"
     );
     assert!(
         result.pickup_global.is_some(),
         "accroche toujours calculée en vol, même plafonnée"
     );
 
-    // La tirette s'accroche au trou de couronne au splay 0 de l'enceinte du
+    // Le pull-back s'accroche au trou de couronne au splay 0 de l'enceinte du
     // bas. C'est un trou qui existe sur cette enceinte-là ; `anchor_at(0)`,
     // qu'on visait avant, désignait l'ancrage de l'enceinte du **dessous** vu
     // depuis celle-ci — donc un point à 170 mm sous son plancher, où il n'y a
     // rien à quoi s'accrocher.
     let last = result.speakers[result.speakers.len() - 1];
-    let expected_tie_point = last.o
+    let expected_pull_back_point = last.o
         + sa303_core::speaker::SpeakerGeometry::compute(&sm)
             .crown(0.0)
             .rotate(last.phi);
-    let tie_point = result.tie_point_global.expect("point de tirette attendu");
+    let pull_back_point = result.pull_back_point_global.expect("point de pull-back attendu");
     assert!(
-        (tie_point.x - expected_tie_point.x).abs() < 1e-6
-            && (tie_point.y - expected_tie_point.y).abs() < 1e-6,
-        "la tirette doit s'accrocher au trou de couronne 0° de l'enceinte du bas"
+        (pull_back_point.x - expected_pull_back_point.x).abs() < 1e-6
+            && (pull_back_point.y - expected_pull_back_point.y).abs() < 1e-6,
+        "le pull-back doit s'accrocher au trou de couronne 0° de l'enceinte du bas"
     );
 
     // L'accroche est plafonnée exactement à la portée de la barre.
@@ -841,10 +842,11 @@ fn deport_beyond_bar_max_reach_auto_activates_a_tie_and_keeps_equilibrium() {
 }
 
 #[test]
-fn tie_direction_that_crosses_another_enceinte_is_impossible() {
-    // La direction est un choix utilisateur (`tie_angle`), mais le solveur la
-    // valide quand même : ici 90°, à cette assiette, vise en plein dans la
-    // grappe au-dessus — physiquement impossible quelle que soit la tension.
+fn pull_back_direction_that_crosses_another_enceinte_is_impossible() {
+    // La direction est un choix utilisateur (`pull_back_angle`), mais le solveur la
+    // valide quand même : ici, grappe nez en l'air à -25°, le pull-back
+    // vertical à 180° remonte à travers les enceintes du dessus —
+    // physiquement impossible quelle que soit la tension.
     let sm = default_speaker();
     let bumper = default_bumper();
     let bumper_bar = BumperBarModel {
@@ -854,8 +856,8 @@ fn tie_direction_that_crosses_another_enceinte_is_impossible() {
     let settings = default_settings();
     let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
 
-    let mut cluster = flown_cluster("tirette bloquée", &splays, Some(-6.0), &bumper.id);
-    cluster.tie_angle = Some(90.0);
+    let mut cluster = flown_cluster("pull-back bloqué", &splays, Some(-25.0), &bumper.id);
+    cluster.pull_back_angle = Some(180.0);
     let err = compute_cluster(
         std::slice::from_ref(&sm),
         &cluster,
@@ -863,7 +865,7 @@ fn tie_direction_that_crosses_another_enceinte_is_impossible() {
         &bumper,
         std::slice::from_ref(&bumper_bar),
     )
-    .expect_err("la tirette à 90° traverse une autre enceinte de la grappe");
+    .expect_err("le pull-back à 180° traverse une autre enceinte de la grappe");
     assert!(
         err.reason.to_lowercase().contains("impossible"),
         "message d'erreur attendu explicite, obtenu : {}",
@@ -872,10 +874,10 @@ fn tie_direction_that_crosses_another_enceinte_is_impossible() {
 }
 
 #[test]
-fn tie_direction_clear_of_other_enceintes_stays_possible() {
-    // Même mécanisme (barre insuffisante) mais avec une direction (0°) qui,
-    // à cette assiette, ne traverse rien et correspond à une vraie traction
-    // (tension positive) — la tirette s'active normalement.
+fn pull_back_direction_clear_of_other_enceintes_stays_possible() {
+    // Même mécanisme (barre insuffisante) mais nez vers le bas : le pull-back
+    // vertical ne traverse rien et tire vraiment (tension positive) — il
+    // s'active normalement.
     let sm = default_speaker();
     let bumper = default_bumper();
     let bumper_bar = BumperBarModel {
@@ -885,8 +887,8 @@ fn tie_direction_clear_of_other_enceintes_stays_possible() {
     let settings = default_settings();
     let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
 
-    let mut cluster = flown_cluster("tirette possible", &splays, Some(-20.0), &bumper.id);
-    cluster.tie_angle = Some(0.0);
+    let mut cluster = flown_cluster("pull-back possible", &splays, Some(20.0), &bumper.id);
+    cluster.pull_back_angle = Some(180.0);
     let result = compute_cluster(
         std::slice::from_ref(&sm),
         &cluster,
@@ -895,29 +897,16 @@ fn tie_direction_clear_of_other_enceintes_stays_possible() {
         std::slice::from_ref(&bumper_bar),
     )
     .expect("cette direction ne traverse rien et tire (ne pousse pas)");
-    assert!(result.tie_tension_n > 0.0);
+    assert!(result.pull_back_tension_n > 0.0);
 }
 
-/// IGNORÉ — signale une incohérence réelle, pas une attente périmée.
-///
-/// La plage renvoyée par `tie_valid_angle_range_deg` ne tient compte que de la
-/// statique : elle borne les directions où la tension reste positive, un câble
-/// ne pouvant que tirer. Le test de collision, lui, est appliqué **après**, au
-/// moment de retenir l'angle. Les deux ne se parlent pas.
-///
-/// Tant que le point d'accroche était `anchor_at(0)` — à 170 mm sous le
-/// plancher de l'enceinte du bas, donc à l'écart de tout — aucune direction ne
-/// croisait quoi que ce soit et le désaccord ne se voyait pas. Depuis qu'il est
-/// sur `crown(0)`, un vrai trou de l'enceinte, une partie des directions
-/// annoncées traverse les enceintes du dessus : le milieu de la plage en fait
-/// partie.
-///
-/// Corriger demande de décider **où** : filtrer la plage par le test de
-/// collision avant de l'annoncer, ou n'annoncer que la statique et laisser le
-/// refus au moment du choix. C'est un arbitrage sur le comportement de la
-/// tirette — hors périmètre ici.
+/// La plage annoncée est la fenêtre verticale 180° ± tolérance, rognée par la
+/// statique (tension positive). Le test de collision, lui, reste appliqué
+/// après coup : grappe nez en l'air, une plage peut encore être annoncée alors
+/// que le câble vertical traverse la grappe (voir
+/// `pull_back_direction_that_crosses_another_enceinte_is_impossible`). Ici, nez vers
+/// le bas, les deux sont d'accord.
 #[test]
-#[ignore = "plage de tirette et test de collision en désaccord depuis le déplacement du point d'accroche sur crown(0)"]
 fn user_can_pick_their_own_angle_inside_the_reported_range() {
     // Correction utilisateur : la direction n'est pas imposée par l'algorithme,
     // seulement délimitée. Ici on part de la plage renvoyée par le solveur (sans
@@ -932,8 +921,8 @@ fn user_can_pick_their_own_angle_inside_the_reported_range() {
     let settings = default_settings();
     let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
 
-    let mut baseline = flown_cluster("angle connu", &splays, Some(-20.0), &bumper.id);
-    baseline.tie_angle = Some(0.0); // connu tenable et dégagé à cette assiette
+    let mut baseline = flown_cluster("angle connu", &splays, Some(20.0), &bumper.id);
+    baseline.pull_back_angle = Some(180.0);
     let baseline_result = compute_cluster(
         std::slice::from_ref(&sm),
         &baseline,
@@ -944,12 +933,12 @@ fn user_can_pick_their_own_angle_inside_the_reported_range() {
     .expect("angle de référence possible");
     let range = baseline_result
         .bumper_view
-        .tie_angle_range_deg
-        .expect("plage attendue dès qu'une tirette est nécessaire");
+        .pull_back_angle_range_deg
+        .expect("plage attendue dès qu'un pull-back est nécessaire");
 
-    let chosen_angle = (range[0] + range[1]) / 2.0 + 2.0; // un point différent de l'optimal, mais dans la plage
-    let mut chosen = flown_cluster("avec choix", &splays, Some(-20.0), &bumper.id);
-    chosen.tie_angle = Some(chosen_angle);
+    let chosen_angle = (range[0] + range[1]) / 2.0 + 5.0; // hors verticale exacte, mais dans la plage
+    let mut chosen = flown_cluster("avec choix", &splays, Some(20.0), &bumper.id);
+    chosen.pull_back_angle = Some(chosen_angle);
     let chosen_result = compute_cluster(
         std::slice::from_ref(&sm),
         &chosen,
@@ -958,7 +947,7 @@ fn user_can_pick_their_own_angle_inside_the_reported_range() {
         std::slice::from_ref(&bumper_bar),
     )
     .expect("un angle dans la plage annoncée doit rester tenable");
-    let returned = chosen_result.tie_direction_angle_deg.unwrap();
+    let returned = chosen_result.pull_back_direction_angle_deg.unwrap();
     let diff = ((returned - chosen_angle) % 360.0 + 360.0) % 360.0;
     let diff = diff.min(360.0 - diff);
     assert!(
@@ -968,7 +957,7 @@ fn user_can_pick_their_own_angle_inside_the_reported_range() {
 }
 
 #[test]
-fn user_chosen_angle_outside_the_valid_range_is_impossible() {
+fn user_chosen_angle_outside_the_valid_range_is_clamped() {
     let sm = default_speaker();
     let bumper = default_bumper();
     let bumper_bar = BumperBarModel {
@@ -978,33 +967,60 @@ fn user_chosen_angle_outside_the_valid_range_is_impossible() {
     let settings = default_settings();
     let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
 
-    let mut cluster = flown_cluster("hors plage", &splays, Some(-20.0), &bumper.id);
-    cluster.tie_angle = Some(180.0); // hors de la plage valable à -20° (cf. probe manuel)
-    let err = compute_cluster(
-        std::slice::from_ref(&sm),
-        &cluster,
-        &settings,
-        &bumper,
-        std::slice::from_ref(&bumper_bar),
-    )
-    .expect_err("180° est hors de la plage valable à cette assiette");
-    assert!(
-        err.reason.to_lowercase().contains("impossible") && err.reason.contains("entre"),
-        "message d'erreur avec la plage attendu, obtenu : {}",
-        err.reason
-    );
+    // Il n'existe pas de pull-back tirant vers le bas, ni en biais au-delà de
+    // la tolérance : un angle saisi hors de 180° ± 10° n'est pas une erreur,
+    // il est ramené sur la borne la plus proche, comme le fait le champ de
+    // saisie. Seule la traversée d'une enceinte reste une erreur.
+    for (asked, expected) in [(0.0, 170.0), (90.0, 170.0), (195.0, 190.0), (270.0, 190.0), (300.0, 190.0)] {
+        let mut cluster = flown_cluster("hors plage", &splays, Some(20.0), &bumper.id);
+        cluster.pull_back_angle = Some(asked);
+        let r = compute_cluster(
+            std::slice::from_ref(&sm),
+            &cluster,
+            &settings,
+            &bumper,
+            std::slice::from_ref(&bumper_bar),
+        )
+        .expect("un angle hors plage est ramené dans la plage, pas refusé");
+        let got = r.pull_back_direction_angle_deg.unwrap();
+        assert!((got - expected).abs() < 1e-9, "{asked}° demandé : {expected}° attendu, obtenu {got}°");
+        assert!(r.pull_back_tension_n > 0.0);
+    }
 }
 
 #[test]
-fn tie_direction_is_never_a_pushing_direction() {
-    // Régression signalée par l'utilisateur : avec une direction fixe par
-    // défaut (0°), certaines assiettes (ex. -61° sur grosse banane 12)
-    // donnaient une tension négative — le solveur l'acceptait silencieusement
-    // en inversant l'effort à l'affichage, ce qui dessinait un câble
-    // traversant la grappe. Il n'y a plus de direction fixe : le solveur
-    // dérive celle qui minimise la tension parmi les seules directions
-    // valables (positives). Ici, -61° est en fait tenable — mais seulement
-    // dans une autre direction que 0°, que le solveur doit trouver seul.
+fn pull_back_tolerance_comes_from_the_settings() {
+    let sm = default_speaker();
+    let bumper = default_bumper();
+    let bumper_bar = BumperBarModel {
+        max_deport_mm: 50.0,
+        ..default_bumper_bar()
+    };
+    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
+    let mut cluster = flown_cluster("tolérance", &splays, Some(20.0), &bumper.id);
+    cluster.pull_back_angle = Some(195.0);
+    let run = |tol: f64| {
+        let mut s = default_settings();
+        s.pull_back_tolerance_deg = tol;
+        compute_cluster(
+            std::slice::from_ref(&sm),
+            &cluster,
+            &s,
+            &bumper,
+            std::slice::from_ref(&bumper_bar),
+        )
+    };
+    let r = run(10.0).expect("195° ramené à 190° à ±10°");
+    assert!((r.pull_back_direction_angle_deg.unwrap() - 190.0).abs() < 1e-9);
+    let r = run(20.0).expect("195° accepté tel quel à ±20°");
+    assert!((r.pull_back_direction_angle_deg.unwrap() - 195.0).abs() < 1e-9);
+    assert_eq!(r.bumper_view.pull_back_angle_range_deg, Some([160.0, 200.0]));
+}
+
+#[test]
+fn pull_back_default_is_vertical_and_pulls() {
+    // Sans angle choisi, le solveur suggère la verticale exacte, et la tension
+    // est positive : un pull-back tire, il ne pousse jamais.
     let sm = default_speaker();
     let bumper = default_bumper();
     let bumper_bar = BumperBarModel {
@@ -1013,9 +1029,7 @@ fn tie_direction_is_never_a_pushing_direction() {
     };
     let settings = default_settings();
     let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
-
-    let mut cluster = flown_cluster("grosse banane -61", &splays, Some(-61.0), &bumper.id);
-    cluster.tie_angle = Some(90.0); // connu tenable à -61°, contrairement à 0°
+    let cluster = flown_cluster("défaut", &splays, Some(20.0), &bumper.id);
     let result = compute_cluster(
         std::slice::from_ref(&sm),
         &cluster,
@@ -1023,11 +1037,15 @@ fn tie_direction_is_never_a_pushing_direction() {
         &bumper,
         std::slice::from_ref(&bumper_bar),
     )
-    .expect("-61° est tenable dans une autre direction que 0°");
-    assert!(
-        result.tie_tension_n > 0.0,
-        "une tension positive était attendue"
-    );
+    .expect("pull-back vertical tenable nez vers le bas");
+    assert!(result.pull_back_tension_n > 0.0, "une tension positive était attendue");
+    let angle = result.pull_back_direction_angle_deg.expect("angle de pull-back");
+    assert!((angle - 180.0).abs() < 1e-9, "verticale attendue, obtenu {angle}°");
+    let dir = result.pull_back_direction_global.unwrap();
+    assert!(dir.y > 0.999, "le pull-back doit tirer vers le haut : {dir:?}");
+    // Il décharge la manille principale.
+    let w = result.total_mass_kg * settings.gravity * settings.dynamic_factor;
+    assert!(result.bumper_view.support_force_n < w);
 }
 
 #[test]
@@ -1086,8 +1104,8 @@ fn bar_is_derived_automatically_from_the_active_bumper_never_selected_manually()
     };
     let settings = default_settings();
     let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
-    let mut cluster = flown_cluster("auto barre", &splays, Some(-20.0), &bumper.id);
-    cluster.tie_angle = Some(0.0); // connu tenable et dégagé à cette assiette
+    let mut cluster = flown_cluster("auto barre", &splays, Some(20.0), &bumper.id);
+    cluster.pull_back_angle = Some(180.0);
 
     let bars = [irrelevant_bar, compatible_bar.clone()];
     let result = compute_cluster(
@@ -1150,7 +1168,7 @@ fn mixed_cluster(splays: &[f64], model_ids: &[&str], bumper_id: &str) -> Cluster
         compartment: Compartment::Flown,
         joints: joints(splays),
         imposed_tilt: None,
-        tie_angle: None,
+        pull_back_angle: None,
         bumper_model_id: bumper_id.into(),
         // Références figées : au sol, pour que l'altitude n'introduise aucune
         // variable dans des valeurs vérifiées à la main.
@@ -1423,7 +1441,7 @@ fn the_trim_height_moves_the_cluster_without_changing_a_single_force() {
     )
     .unwrap();
 
-    assert_eq!(at_ground.tie_tension_n, in_the_air.tie_tension_n);
+    assert_eq!(at_ground.pull_back_tension_n, in_the_air.pull_back_tension_n);
     assert_eq!(at_ground.phi_initial, in_the_air.phi_initial);
     for (a, b) in at_ground.joints.iter().zip(&in_the_air.joints) {
         assert_eq!(a.f_orientation_n, b.f_orientation_n);
@@ -1792,24 +1810,24 @@ fn the_pair_is_checked_and_sees_far_more_than_the_crown_resultant() {
     );
 }
 
-/// §8 — la tirette entre dans l'équilibre sans être multipliée par `k_dyn`,
+/// §8 — le pull-back entre dans l'équilibre sans être multiplié par `k_dyn`,
 /// contrairement aux poids. Ce n'est pas un oubli : sa tension est calculée
 /// pour tenir une grappe dont le poids est **déjà** dynamisé
 /// (`total_weight_n = masse × g × k_dyn`), donc le facteur y est déjà. Le
 /// réappliquer dans `compute_joint` le compterait deux fois.
 #[test]
-fn the_tie_tension_already_carries_the_dynamic_factor() {
+fn the_pull_back_tension_already_carries_the_dynamic_factor() {
     let sm = default_speaker();
     let bumper = default_bumper();
-    // Portée minuscule : force le solveur à mettre une tirette en place.
+    // Portée minuscule : force le solveur à mettre un pull-back en place.
     let bumper_bar = BumperBarModel {
         max_deport_mm: 50.0,
         ..default_bumper_bar()
     };
     let settings = default_settings();
     let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
-    let mut cluster = flown_cluster("tirette", &splays, Some(-20.0), &bumper.id);
-    cluster.tie_angle = Some(0.0);
+    let mut cluster = flown_cluster("pull-back", &splays, Some(20.0), &bumper.id);
+    cluster.pull_back_angle = Some(180.0);
 
     let run = |k_dyn: f64| {
         let mut s = settings.clone();
@@ -1825,15 +1843,15 @@ fn the_tie_tension_already_carries_the_dynamic_factor() {
     };
 
     let base = run(1.3);
-    assert!(base.tie_tension_n > 0.0, "la tirette doit être active");
+    assert!(base.pull_back_tension_n > 0.0, "le pull-back doit être actif");
     let doubled = run(2.6);
 
     // Le facteur double, la tension double : il est déjà dedans.
     assert!(
-        (doubled.tie_tension_n - 2.0 * base.tie_tension_n).abs() < 1e-6 * base.tie_tension_n,
+        (doubled.pull_back_tension_n - 2.0 * base.pull_back_tension_n).abs() < 1e-6 * base.pull_back_tension_n,
         "{} contre {}",
-        doubled.tie_tension_n,
-        2.0 * base.tie_tension_n
+        doubled.pull_back_tension_n,
+        2.0 * base.pull_back_tension_n
     );
 }
 
@@ -2288,7 +2306,7 @@ fn the_reported_utilization_covers_the_pair_and_the_bar() {
 }
 
 /// Ce que la manille reprend doit être exactement ce qui pend dessous : le
-/// poids dynamisé de toute la grappe, plus la tirette quand elle existe. Un
+/// poids dynamisé de toute la grappe, plus le pull-back quand il existe. Un
 /// chiffre affiché sur le bumper qui ne serait pas cette résultante-là
 /// tromperait le rigger sur le calibre de son point d'accroche.
 #[test]
@@ -2308,7 +2326,7 @@ fn the_bumper_carries_exactly_what_hangs_below_it() {
         "manille {} N contre {expected} N suspendus",
         bv.support_force_n
     );
-    // Sans tirette, elle tire droit vers le haut : 180° dans la convention de
+    // Sans pull-back, elle tire droit vers le haut : 180° dans la convention de
     // sortie (0° = vers le bas).
     assert!(
         (bv.support_angle_deg - 180.0).abs() < 1e-6,

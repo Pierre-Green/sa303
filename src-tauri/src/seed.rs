@@ -131,6 +131,7 @@ pub fn default_settings() -> Settings {
             tool_x: "X".into(),
             tool_y: "-Y".into(),
         },
+        pull_back_tolerance_deg: 10.0,
     }
 }
 

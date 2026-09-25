@@ -31,7 +31,7 @@ pub struct ChainSpeaker {
     pub mass_kg: f64,
     pub frame_hole_splay: f64,
     /// Silhouette (trapèze) en repère enceinte — sert au test de collision de
-    /// la tirette et au rendu, sans jamais recalculer la trigonométrie.
+    /// le pull-back et au rendu, sans jamais recalculer la trigonométrie.
     pub outline: [Vec2; 4],
 }
 
@@ -137,7 +137,7 @@ pub fn phi_initial_stack(bottom_angle_deg: f64, splays_deg: &[f64]) -> f64 {
 }
 
 /// Position d'accroche (x, le long de la barre de déport) nécessaire pour
-/// qu'une grappe suspendue sans tirette adopte exactement `phi_initial` à la
+/// qu'une grappe suspendue sans pull-back adopte exactement `phi_initial` à la
 /// hauteur d'accroche donnée — l'inverse de `phi_initial_free_hang` : là on
 /// part de l'assiette voulue pour remonter au point d'accroche, plutôt que
 /// l'inverse.

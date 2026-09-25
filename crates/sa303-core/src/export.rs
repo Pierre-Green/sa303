@@ -263,7 +263,7 @@ pub fn build_audit_export(
                     .fold(bumper_checks.utilization_worst, f64::max);
                 // Même grappe, même barre, seul `k_dyn` change. Recalculée
                 // plutôt que mise à l'échelle : les efforts ne sont pas tous
-                // proportionnels au poids — la tirette, elle, est résolue pour
+                // proportionnels au poids — le pull-back, lui, est résolu pour
                 // tenir une assiette, donc la règle de trois serait fausse.
                 let mut static_settings = settings.clone();
                 static_settings.dynamic_factor = STATIC_COMPARISON_K_DYN;

@@ -162,11 +162,11 @@ export interface Cluster {
   /** Du haut vers le bas : exactement `speakerModelIds.length - 1`. */
   joints: JointSetting[];
   imposedTilt?: number | null;
-  /** Direction de traction choisie pour la tirette automatique (degrés,
-   * convention §2), si le bumper et sa barre ne suffisent plus. `null` tant
-   * que l'utilisateur n'a pas encore choisi : le solveur suggère alors la
-   * direction qui minimise la tension, affichée mais jamais imposée. */
-  tieAngle?: number | null;
+  /** Direction du pull-back automatique (degrés, convention §2 : **180° =
+   * vers le haut**), si le bumper et sa barre ne suffisent plus. Doit rester
+   * dans 180° ± `Settings.pullBackToleranceDeg`. `null` tant que
+   * l'utilisateur n'a pas choisi : le solveur suggère alors la verticale. */
+  pullBackAngle?: number | null;
   /** Bumper utilisé pour dériver le point d'accroche en vol ou comme support
    * en stack. Obligatoire : il n'existe pas de repli manuel. */
   bumperModelId: string;
@@ -238,7 +238,7 @@ export interface BumperBarModel {
   id: string;
   name: string;
   schemaVersion: number;
-  /** Portée max de déport depuis le centre du bumper, mm : au-delà, une tirette prend le relais. */
+  /** Portée max de déport depuis le centre du bumper, mm : au-delà, un pull-back prend le relais. */
   maxDeportMm: number;
   compatibleBumpers: BumperBarCompatibility[];
 }
@@ -268,6 +268,9 @@ export interface Settings {
   pin: PinSpec;
   plate: PlateSpec;
   axisMapping: AxisMapping;
+  /** Tolérance du pull-back autour de la verticale (degrés) : la direction
+   * doit rester dans 180° ± cette valeur. 10° par défaut (Meyer Sound). */
+  pullBackToleranceDeg: number;
 }
 
 export interface SpeakerInstance {
@@ -398,7 +401,7 @@ export interface ClusterResult {
    * assiette imposée — référence de comparaison, jamais remplacée par
    * `phiInitial`. `null` en stack. */
   phiFreeHang: number | null;
-  tieTensionN: number;
+  pullBackTensionN: number;
   joints: JointResult[];
   /** CG de l'ensemble, repère global : barycentre pondéré par la masse de
    * chaque enceinte. */
@@ -410,14 +413,16 @@ export interface ClusterResult {
   speakerNames: string[];
   /** Point de levage, repère global. Vol uniquement. */
   pickupGlobal: Vec2 | null;
-  /** Point d'accroche de la tirette sur l'enceinte du bas, repère global. */
-  tiePointGlobal: Vec2 | null;
-  /** Direction de traction de la tirette, repère global. */
-  tieDirectionGlobal: Vec2 | null;
-  /** Même direction, en degrés (convention §2) : angle réel auquel ancrer la
-   * tirette (choisi par l'utilisateur, ou suggéré par le solveur tant qu'il
-   * n'a pas encore choisi — voir `BumperView.tieAngleRangeDeg`). */
-  tieDirectionAngleDeg: number | null;
+  /** Point d'accroche du pull-back sur l'enceinte du bas, repère global. */
+  pullBackPointGlobal: Vec2 | null;
+  /** Direction de traction du pull-back, repère global. */
+  pullBackDirectionGlobal: Vec2 | null;
+  /** Même direction, en degrés (convention §2 : 0° bas, 90° avant, 180° haut,
+   * 270° arrière) : angle réel auquel ancrer le pull-back, dans 180° ±
+   * tolérance (choisi par
+   * l'utilisateur, ou suggéré par le solveur tant qu'il n'a pas encore
+   * choisi — voir `BumperView.pullBackAngleRangeDeg`). */
+  pullBackDirectionAngleDeg: number | null;
   /** Position de l'ensemble dans l'espace, dérivée de `Cluster.bumperHeight`. */
   elevation: Elevation;
   /** Bumper attaché à l'enceinte de référence. Toujours présent : un bumper
@@ -441,15 +446,15 @@ export interface BumperView {
    * `maxDirectDeportMm`, donc 0 tant que l'accroche tombe sur le bumper. Ne
    * décrit pas où est l'accroche, mais s'il faut une barre et de combien. */
   barDeportMm: number | null;
-  /** Au-delà de la portée de la barre (`BumperBarModel.maxDeportMm`), elle ne suffit plus : une tirette est
-   * automatiquement mise en place (voir `tieTensionN`/`tiePointGlobal` sur
+  /** Au-delà de la portée de la barre (`BumperBarModel.maxDeportMm`), elle ne suffit plus : un pull-back est
+   * automatiquement mise en place (voir `pullBackTensionN`/`pullBackPointGlobal` sur
    * ClusterResult). */
   bumperBarExceeded: boolean;
   /** Plage de directions de traction physiquement valables (degrés,
    * convention §2), présente seulement si `bumperBarExceeded`. Le point d'ancrage
    * réel dépend du terrain : à choisir dedans, ce n'est pas à l'algorithme
    * de décider seul. */
-  tieAngleRangeDeg: [number, number] | null;
+  pullBackAngleRangeDeg: [number, number] | null;
   /** Efforts transmis par le bumper à l'enceinte de référence, repère de
    * cette enceinte, par flanc. Vol uniquement. */
   orientationForceN: number | null;

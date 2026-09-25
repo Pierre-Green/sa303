@@ -89,19 +89,20 @@ const hasLoads = computed(
       </PopupRow>
     </template>
 
-    <!-- La tirette tire sur cette enceinte-ci : sa tension est une charge
+    <!-- Le pull-back tire sur cette enceinte-ci : sa tension est une charge
          qu'elle subit, au même titre que ses goupilles. -->
-    <template v-if="data.tie">
-      <div class="mt-1 text-xs text-muted-foreground">Tirette</div>
+    <template v-if="data.pullBack">
+      <div class="mt-1 text-xs text-muted-foreground">Pull-back (compression)</div>
       <PopupRow label="Tension" tone="text-zone-lift">
-        {{ data.tie.tensionKn.toFixed(2) }} kN
+        {{ data.pullBack.tensionKn.toFixed(2) }} kN
       </PopupRow>
+      <!-- Convention §2 : 180° = verticale vers le haut. -->
       <PopupRow label="Direction">
-        {{ data.tie.angleDeg !== null ? `${data.tie.angleDeg.toFixed(1)}°` : "—" }}
+        {{ data.pullBack.angleDeg !== null ? `${data.pullBack.angleDeg.toFixed(1)}°` : "—" }}
       </PopupRow>
     </template>
 
-    <p v-if="!hasLoads && !data.tie" class="mt-1 text-muted-foreground">
+    <p v-if="!hasLoads && !data.pullBack" class="mt-1 text-muted-foreground">
       Aucune charge directe (flanc non porteur).
     </p>
   </dl>

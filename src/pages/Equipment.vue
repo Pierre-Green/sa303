@@ -629,7 +629,7 @@ async function removeBumperBar() {
 
                 <div class="flex flex-col gap-1.5 w-64">
                   <Label class="flex items-center text-xs">
-                    Portée max<InfoTip text="Portée maximale de déport depuis le centre du bumper. Au-delà, la barre seule ne suffit plus : une tirette est automatiquement mise en place par le solveur, sur le point 0° arrière-bas de l'enceinte du bas." />
+                    Portée max<InfoTip text="Portée maximale de déport depuis le centre du bumper. Au-delà, la barre seule ne suffit plus : un pull-back est automatiquement mis en place par le solveur : un second moteur accroché au trou de couronne 0° de l'enceinte du bas, qui tire verticalement vers le haut." />
                   </Label>
                   <Input v-model.number="bumperBarForm.maxDeportMm" type="number" />
                 </div>

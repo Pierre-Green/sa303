@@ -267,7 +267,7 @@ fn a_degenerate_bielle_lever_is_an_error_not_a_silent_nan() {
         g: 9.80665,
         k_dyn: 1.3,
         share_per_flank: 0.5,
-        tie: None,
+        pull_back: None,
         recommended_splay: None,
     })
     .expect_err("bras nul : la jonction n'a pas de solution");
@@ -299,7 +299,7 @@ fn golden_bar_loads_on_the_reference_joint() {
         g: 9.80665,
         k_dyn: 1.3,
         share_per_flank: 0.5,
-        tie: None,
+        pull_back: None,
         recommended_splay: None,
     })
     .expect("jonction résoluble");
@@ -443,7 +443,7 @@ fn the_bar_rear_edge_stays_inside_the_cabinet() {
             g: 9.80665,
             k_dyn: 1.3,
             share_per_flank: 0.5,
-            tie: None,
+            pull_back: None,
             recommended_splay: None,
         })
         .expect("jonction résoluble");

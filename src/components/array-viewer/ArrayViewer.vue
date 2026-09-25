@@ -32,7 +32,7 @@ import SpeakersLayer from "./layers/SpeakersLayer.vue";
 import BumperOutline from "./layers/BumperOutline.vue";
 import BumperAnnotations from "./layers/BumperAnnotations.vue";
 import JointsLayer from "./layers/JointsLayer.vue";
-import TieOverlay from "./layers/TieOverlay.vue";
+import PullBackOverlay from "./layers/PullBackOverlay.vue";
 import CgMarker from "./layers/CgMarker.vue";
 import ViewerPopup from "./popup/ViewerPopup.vue";
 import ElevationReadout from "./overlays/ElevationReadout.vue";
@@ -218,7 +218,7 @@ function onStageClick(e: Konva.KonvaEventObject<MouseEvent>) {
               <SpeakersLayer />
               <BumperOutline />
               <BumperAnnotations />
-              <TieOverlay />
+              <PullBackOverlay />
               <JointsLayer />
               <CgMarker />
             </v-group>
