@@ -11,14 +11,21 @@ use super::kinematics::{
 };
 use super::model::{Cluster, Compartment};
 use super::pair::split_over_pair;
+use super::rigging::{
+    pick_pair, pick_single, rigging_options, single_tilt_range, BarMountView, Candidate,
+    GroupKind, LinkForceView, RiggingOptions, RiggingPointView, RiggingView, TILT_TOLERANCE_DEG,
+};
+use super::model::RiggingSupport;
 use crate::bumper::{
-    bumper_outline_top, bumper_pickup_height, bumper_pin_points, BumperBarModel, BumperModel,
+    bar_outline_local, bumper_outline_top, bumper_pickup_height, bumper_pin_points, BumperBarModel,
+    BumperModel,
     BumperRearBar,
 };
 use crate::settings::Settings;
 use crate::speaker::{SpeakerModel, SplayRange};
 use crate::pull_back::{
-    clamp_to_pull_back_range, pull_back_usable_range_deg, pull_back_default_angle_deg,
+    clamp_to_pull_back_range, pull_back_usable_range_deg, pull_back_window_deg, pull_back_default_angle_deg,
+    PULL_BACK_VERTICAL_DEG,
     pull_back_tension, pull_back_valid_angle_range_deg, PullBackForce,
 };
 use crate::vector::{angle_of, dir_from_angle, ray_hits_polygon, Vec2};
@@ -118,14 +125,24 @@ pub struct BumperView {
     /// Toujours renseigné en vol, même quand nul.
     pub bar_deport_mm: Option<f64>,
     /// Au-delà de la portée de la barre (`BumperBarModel::max_deport_mm`), elle ne suffit plus : un
-    /// pull-back est automatiquement mis en place (voir `pull_back_tension_n`,
-    /// `pull_back_point_global`).
+    /// pull-back est obligatoire et mis en place automatiquement (voir
+    /// `pull_back_tension_n`, `pull_back_point_global`). Un pull-back manuel
+    /// (`Cluster::pull_back_enabled`) laisse ce drapeau à `false`.
     pub bumper_bar_exceeded: bool,
     /// Plage de directions de traction physiquement valables pour le pull-back
-    /// (degrés, convention §2), présente seulement si `bumper_bar_exceeded`. Le
+    /// (degrés, convention §2), présente dès qu'un pull-back est en place,
+    /// imposé ou manuel. Le
     /// point d'ancrage réel dépend du terrain : à l'utilisateur de choisir
     /// dedans, pas à l'algorithme.
     pub pull_back_angle_range_deg: Option<[f64; 2]>,
+    /// Pull-back manuel seulement : tensions saisissables, N (même base que
+    /// les autres efforts, poids × k_dyn). Elles correspondent aux positions
+    /// d'accroche atteignables sur le bumper et sa barre ; l'accroche qui
+    /// donne la tension demandée est dans `pickup_offset_mm`.
+    pub pull_back_tension_range_n: Option<[f64; 2]>,
+    /// Part du poids dynamisé reprise par le pull-back (composante verticale
+    /// de sa tension / poids), 0 sans pull-back. La manille porte le reste.
+    pub pull_back_load_share: f64,
     /// Efforts transmis par le bumper à l'enceinte de référence, repère de
     /// cette enceinte : ce que chacun de ses **deux pions** encaisse.
     /// `orientation` est le pion arrière (celui qui alimente la barre),
@@ -183,6 +200,9 @@ pub struct BumperView {
     pub pin_pair_moment_nm: f64,
     /// Entraxe des deux pions, mm — le bras de ce couple.
     pub pin_span_mm: f64,
+    /// Vol, bumper aux trous déclarés : trous retenus, charge de chacun,
+    /// montage de barre et assiette réellement obtenue. `None` sinon.
+    pub rigging: Option<RiggingView>,
 }
 
 /// Moment que deux efforts de pion imposent à la pièce qui les relie, réduit au
@@ -577,6 +597,349 @@ fn compute_bumper_loads(
     })
 }
 
+/// Accroche et pull-back retenus en vol (valeurs neutres en stack).
+struct FlownSupport {
+    pickup: Vec2,
+    /// Le bumper et sa barre ne suffisent pas : le pull-back est obligatoire.
+    pull_back_forced: bool,
+    pull_back: Option<PullBackForce>,
+    angle_range: Option<(f64, f64)>,
+    /// Pull-back manuel seulement : tensions saisissables, N.
+    tension_range: Option<(f64, f64)>,
+    /// Trous retenus, quand le bumper les déclare.
+    rig: Option<RigSelection>,
+}
+
+/// Trous retenus parmi ceux du bumper et de sa barre, avec la charge de
+/// chacun quand elle est connue d'avance (2 points). À un point, la manille
+/// reprend l'effort de support du bumper.
+struct RigSelection {
+    group: GroupKind,
+    points: Vec<(Candidate, Option<f64>)>,
+}
+
+/// Ce que le solveur fait des trous déclarés, décidé avant d'assembler la
+/// grappe : c'est ce choix qui fixe `φ_initial`.
+enum RigPlan {
+    /// Un point, l'assiette découle du trou. `forced_pull_back` : même le
+    /// meilleur trou n'approche pas l'assiette visée, un pull-back la tient.
+    Single { group: GroupKind, candidate: Candidate, forced_pull_back: bool },
+    /// Un point plus un pull-back manuel : le trou sera choisi sur la tension.
+    ManualPullBack,
+    /// Deux points : l'assiette est libre, les trous se choisissent sur la
+    /// répartition.
+    Pair,
+}
+
+impl FlownSupport {
+    fn centered(pickup: Vec2) -> Self {
+        Self {
+            pickup,
+            pull_back_forced: false,
+            pull_back: None,
+            angle_range: None,
+            tension_range: None,
+            rig: None,
+        }
+    }
+}
+
+/// Nombre de pas du balayage de l'accroche en pull-back manuel.
+const PICKUP_SWEEP_STEPS: usize = 400;
+
+/// Positions d'accroche (mm depuis le centre du bumper) où un pull-back
+/// vertical est tendu, en mode manuel. À `raw_x`, l'accroche tient seule
+/// l'assiette : tension nulle. En s'éloignant de `raw_x`, la tension croît
+/// d'un seul côté ; on part de ce côté jusqu'au bout de barre, et on s'arrête
+/// avant tout point où la tension cesse d'être positive et finie (câble à
+/// l'aplomb de l'accroche). `None` si aucun côté ne tend le câble.
+fn manual_pickup_range_mm(
+    raw_x: f64,
+    bar_max: f64,
+    tension_at: impl Fn(f64) -> f64,
+) -> Option<(f64, f64)> {
+    let side = [bar_max, -bar_max]
+        .into_iter()
+        .filter(|&e| (e - raw_x).abs() > 1e-6)
+        .map(|e| {
+            let probe = raw_x + (e - raw_x) * 1e-3;
+            (e, tension_at(probe))
+        })
+        .filter(|&(_, t)| t.is_finite() && t > 0.0)
+        .map(|(e, _)| e)
+        .next()?;
+    // La plage commence au premier pas, pas à `raw_x` : là, le câble est
+    // exactement détendu et sa direction n'est plus définie.
+    let mut first_ok = None;
+    let mut last_ok = None;
+    for i in 1..=PICKUP_SWEEP_STEPS {
+        let x = raw_x + (side - raw_x) * (i as f64) / (PICKUP_SWEEP_STEPS as f64);
+        let t = tension_at(x);
+        if !(t.is_finite() && t > 0.0) {
+            break;
+        }
+        first_ok.get_or_insert(x);
+        last_ok = Some(x);
+    }
+    let (a, b) = (first_ok?, last_ok?);
+    ((b - a).abs() > 1e-6).then(|| (a.min(b), a.max(b)))
+}
+
+/// Accroche où le pull-back a exactement la tension `target`, par dichotomie
+/// sur `range` : la tension y varie de façon monotone (le balayage de
+/// `manual_pickup_range_mm` s'est arrêté avant toute singularité).
+fn pickup_for_tension_mm(range: (f64, f64), target: f64, tension_at: impl Fn(f64) -> f64) -> f64 {
+    let (mut lo, mut hi) = if tension_at(range.0) <= tension_at(range.1) {
+        (range.0, range.1)
+    } else {
+        (range.1, range.0)
+    };
+    for _ in 0..80 {
+        let mid = 0.5 * (lo + hi);
+        if tension_at(mid) < target {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    0.5 * (lo + hi)
+}
+
+/// Direction, tension et test de collision du pull-back, une fois l'accroche
+/// fixée. Commun au pull-back imposé et manuel, avec ou sans trous déclarés.
+fn resolve_pull_back(
+    speakers: &[SpeakerInstance],
+    total_weight_n: f64,
+    cluster_cg: Vec2,
+    pull_back_point: Vec2,
+    pickup: Vec2,
+    requested_angle: Option<f64>,
+    settings: &Settings,
+) -> Result<(PullBackForce, (f64, f64)), ImpossibleConfiguration> {
+    let tension_at = |pickup: Vec2, angle: f64| {
+        pull_back_tension(speakers, total_weight_n, cluster_cg, pickup, pull_back_point, angle)
+    };
+    let static_range = pull_back_valid_angle_range_deg(
+        speakers,
+        total_weight_n,
+        cluster_cg,
+        pickup,
+        pull_back_point,
+    );
+    // Le pull-back est un second point de levage : il
+    // tire verticalement vers le haut, 180° ± tolérance
+    // (convention §2, pratique Meyer Sound). Seule la
+    // partie de cette fenêtre où le câble tire (tension
+    // positive) est utilisable. Si elle est vide, il
+    // faudrait tirer vers le bas : ce n'est pas un
+    // pull-back, la configuration est refusée.
+    let tol = settings.pull_back_tolerance_deg;
+    let Some(range) = pull_back_usable_range_deg(static_range, tol) else {
+        return Err(ImpossibleConfiguration {
+            reason: format!(
+                "Assiette impossible à tenir : depuis l'accroche à {:.0} mm du centre du bumper, un pull-back vertical (180° ± {tol:.0}°) ne peut pas tenir cette assiette ; il faudrait tirer le bas de la grappe vers le bas. Réduis l'assiette imposée.",
+                pickup.x
+            ),
+        });
+    };
+    // L'angle exact reste un choix utilisateur, ramené
+    // dans la plage : le champ de saisie le borne déjà,
+    // mais une grappe enregistrée peut en sortir quand
+    // l'assiette change. Tant qu'il n'a pas choisi, on
+    // suggère la verticale (ou la borne la plus proche).
+    // Seule la collision reste une erreur.
+    let angle = requested_angle
+        .map(|a| clamp_to_pull_back_range(a, range))
+        .unwrap_or_else(|| pull_back_default_angle_deg(range));
+    let tension = tension_at(pickup, angle);
+    // Garde-fou : dans la plage, le câble tire toujours.
+    debug_assert!(tension > 0.0, "pull-back à {angle}° : tension {tension}");
+    let dir = dir_from_angle(angle);
+    let last = speakers[speakers.len() - 1];
+    let point_global = last.o + pull_back_point.rotate(last.phi);
+    // Un vrai test de collision (rayon contre la silhouette
+    // de chaque autre enceinte). Seules les AUTRES
+    // enceintes comptent : celle du bas ne peut pas se
+    // bloquer elle-même.
+    let blocked = speakers[..speakers.len() - 1].iter().any(|sp| {
+        let corners = sp.outline.map(|c| sp.o + c.rotate(sp.phi));
+        ray_hits_polygon(point_global, dir, &corners)
+    });
+    if blocked {
+        return Err(ImpossibleConfiguration {
+            reason: format!(
+                "Assiette impossible à tenir : le pull-back à {angle:.0}° traverserait une autre enceinte de la grappe. Choisis un autre angle entre {:.0}° et {:.0}°, ou réduis l'assiette imposée.",
+                range.0, range.1
+            ),
+        });
+    }
+    Ok((
+        PullBackForce {
+            point_local: pull_back_point,
+            force: dir * tension,
+        },
+        range,
+    ))
+}
+
+/// Décide ce que le solveur fera des trous déclarés — avant d'assembler la
+/// grappe, puisque c'est ce choix qui fixe `φ_initial` à un point.
+fn plan_rigging(
+    options: &RiggingOptions,
+    cluster: &Cluster,
+    chain: &[ChainSpeaker],
+    splays: &[f64],
+) -> Result<RigPlan, ImpossibleConfiguration> {
+    match cluster.rigging.points {
+        1 => {}
+        2 if cluster.pull_back_enabled => {
+            return Err(ImpossibleConfiguration {
+                reason: "Pull-back manuel et accroche 2 points ne se combinent pas : à 2 points, \
+                         la charge se répartit déjà entre les deux moteurs."
+                    .into(),
+            });
+        }
+        2 => return Ok(RigPlan::Pair),
+        n => {
+            return Err(ImpossibleConfiguration {
+                reason: format!("Accroche à {n} points non gérée : 1 ou 2 points seulement."),
+            });
+        }
+    }
+    if cluster.pull_back_enabled {
+        if cluster.imposed_tilt.is_none() {
+            return Err(ImpossibleConfiguration {
+                reason: "Le pull-back manuel demande une assiette imposée : c'est avec \
+                         elle que se répartit la charge entre le moteur principal et le \
+                         pull-back."
+                    .into(),
+            });
+        }
+        return Ok(RigPlan::ManualPullBack);
+    }
+    let phi_of = |p: Vec2| phi_initial_free_hang(chain, splays, p);
+    let target = cluster.imposed_tilt.map(f64::to_radians);
+    let pick = pick_single(options, target, phi_of);
+    // Pull-back imposé seulement si l'assiette visée sort de tout ce que les
+    // trous permettent : entre deux trous, on accroche au plus proche et on
+    // affiche l'écart.
+    let forced_pull_back = target.is_some_and(|t| {
+        let (lo, hi) = single_tilt_range(options, phi_of);
+        (pick.phi - t).abs() > TILT_TOLERANCE_DEG.to_radians() && (t < lo || t > hi)
+    });
+    Ok(RigPlan::Single {
+        group: pick.group,
+        candidate: pick.candidate,
+        forced_pull_back,
+    })
+}
+
+struct RiggingViewInput<'a> {
+    rig: RigSelection,
+    options: &'a RiggingOptions,
+    bar: Option<&'a BumperBarModel>,
+    top: SpeakerInstance,
+    /// Ce que la manille tire à un point, N, repère global.
+    support_force: Vec2,
+    gravity: f64,
+    target_tilt_deg: Option<f64>,
+    achieved_phi: f64,
+    pull_back: bool,
+}
+
+fn rigging_view(input: RiggingViewInput) -> RiggingView {
+    let RiggingViewInput { rig, options, bar, top, support_force, gravity, target_tilt_deg, achieved_phi, pull_back } = input;
+    let to_global = |p: Vec2| top.o + p.rotate(top.phi);
+    // Effort de chaque chaîne sur son trou : la manille unique tire selon
+    // l'effort de support (incliné si un pull-back tire aussi) ; à deux points,
+    // les deux chaînes sont verticales.
+    let lifts: Vec<(Vec2, Vec2)> = rig
+        .points
+        .iter()
+        .map(|(c, tension)| {
+            let force = tension.map_or(support_force, |t| Vec2::new(0.0, t));
+            (to_global(c.local), force)
+        })
+        .collect();
+    let points = rig
+        .points
+        .into_iter()
+        .map(|(c, tension)| {
+            let tension_n = tension.unwrap_or(support_force.norm());
+            let load_kg = tension_n / gravity;
+            RiggingPointView {
+                label: c.label,
+                bumper_x_mm: c.bumper_x_mm,
+                point_global: to_global(c.local),
+                tension_n,
+                load_kg,
+                wll_kg: c.wll_kg,
+                overloaded: load_kg > c.wll_kg,
+            }
+        })
+        .collect();
+    let (support, bar_mount_index) = match rig.group {
+        GroupKind::Bumper => (RiggingSupport::Bumper, None),
+        GroupKind::Bar { mount_index } => (RiggingSupport::Bar, Some(mount_index)),
+    };
+    // Barre dessinée telle que montée : ses trous et ses pattes, du repère
+    // barre au repère global en passant par le bumper puis l'enceinte.
+    let (bar_holes_global, bar_pins_global, bar_outline_global) =
+        match (bar_mount_index, bar.and_then(|b| b.geometry.as_ref())) {
+            (Some(i), Some(geometry)) => {
+                let mount = options.mounts[i];
+                let shift = options.speaker_half_height;
+                let place = |p: [f64; 2]| to_global(mount.to_bumper(p) + Vec2::new(0.0, shift));
+                (
+                    geometry.pickup_holes.iter().map(|&p| place(p)).collect(),
+                    geometry.link_pins.iter().map(|&p| place(p)).collect::<Vec<_>>(),
+                    bar_outline_local(geometry).into_iter().map(place).collect(),
+                )
+            }
+            _ => (Vec::new(), Vec::new(), Vec::new()),
+        };
+    // La barre est un corps rigide repris par ses deux goupilles : même
+    // répartition élastique qu'une paire ancrage/verrou, chaque chaîne
+    // ajoutant sa part. Pattes à même hauteur : les composantes verticales
+    // retombent exactement sur la règle du levier.
+    let bar_link_forces = match bar_pins_global.as_slice() {
+        &[a, b] => {
+            let (mut fa, mut fb) = (Vec2::ZERO, Vec2::ZERO);
+            for &(at, force) in &lifts {
+                let (da, db, _) = split_over_pair(a, b, at, force);
+                fa = fa + da;
+                fb = fb + db;
+            }
+            [(a, fa), (b, fb)]
+                .into_iter()
+                .map(|(point_global, force_global)| LinkForceView {
+                    point_global,
+                    force_global,
+                    force_n: force_global.norm(),
+                    angle_deg: angle_of(force_global.rotate_transpose(top.phi)),
+                })
+                .collect()
+        }
+        _ => Vec::new(),
+    };
+    let achieved_tilt_deg = achieved_phi.to_degrees();
+    RiggingView {
+        support,
+        bar_mounts: options.mounts.iter().map(BarMountView::from).collect(),
+        bar_mount_index,
+        points,
+        target_tilt_deg,
+        achieved_tilt_deg,
+        tilt_error_deg: target_tilt_deg.filter(|_| !pull_back).map(|t| achieved_tilt_deg - t),
+        bumper_holes_global: options.bumper_holes_local.iter().map(|&p| to_global(p)).collect(),
+        bumper_link_holes_global: options.link_holes_local.iter().map(|&p| to_global(p)).collect(),
+        bar_holes_global,
+        bar_pins_global,
+        bar_outline_global,
+        bar_link_forces,
+    }
+}
+
 /// Calcule la géométrie, la statique de chaque jonction et la tension de pull-back
 /// éventuelle pour une grappe ou un stack (brief §4, §5).
 ///
@@ -638,12 +1001,37 @@ pub fn compute_cluster(
     validate_bumper_compatible(bumper_model, reference_model, compartment)?;
     let active_bumper_bar = bumper_bar_for(bumper_bars, bumper_model);
 
+    // Trous d'accroche déclarés : en vol seulement, et seulement si le bumper
+    // les cote. Sinon, ancienne accroche continue.
+    let rigging = match compartment {
+        Compartment::Stacked => None,
+        Compartment::Flown => rigging_options(
+            bumper_model,
+            active_bumper_bar,
+            reference_model.mechanical.height / 2.0,
+            &cluster.rigging,
+        )
+        .transpose()?,
+    };
+    let rig_plan = rigging
+        .as_ref()
+        .map(|options| plan_rigging(options, cluster, chain, &splays))
+        .transpose()?;
+
     let phi_initial = match compartment {
         Compartment::Stacked => {
             let bottom_deg = cluster.imposed_tilt.unwrap_or(0.0);
             phi_initial_stack(bottom_deg, &splays)
         }
         Compartment::Flown => match cluster.imposed_tilt {
+            // À un point sans pull-back, l'assiette est celle que donne le
+            // trou retenu, pas celle demandée : l'écart s'affiche.
+            _ if matches!(rig_plan, Some(RigPlan::Single { forced_pull_back: false, .. })) => {
+                let Some(RigPlan::Single { candidate, .. }) = &rig_plan else { unreachable!() };
+                phi_initial_free_hang(chain, &splays, candidate.local)
+            }
+            // Deux points sans assiette demandée : à plat.
+            None if matches!(rig_plan, Some(RigPlan::Pair)) => 0.0,
             Some(deg) => deg.to_radians(),
             None => {
                 let pickup_height = bumper_pickup_height(reference_model, bumper_model);
@@ -679,19 +1067,123 @@ pub fn compute_cluster(
     let total_weight_n = total_mass_kg * settings.gravity * settings.dynamic_factor;
     let cluster_cg = weighted_cg(chain, &speakers);
 
-    // Point d'accroche final, et pull-back auto-décidé par le solveur quand le
-    // bumper (+ sa barre) ne suffit plus à atteindre seul l'assiette voulue.
-    let (pickup, bumper_bar_exceeded, auto_pull_back, pull_back_angle_range_deg): (
-        Vec2,
-        bool,
-        Option<PullBackForce>,
-        Option<(f64, f64)>,
-    ) = match compartment {
-        Compartment::Stacked => (Vec2::ZERO, false, None, None),
+    // Point d'accroche final, et pull-back. Deux façons d'en avoir un :
+    // * **imposé** : le bumper (+ sa barre) ne suffit plus à atteindre seul
+    //   l'assiette voulue ; l'accroche est plafonnée au bout de la barre ;
+    // * **manuel** (`Cluster::pull_back_enabled`) : l'assiette tient sans lui,
+    //   mais l'utilisateur veut répartir la charge entre le moteur principal et
+    //   le pull-back, parce que les points d'accroche sont faibles. La
+    //   direction et la tension sont alors des saisies
+    //   (`Cluster::manual_pull_back_tension_n`) ; l'accroche en découle.
+    let flown = match compartment {
+        Compartment::Stacked => FlownSupport::centered(Vec2::ZERO),
+        Compartment::Flown if rig_plan.is_some() => {
+            let options = rigging.as_ref().expect("plan sans options");
+            let pull_back_point = chain[chain.len() - 1].geo.crown(0.0);
+            let resolve = |pickup: Vec2, requested_angle: Option<f64>| {
+                resolve_pull_back(&speakers, total_weight_n, cluster_cg, pull_back_point, pickup, requested_angle, settings)
+            };
+            match rig_plan.expect("vérifié ci-dessus") {
+                RigPlan::Single { group, candidate, forced_pull_back } => {
+                    let pickup = candidate.local;
+                    let rig = Some(RigSelection { group, points: vec![(candidate, None)] });
+                    if forced_pull_back {
+                        let (force, range) = resolve(pickup, cluster.pull_back_angle)?;
+                        FlownSupport {
+                            pickup,
+                            pull_back_forced: true,
+                            pull_back: Some(force),
+                            angle_range: Some(range),
+                            tension_range: None,
+                            rig,
+                        }
+                    } else {
+                        FlownSupport { rig, ..FlownSupport::centered(pickup) }
+                    }
+                }
+                RigPlan::ManualPullBack => {
+                    // Direction dans la fenêtre verticale ; chaque trou donne
+                    // sa tension, on retient celui qui approche la demande.
+                    let window = pull_back_window_deg(settings.pull_back_tolerance_deg);
+                    let angle = cluster
+                        .pull_back_angle
+                        .map(|a| clamp_to_pull_back_range(a, window))
+                        .unwrap_or(PULL_BACK_VERTICAL_DEG);
+                    let tensioned: Vec<(GroupKind, &Candidate, f64)> = options
+                        .groups
+                        .iter()
+                        .flat_map(|g| g.candidates.iter().map(move |c| (g.kind, c)))
+                        .map(|(kind, c)| {
+                            let t = pull_back_tension(&speakers, total_weight_n, cluster_cg, c.local, pull_back_point, angle);
+                            (kind, c, t)
+                        })
+                        .filter(|&(_, _, t)| t.is_finite() && t > 0.0)
+                        .collect();
+                    if tensioned.is_empty() {
+                        return Err(ImpossibleConfiguration {
+                            reason: format!(
+                                "Pull-back manuel impossible : à cette assiette, aucun trou d'accroche du bumper ou de sa barre ne met un pull-back à {angle:.1}° en traction."
+                            ),
+                        });
+                    }
+                    let tension_range = tensioned
+                        .iter()
+                        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &(_, _, t)| (lo.min(t), hi.max(t)));
+                    let half_load = 0.5 * total_weight_n / dir_from_angle(angle).y;
+                    let target = cluster
+                        .manual_pull_back_tension_n
+                        .unwrap_or(half_load)
+                        .clamp(tension_range.0, tension_range.1);
+                    // `min_by` garde le premier à égalité : l'ordre des familles
+                    // (bumper d'abord) départage.
+                    let &(group, candidate, _) = tensioned
+                        .iter()
+                        .min_by(|a, b| (a.2 - target).abs().total_cmp(&(b.2 - target).abs()))
+                        .expect("non vide");
+                    let (force, _) = resolve(candidate.local, Some(angle))?;
+                    FlownSupport {
+                        pickup: candidate.local,
+                        pull_back_forced: false,
+                        pull_back: Some(force),
+                        angle_range: Some(window),
+                        tension_range: Some(tension_range),
+                        rig: Some(RigSelection { group, points: vec![(candidate.clone(), None)] }),
+                    }
+                }
+                RigPlan::Pair => {
+                    let top = speakers[0];
+                    let pick = pick_pair(options, cluster_cg.x, total_weight_n, settings.gravity, |p| {
+                        (top.o + p.rotate(top.phi)).x
+                    })
+                    .ok_or_else(|| ImpossibleConfiguration {
+                        reason: "Accroche 2 points impossible : aucune paire de trous du bumper ou de la barre n'encadre le centre de gravité de la grappe à cette assiette. Essaie la barre, un autre montage, ou réduis l'assiette.".into(),
+                    })?;
+                    // Le point le plus chargé tient lieu d'accroche principale
+                    // pour les champs hérités (dessin, altitude).
+                    let [(a, ta), (b, tb)] = pick.points;
+                    let pickup = if ta >= tb { a.local } else { b.local };
+                    FlownSupport {
+                        rig: Some(RigSelection {
+                            group: pick.group,
+                            points: vec![(a, Some(ta)), (b, Some(tb))],
+                        }),
+                        ..FlownSupport::centered(pickup)
+                    }
+                }
+            }
+        }
         Compartment::Flown => {
             let pickup_height = bumper_pickup_height(reference_model, bumper_model);
             match cluster.imposed_tilt {
-                None => (Vec2::new(0.0, pickup_height), false, None, None),
+                None if cluster.pull_back_enabled => {
+                    return Err(ImpossibleConfiguration {
+                        reason: "Le pull-back manuel demande une assiette imposée : c'est avec \
+                                 elle que se répartit la charge entre le moteur principal et le \
+                                 pull-back."
+                            .into(),
+                    });
+                }
+                None => FlownSupport::centered(Vec2::new(0.0, pickup_height)),
                 Some(_) => {
                     let raw_x =
                         solve_pickup_x_for_imposed_tilt(chain, &splays, phi_initial, pickup_height);
@@ -700,92 +1192,91 @@ pub fn compute_cluster(
                     let bumper_bar_max = active_bumper_bar
                         .map(|bumper_bar| bumper_bar.max_deport_mm)
                         .unwrap_or(bumper_model.max_direct_deport_mm);
-                    if raw_x.abs() <= bumper_bar_max {
-                        (Vec2::new(raw_x, pickup_height), false, None, None)
-                    } else {
-                        // Trou de couronne 0° de l'enceinte du bas.
-                        let pull_back_point = chain[chain.len() - 1].geo.crown(0.0);
-                        let capped_x = bumper_bar_max * raw_x.signum();
-                        let capped_pickup = Vec2::new(capped_x, pickup_height);
-                        let static_range = pull_back_valid_angle_range_deg(
+                    // Trou de couronne 0° de l'enceinte du bas.
+                    let pull_back_point = chain[chain.len() - 1].geo.crown(0.0);
+                    let tension_at = |pickup: Vec2, angle: f64| {
+                        pull_back_tension(
                             &speakers,
                             total_weight_n,
                             cluster_cg,
-                            capped_pickup,
+                            pickup,
                             pull_back_point,
-                        );
-                        // Le pull-back est un second point de levage : il
-                        // tire verticalement vers le haut, 180° ± tolérance
-                        // (convention §2, pratique Meyer Sound). Seule la
-                        // partie de cette fenêtre où le câble tire (tension
-                        // positive) est utilisable. Si elle est vide, il
-                        // faudrait tirer vers le bas : ce n'est pas un
-                        // pull-back, la configuration est refusée.
-                        let tol = settings.pull_back_tolerance_deg;
-                        let Some(range) = pull_back_usable_range_deg(static_range, tol) else {
-                            return Err(ImpossibleConfiguration {
-                                reason: format!(
-                                    "Assiette impossible à tenir : le déport nécessaire ({raw_x:.0} mm) dépasse la portée de la barre ({bumper_bar_max:.0} mm), et un pull-back vertical (180° ± {tol:.0}°) ne peut pas tenir cette assiette : il faudrait tirer le bas de la grappe vers le bas. Réduis l'assiette imposée."
-                                ),
-                            });
-                        };
-                        // L'angle exact reste un choix utilisateur, ramené
-                        // dans la plage : le champ de saisie le borne déjà,
-                        // mais une grappe enregistrée peut en sortir quand
-                        // l'assiette change. Tant qu'il n'a pas choisi, on
-                        // suggère la verticale (ou la borne la plus proche).
-                        // Seule la collision reste une erreur.
-                        let pull_back_angle = cluster
-                            .pull_back_angle
-                            .map(|a| clamp_to_pull_back_range(a, range))
-                            .unwrap_or_else(|| pull_back_default_angle_deg(range));
-                        let tension = pull_back_tension(
-                            &speakers,
-                            total_weight_n,
-                            cluster_cg,
-                            capped_pickup,
-                            pull_back_point,
-                            pull_back_angle,
-                        );
-                        // Garde-fou : dans la plage, le câble tire toujours.
-                        debug_assert!(tension > 0.0, "pull-back à {pull_back_angle}° : tension {tension}");
-                        let pull_back_dir = dir_from_angle(pull_back_angle);
-                        let last = speakers[speakers.len() - 1];
-                        let pull_back_point_global = last.o + pull_back_point.rotate(last.phi);
-                        // Reste à vérifier que cette direction est
-                        // réellement dégagée : un vrai test de collision
-                        // (rayon contre la silhouette de chaque autre
-                        // enceinte), pas une simple comparaison de position
-                        // relative. Seules les AUTRES enceintes comptent :
-                        // celle du bas ne peut pas se bloquer elle-même.
-                        let blocked = speakers[..speakers.len() - 1].iter().any(|sp| {
-                            let corners = sp.outline.map(|c| sp.o + c.rotate(sp.phi));
-                            ray_hits_polygon(pull_back_point_global, pull_back_dir, &corners)
-                        });
-                        if blocked {
-                            return Err(ImpossibleConfiguration {
-                                reason: format!(
-                                    "Assiette impossible à tenir : le déport nécessaire ({raw_x:.0} mm) dépasse la portée de la barre ({bumper_bar_max:.0} mm) et le pull-back à {pull_back_angle:.0}° traverserait une autre enceinte de la grappe. Choisis un autre angle entre {:.0}° et {:.0}°, ou réduis l'assiette imposée.",
-                                    range.0, range.1
-                                ),
-                            });
+                            angle,
+                        )
+                    };
+                    // Direction, tension et test de collision, communs aux deux
+                    // modes une fois l'accroche fixée.
+                    let resolve = |pickup: Vec2, requested_angle: Option<f64>| {
+                        resolve_pull_back(&speakers, total_weight_n, cluster_cg, pull_back_point, pickup, requested_angle, settings)
+                    };
+
+                    if raw_x.abs() > bumper_bar_max {
+                        // Pull-back imposé : l'accroche est plafonnée au bout
+                        // de la barre, le pull-back tient le reste.
+                        let pickup = Vec2::new(bumper_bar_max * raw_x.signum(), pickup_height);
+                        let (force, range) = resolve(pickup, cluster.pull_back_angle)?;
+                        FlownSupport {
+                            pickup,
+                            pull_back_forced: true,
+                            pull_back: Some(force),
+                            angle_range: Some(range),
+                            tension_range: None,
+                            rig: None,
                         }
-                        let force = PullBackForce {
-                            point_local: pull_back_point,
-                            force: pull_back_dir * tension,
+                    } else if cluster.pull_back_enabled {
+                        // Pull-back manuel : l'utilisateur fixe la direction
+                        // et la tension ; l'accroche en découle par l'équilibre
+                        // des moments autour d'elle. Direction dans la fenêtre
+                        // verticale, tension bornée par les positions
+                        // d'accroche atteignables sur le bumper et sa barre.
+                        let window = pull_back_window_deg(settings.pull_back_tolerance_deg);
+                        let angle = cluster
+                            .pull_back_angle
+                            .map(|a| clamp_to_pull_back_range(a, window))
+                            .unwrap_or(PULL_BACK_VERTICAL_DEG);
+                        let at = |x: f64| tension_at(Vec2::new(x, pickup_height), angle);
+                        let Some(pickup_range) = manual_pickup_range_mm(raw_x, bumper_bar_max, at) else {
+                            return Err(ImpossibleConfiguration {
+                                reason: format!(
+                                    "Pull-back manuel impossible : à cette assiette, aucune position d'accroche sur le bumper ou sa barre ne met un pull-back à {angle:.1}° en traction."
+                                ),
+                            });
                         };
-                        (capped_pickup, true, Some(force), Some(range))
+                        let (t_a, t_b) = (at(pickup_range.0), at(pickup_range.1));
+                        let tension_range = (t_a.min(t_b), t_a.max(t_b));
+                        // Sans saisie : la moitié de la charge au pull-back.
+                        let half_load = 0.5 * total_weight_n / dir_from_angle(angle).y;
+                        let target = cluster
+                            .manual_pull_back_tension_n
+                            .unwrap_or(half_load)
+                            .clamp(tension_range.0, tension_range.1);
+                        let x = pickup_for_tension_mm(pickup_range, target, at);
+                        let pickup = Vec2::new(x, pickup_height);
+                        let (force, _) = resolve(pickup, Some(angle))?;
+                        FlownSupport {
+                            pickup,
+                            pull_back_forced: false,
+                            pull_back: Some(force),
+                            angle_range: Some(window),
+                            tension_range: Some(tension_range),
+                            rig: None,
+                        }
+                    } else {
+                        FlownSupport::centered(Vec2::new(raw_x, pickup_height))
                     }
                 }
             }
         }
     };
+    let pickup = flown.pickup;
+    let flown_rig = flown.rig;
+    let bumper_bar_exceeded = flown.pull_back_forced;
+    let pull_back_angle_range_deg = flown.angle_range;
 
-    // Pas de pull-back manuel au sens "case à cocher" (brief, correction
-    // utilisateur) : le pull-back n'existe que si le solveur l'a activé
-    // ci-dessus. Sa direction, elle, reste un choix utilisateur dans la plage
-    // affichée (`pull_back_angle_range_deg`) — l'algorithme délimite, ne décide pas.
-    let pull_back_force = auto_pull_back;
+    // Le pull-back n'existe que s'il est imposé ou demandé ci-dessus. Sa
+    // direction reste un choix utilisateur dans la plage affichée
+    // (`pull_back_angle_range_deg`) — l'algorithme délimite, ne décide pas.
+    let pull_back_force = flown.pull_back;
     let tension = pull_back_force.map(|t| t.force.norm()).unwrap_or(0.0);
 
     let joints = (0..splays.len())
@@ -872,6 +1363,10 @@ pub fn compute_cluster(
                 bar_deport_mm: Some(deport),
                 bumper_bar_exceeded,
                 pull_back_angle_range_deg: pull_back_angle_range_deg.map(|(lo, hi)| [lo, hi]),
+                pull_back_tension_range_n: flown.tension_range.map(|(lo, hi)| [lo, hi]),
+                pull_back_load_share: pull_back_force
+                    .map(|f| f.force.y / total_weight_n)
+                    .unwrap_or(0.0),
                 orientation_force_n: Some(of_local.norm()),
                 orientation_angle_deg: Some(angle_of(of_local)),
                 pivot_force_n: Some(pf_local.norm()),
@@ -904,6 +1399,19 @@ pub fn compute_cluster(
                     loads.pivot_force,
                 ),
                 pin_span_mm: (loads.orientation_point - loads.pivot_point).norm(),
+                rigging: flown_rig.map(|rig| {
+                    rigging_view(RiggingViewInput {
+                        rig,
+                        options: rigging.as_ref().expect("sélection sans options"),
+                        bar: active_bumper_bar,
+                        top: attach,
+                        support_force: loads.support_force,
+                        gravity: settings.gravity,
+                        target_tilt_deg: cluster.imposed_tilt,
+                        achieved_phi: phi_initial,
+                        pull_back: pull_back_force.is_some(),
+                    })
+                }),
             }
         }
         Compartment::Stacked => {
@@ -951,6 +1459,8 @@ pub fn compute_cluster(
                 bar_deport_mm: None,
                 bumper_bar_exceeded: false,
                 pull_back_angle_range_deg: None,
+                pull_back_tension_range_n: None,
+                pull_back_load_share: 0.0,
                 // Le pion arrière (trou de cadre) joue le rôle « orientation »,
                 // le pion avant (charnière) celui du pivot : mêmes noms qu'en
                 // vol, pour que le front n'ait pas deux schémas à gérer.
@@ -979,6 +1489,7 @@ pub fn compute_cluster(
                 support_angle_deg: angle_of(support),
                 pin_pair_moment_nm: pin_pair_moment_nm(rear_pt, rear_f, front_pt, front_f),
                 pin_span_mm: (rear_pt - front_pt).norm(),
+                rigging: None,
             }
         }
     };

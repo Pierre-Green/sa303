@@ -7,7 +7,11 @@
 mod bumper_bar;
 mod geometry;
 mod model;
+mod rigging;
 
 pub use bumper_bar::{BumperBarCompatibility, BumperBarModel};
 pub use geometry::{bumper_outline_top, bumper_pickup_height, bumper_pin_points};
 pub use model::{BumperCompatibility, BumperModel, BumperPins, BumperRearBar};
+pub use rigging::{
+    bar_mounts, bar_outline_local, BarMount, BumperBarGeometry, BumperRigging, DEFAULT_SHACKLE_WLL_KG,
+};

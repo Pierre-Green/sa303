@@ -2,7 +2,7 @@
 // sélectionne et on renomme, on ne recalcule rien (brief §1).
 
 import { computed } from "vue";
-import type { JointResult } from "@/lib/types";
+import type { JointResult, RiggingView } from "@/lib/types";
 import { useViewer, type ViewerContext } from "../context";
 import { useDisplayNumber } from "./useDisplayNumber";
 import { BUMPER_IDX } from "./useHoverPin";
@@ -48,6 +48,8 @@ export interface BumperPopupData {
   pickupOffsetMm: number | null;
   barDeportMm: number | null;
   bumperBarExceeded: boolean;
+  /** Trous déclarés : points retenus et leur charge. */
+  rigging: RiggingView | null;
   supportForceN: number;
   supportAngleDeg: number;
   pinPairMomentNm: number;
@@ -131,6 +133,7 @@ export function usePopupData(ctx?: ViewerContext) {
         pickupOffsetMm: bv.pickupOffsetMm,
         barDeportMm: bv.barDeportMm,
         bumperBarExceeded: bv.bumperBarExceeded,
+        rigging: bv.rigging,
         supportForceN: bv.supportForceN,
         supportAngleDeg: bv.supportAngleDeg,
         pinPairMomentNm: bv.pinPairMomentNm,

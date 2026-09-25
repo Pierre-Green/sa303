@@ -16,12 +16,36 @@ defineProps<{ data: BumperPopupData; compartment: Compartment }>();
     <PopupRow v-if="data.pickupElevationMm !== null" label="Levage">
       {{ data.pickupElevationMm.toFixed(0) }} mm
     </PopupRow>
-    <PopupRow label="Accroche">
-      {{ data.pickupOffsetMm !== null ? `${Math.abs(data.pickupOffsetMm).toFixed(0)} mm` : "—" }}
-    </PopupRow>
-    <PopupRow v-if="(data.barDeportMm ?? 0) !== 0" label="Dont barre">
-      {{ Math.abs(data.barDeportMm!).toFixed(0) }} mm
-    </PopupRow>
+    <template v-if="data.rigging">
+      <PopupRow v-if="data.rigging.barMountIndex !== null" label="Barre">
+        {{ data.rigging.barMounts[data.rigging.barMountIndex].label }}
+      </PopupRow>
+      <PopupRow
+        v-for="(p, i) in data.rigging.points"
+        :key="i"
+        :label="p.label"
+        :tone="p.overloaded ? 'text-status-alarm' : 'text-zone-lift'"
+      >
+        {{ (p.tensionN / 1000).toFixed(2) }} kN
+        <span class="text-xs">/ CMU {{ p.wllKg.toFixed(0) }} kg</span>
+      </PopupRow>
+      <ForceRow
+        v-for="(f, i) in data.rigging.barLinkForces"
+        :key="'link-' + i"
+        :label="`Liaison barre ${i + 1}`"
+        tone="text-zone-orientation"
+        :newtons="f.forceN"
+        :angle-deg="f.angleDeg"
+      />
+    </template>
+    <template v-else>
+      <PopupRow label="Accroche">
+        {{ data.pickupOffsetMm !== null ? `${Math.abs(data.pickupOffsetMm).toFixed(0)} mm` : "—" }}
+      </PopupRow>
+      <PopupRow v-if="(data.barDeportMm ?? 0) !== 0" label="Dont barre">
+        {{ Math.abs(data.barDeportMm!).toFixed(0) }} mm
+      </PopupRow>
+    </template>
 
     <div v-if="data.bumperBarExceeded" class="text-status-alarm">
       Portée barre dépassée : pull-back actif.

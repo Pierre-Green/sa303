@@ -140,6 +140,12 @@ fn clamp_tolerance(tolerance_deg: f64) -> f64 {
     }
 }
 
+/// Fenêtre verticale 180° ± `tolerance_deg`, en degrés.
+pub fn pull_back_window_deg(tolerance_deg: f64) -> (f64, f64) {
+    let tol = clamp_tolerance(tolerance_deg);
+    (PULL_BACK_VERTICAL_DEG - tol, PULL_BACK_VERTICAL_DEG + tol)
+}
+
 /// `true` si `angle_deg` (modulo 360°) est dans la fenêtre verticale
 /// 180° ± `tolerance_deg`.
 pub fn is_within_pull_back_window(angle_deg: f64, tolerance_deg: f64) -> bool {

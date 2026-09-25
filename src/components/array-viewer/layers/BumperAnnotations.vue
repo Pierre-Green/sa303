@@ -15,9 +15,11 @@ const { arrow, hole, span, label } = useShapes();
 
 const bumperView = computed(() => result.value.bumperView);
 
+const rigging = computed(() => bumperView.value?.rigging ?? null);
+
 const barConfig = computed(() => {
   const bv = bumperView.value;
-  if (!bv?.bumperBarStartGlobal || !bv.pickupGlobal) return null;
+  if (bv?.rigging || !bv?.bumperBarStartGlobal || !bv.pickupGlobal) return null;
   return {
     points: localPoints(bv.bumperBarStartGlobal, bv.pickupGlobal),
     stroke: colors.value.lift,
@@ -27,7 +29,7 @@ const barConfig = computed(() => {
 });
 
 const pickupMarkerConfig = computed(() => {
-  if (compartment.value !== "flown" || !result.value.pickupGlobal) return null;
+  if (compartment.value !== "flown" || !result.value.pickupGlobal || rigging.value) return null;
   const p = toLocal(result.value.pickupGlobal);
   return {
     x: p.x,
@@ -47,7 +49,8 @@ const pickupMarkerConfig = computed(() => {
 const supportArrow = computed(() => {
   const bv = bumperView.value;
   const mag = magnitude(bv.supportForceGlobal);
-  if (mag <= 0) return null;
+  // Trous déclarés : une flèche par point retenu, dessinée plus bas.
+  if (mag <= 0 || bv.rigging) return null;
   const from = bv.supportPointGlobal;
   const len = annotation(referenceDepth.value * 0.9);
   const to = {
@@ -66,6 +69,76 @@ const supportArrow = computed(() => {
     label: label(to, `${(bv.supportForceN / 1000).toFixed(2)} kN`, colors.value.lift, {
       dx: 6,
       dy: -6,
+    }),
+  };
+});
+
+/// Trous réellement percés : ceux du bumper toujours, ceux de la barre quand
+/// elle est montée, et la barre elle-même, de patte en trous. Les points retenus
+/// portent chacun leur flèche de levage, de longueur fixe comme la manille
+/// unique, et leur charge en kN — en alarme au-delà de la CMU.
+const riggingShapes = computed(() => {
+  const r = rigging.value;
+  if (!r) return null;
+  const muted = colors.value.mutedForeground;
+  const len = annotation(referenceDepth.value * 0.6);
+  const linkLen = annotation(referenceDepth.value * 0.35);
+  return {
+    bumperHoles: r.bumperHolesGlobal.map((p) => hole(p, muted, 2.5)),
+    linkHoles: r.bumperLinkHolesGlobal.map((p) => hole(p, muted, 2.5)),
+    bar:
+      r.barOutlineGlobal.length > 0
+        ? {
+            points: localPoints(...r.barOutlineGlobal),
+            closed: true,
+            fill: muted,
+            opacity: 0.25,
+            stroke: muted,
+            strokeWidth: px(1),
+          }
+        : null,
+    // Ce que chaque patte tire sur son trou de liaison du bumper. Longueur fixe,
+    // comme la manille : ces efforts portent toute la grappe, l'échelle des
+    // jonctions les écraserait. L'intensité se lit sur l'étiquette.
+    links: r.barLinkForces.map((f) => {
+      const mag = magnitude(f.forceGlobal);
+      const to =
+        mag > 0
+          ? { x: f.pointGlobal.x + (f.forceGlobal.x / mag) * linkLen, y: f.pointGlobal.y + (f.forceGlobal.y / mag) * linkLen }
+          : f.pointGlobal;
+      return {
+        arrow: {
+          points: localPoints(f.pointGlobal, to),
+          stroke: colors.value.orientation,
+          fill: colors.value.orientation,
+          strokeWidth: px(2.5),
+          pointerLength: px(8),
+          pointerWidth: px(8),
+        },
+        label: label(to, `${(f.forceN / 1000).toFixed(2)} kN @ ${f.angleDeg.toFixed(1)}°`, colors.value.orientation, {
+          dx: 6,
+          dy: 4,
+          size: 11,
+        }),
+      };
+    }),
+    barPins: r.barPinsGlobal.map((p) => hole(p, muted, 3)),
+    barHoles: r.barHolesGlobal.map((p) => hole(p, muted, 2)),
+    points: r.points.map((pt) => {
+      const color = pt.overloaded ? colors.value.alarm : colors.value.lift;
+      const to = { x: pt.pointGlobal.x, y: pt.pointGlobal.y + len };
+      return {
+        marker: { ...hole(pt.pointGlobal, color, 6), strokeWidth: px(2.5) },
+        arrow: {
+          points: localPoints(pt.pointGlobal, to),
+          stroke: color,
+          fill: color,
+          strokeWidth: px(3),
+          pointerLength: px(10),
+          pointerWidth: px(10),
+        },
+        label: label(to, `${pt.label} · ${(pt.tensionN / 1000).toFixed(2)} kN`, color, { dx: 6, dy: -6 }),
+      };
     }),
   };
 });
@@ -140,6 +213,31 @@ function pinLabel(p: Vec2, text: string) {
 
 <template>
   <v-line v-if="barConfig" :config="barConfig" />
+
+  <!-- Trous déclarés du bumper et de sa barre, et les points retenus. -->
+  <template v-if="riggingShapes">
+    <!-- La barre fait partie du bumper : même fiche au survol et au clic. -->
+    <v-line
+      v-if="riggingShapes.bar"
+      :config="riggingShapes.bar"
+      @click="hover.onClick(BUMPER_IDX)"
+      @mouseenter="hover.onEnter(BUMPER_IDX)"
+      @mouseleave="hover.onLeave()"
+    />
+    <v-circle v-for="(h, i) in riggingShapes.linkHoles" :key="'lh-' + i" :config="h" />
+    <v-circle v-for="(h, i) in riggingShapes.barPins" :key="'bpin-' + i" :config="h" />
+    <v-circle v-for="(h, i) in riggingShapes.barHoles" :key="'bh-' + i" :config="h" />
+    <v-circle v-for="(h, i) in riggingShapes.bumperHoles" :key="'mh-' + i" :config="h" />
+    <template v-for="(l, i) in riggingShapes.links" :key="'link-' + i">
+      <v-arrow :config="l.arrow" />
+      <v-text :config="l.label" />
+    </template>
+    <template v-for="(p, i) in riggingShapes.points" :key="'rp-' + i">
+      <v-arrow :config="p.arrow" />
+      <v-circle :config="p.marker" />
+      <v-text :config="p.label" />
+    </template>
+  </template>
   <v-circle v-if="pickupMarkerConfig" :config="pickupMarkerConfig" />
 
   <!-- Charge reprise par le bumper : la manille en vol, la réaction du sol en

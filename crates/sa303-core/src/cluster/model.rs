@@ -20,6 +20,53 @@ pub enum Compartment {
     Stacked,
 }
 
+/// Où accrocher en vol : laissé au solveur, ou imposé par l'utilisateur.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RiggingSupport {
+    /// Le bumper seul d'abord, puis la barre du montage le plus centré au plus
+    /// déporté.
+    #[default]
+    Auto,
+    Bumper,
+    /// Barre forcée, même si le bumper seul suffirait (ex. pour écarter deux
+    /// points et répartir la charge).
+    Bar,
+}
+
+/// Choix d'accroche en vol. Jamais un trou précis : le solveur choisit le trou,
+/// l'utilisateur ne choisit que la famille (bumper / barre / montage) et le
+/// nombre de points.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RiggingRequest {
+    #[serde(default)]
+    pub support: RiggingSupport,
+    /// 1 ou 2 moteurs. À 2 points, l'assiette est tenue par les longueurs de
+    /// chaîne et le solveur choisit les deux trous qui équilibrent au mieux les
+    /// charges.
+    #[serde(default = "default_rigging_points")]
+    pub points: u8,
+    /// Montage de barre imposé, indice dans `RiggingView::bar_mounts`. `None` :
+    /// au choix du solveur.
+    #[serde(default)]
+    pub bar_mount_index: Option<usize>,
+}
+
+fn default_rigging_points() -> u8 {
+    1
+}
+
+impl Default for RiggingRequest {
+    fn default() -> Self {
+        Self {
+            support: RiggingSupport::Auto,
+            points: 1,
+            bar_mount_index: None,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JointSetting {
@@ -52,6 +99,25 @@ pub struct Cluster {
     /// la verticale, ou la borne la plus proche dans la plage utilisable.
     #[serde(default)]
     pub pull_back_angle: Option<f64>,
+    /// Pull-back activé à la main, alors que le bumper et sa barre suffisent
+    /// à tenir l'assiette : pour répartir la charge entre le moteur principal
+    /// et le pull-back quand les points d'accroche sont faibles. Demande une
+    /// assiette imposée. Sans effet quand le pull-back est de toute façon
+    /// obligatoire, et en stack.
+    #[serde(default)]
+    pub pull_back_enabled: bool,
+    /// Pull-back manuel seulement : tension voulue dans le pull-back, N,
+    /// sur la même base que les efforts affichés (poids × k_dyn). Avec la
+    /// direction (`pull_back_angle`) et l'assiette imposée, elle fixe
+    /// l'accroche du moteur principal. Ramenée dans
+    /// `BumperView::pull_back_tension_range_n`. `None` : la moitié de la
+    /// charge au pull-back.
+    #[serde(default)]
+    pub manual_pull_back_tension_n: Option<f64>,
+    /// Vol : famille d'accroche et nombre de points. Sans effet en stack, et
+    /// sur un bumper qui ne déclare pas encore ses trous (`BumperModel::rigging`).
+    #[serde(default)]
+    pub rigging: RiggingRequest,
     /// Bumper utilisé pour dériver le point d'accroche en vol ou comme support en stack.
     pub bumper_model_id: String,
     /// Altitude du **dessous** du bumper au-dessus du sol, mm. En stack, 0 =

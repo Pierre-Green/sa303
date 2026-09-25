@@ -11,6 +11,7 @@ mod joint;
 mod kinematics;
 mod model;
 mod pair;
+mod rigging;
 mod solver;
 mod worst_cases_selector;
 
@@ -22,6 +23,7 @@ pub use kinematics::{
     build_cluster, phi_initial_free_hang, phi_initial_stack, solve_pickup_x_for_imposed_tilt,
     weighted_cg, ChainSpeaker, SpeakerInstance,
 };
-pub use model::{Cluster, Compartment, JointSetting};
+pub use model::{Cluster, Compartment, JointSetting, RiggingRequest, RiggingSupport};
+pub use rigging::{BarMountView, LinkForceView, RiggingPointView, RiggingView};
 pub use solver::{compute_cluster, BumperView, ClusterResult, ImpossibleConfiguration};
 pub use worst_cases_selector::{select_block_a, select_block_b, LoadCase};

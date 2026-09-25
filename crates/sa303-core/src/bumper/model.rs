@@ -148,6 +148,11 @@ pub struct BumperModel {
     /// barres de la SA303-BUMPER (brief §8).
     #[serde(default = "default_rear_bars")]
     pub rear_bars: Vec<BumperRearBar>,
+    /// Trous de manille et trous de liaison de la barre de déport. `None` pour
+    /// un fichier écrit avant qu'ils ne soient déclarés : le solveur retombe
+    /// alors sur l'ancienne accroche continue (brief §8).
+    #[serde(default)]
+    pub rigging: Option<super::BumperRigging>,
     /// Alias : anciennement `compatibleBoxes` (brief §8).
     #[serde(alias = "compatibleBoxes")]
     pub compatible_speakers: Vec<BumperCompatibility>,

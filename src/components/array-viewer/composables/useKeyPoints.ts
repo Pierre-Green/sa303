@@ -16,6 +16,14 @@ export function useKeyPoints() {
     result.value.pickupGlobal ? toLocal(result.value.pickupGlobal) : null,
   );
 
+  /** Tous les points de levage : les trous retenus quand le bumper les déclare
+   * (un ou deux), sinon l'accroche unique. */
+  const liftPointsLocal = computed(() => {
+    const rigging = result.value.bumperView?.rigging;
+    if (rigging) return rigging.points.map((p) => toLocal(p.pointGlobal));
+    return pickupLocal.value ? [pickupLocal.value] : [];
+  });
+
   const pullBackPointLocal = computed(() =>
     result.value.pullBackPointGlobal ? toLocal(result.value.pullBackPointGlobal) : null,
   );
@@ -30,5 +38,5 @@ export function useKeyPoints() {
     return toLocal({ x: from.x + dir.x * len, y: from.y + dir.y * len });
   });
 
-  return { cgLocal, pickupLocal, pullBackPointLocal, pullBackEndLocal };
+  return { cgLocal, pickupLocal, liftPointsLocal, pullBackPointLocal, pullBackEndLocal };
 }

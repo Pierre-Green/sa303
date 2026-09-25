@@ -6,7 +6,7 @@ import { useClustersStore } from "@/stores/clusters";
 import { useBuiltinsStore } from "@/stores/builtins";
 import { api } from "@/lib/api";
 import { speakerDisplayNumber } from "@/lib/display";
-import type { BumperView, Cluster, ClusterResult, Compartment } from "@/lib/types";
+import type { BumperView, Cluster, ClusterResult, Compartment, RiggingSupport } from "@/lib/types";
 import ArrayViewer from "@/components/array-viewer/ArrayViewer.vue";
 import InfoTip from "@/components/ui/info-tip/InfoTip.vue";
 import { Button } from "@/components/ui/button";
@@ -60,6 +60,18 @@ interface FormState {
    * pull-back : le solveur suggère alors la verticale (180°, convention §2),
    * ou la borne la plus proche dans 180° ± tolérance. */
   pullBackAngle: number | null;
+  /** Pull-back activé à la main, pour répartir la charge quand les points
+   * d'accroche sont faibles. Ignoré quand il est de toute façon obligatoire. */
+  pullBackEnabled: boolean;
+  /** Pull-back manuel : tension voulue, kN (même base que les efforts
+   * affichés, poids × k_dyn). `null` : la moitié de la charge au pull-back. */
+  pullBackTensionKn: number | null;
+  /** Vol : famille d'accroche (le trou est toujours choisi par le solveur). */
+  riggingSupport: RiggingSupport;
+  /** 1 ou 2 moteurs. */
+  riggingPoints: number;
+  /** Montage de barre imposé, `null` : au choix du solveur. */
+  barMountIndex: number | null;
   /** Altitude du dessous du bumper, mm. Situe la grappe dans l'espace sans
    * rien changer aux efforts. */
   bumperHeight: number;
@@ -84,6 +96,11 @@ function blankForm(): FormState {
     imposedTiltEnabled: false,
     imposedTilt: 0,
     pullBackAngle: null,
+    pullBackEnabled: false,
+    pullBackTensionKn: null,
+    riggingSupport: "auto",
+    riggingPoints: 1,
+    barMountIndex: null,
     bumperHeight: 0,
   };
 }
@@ -102,6 +119,11 @@ function loadIntoForm(c: Cluster) {
     imposedTiltEnabled: c.imposedTilt != null,
     imposedTilt: c.imposedTilt ?? 0,
     pullBackAngle: c.pullBackAngle ?? null,
+    pullBackEnabled: c.pullBackEnabled ?? false,
+    pullBackTensionKn: c.manualPullBackTensionN != null ? c.manualPullBackTensionN / 1000 : null,
+    riggingSupport: c.rigging?.support ?? "auto",
+    riggingPoints: c.rigging?.points ?? 1,
+    barMountIndex: c.rigging?.barMountIndex ?? null,
     bumperHeight: c.bumperHeight,
   });
 }
@@ -131,7 +153,7 @@ watch(selectedClusterId, (id) => {
 // jamais recopiée ensuite) — même principe que pour l'assiette imposée :
 // une valeur de départ pratique, pas un couplage permanent.
 watch(
-  () => effectiveBumperView.value?.bumperBarExceeded,
+  () => effectiveBumperView.value?.pullBackAngleRangeDeg != null,
   (needed, wasNeeded) => {
     if (needed && !wasNeeded && form.pullBackAngle === null && clusterResult.value?.pullBackDirectionAngleDeg != null) {
       form.pullBackAngle = Number(clusterResult.value.pullBackDirectionAngleDeg.toFixed(1));
@@ -139,52 +161,125 @@ watch(
   },
 );
 
-/** Plage utilisable du pull-back, arrondie vers l'intérieur au dixième de
- * degré pour que les bornes affichées dans le champ restent valables. */
-const pullBackAngleRange = computed<[number, number] | null>(() => {
-  const r = effectiveBumperView.value?.pullBackAngleRangeDeg;
+/** Champ numérique borné à une plage que le solveur renvoie : les flèches
+ * (souris et clavier) s'arrêtent aux bornes grâce à `min`/`max` ; pendant la frappe, seule une valeur dans la plage
+ * part au solveur (un « 1 » ou un « 17 » intermédiaire n'est pas ramené de
+ * force à la borne) ; en sortie de champ ou sur Entrée, la valeur est ramenée
+ * dans la plage. Quand la plage bouge (assiette modifiée), la valeur déjà
+ * saisie y est ramenée, pour que le champ affiche ce que le solveur calcule. */
+function useBoundedNumber(
+  range: () => [number, number] | null,
+  get: () => number | null,
+  set: (v: number) => void,
+) {
+  const clamp = (v: number) => {
+    const r = range();
+    return r ? Math.min(r[1], Math.max(r[0], v)) : v;
+  };
+  function onInput(v: string | number) {
+    if (v === "") return;
+    const n = Number(v);
+    if (Number.isFinite(n) && clamp(n) === n) set(n);
+  }
+  /** Le champ n'est jamais recréé (une `key` changeante lui faisait perdre
+   * le focus à chaque cran de flèche, souris ou clavier) : la valeur bornée
+   * est réécrite directement dans l'élément, et seulement si elle diffère. */
+  function onCommit(e: Event) {
+    const el = e.target as HTMLInputElement;
+    const n = Number(el.value);
+    if (el.value === "" || !Number.isFinite(n)) return;
+    const c = clamp(n);
+    if (c !== n) el.value = String(c);
+    if (c !== get()) set(c);
+  }
+  watch(range, (r) => {
+    const v = get();
+    if (r && v !== null && clamp(v) !== v) set(clamp(v));
+  });
+  return { onInput, onCommit };
+}
+
+/** Arrondit une plage vers l'intérieur, pour que les bornes affichées dans le
+ * champ restent valables. */
+function inwardRange(r: [number, number] | null | undefined, step: number): [number, number] | null {
   if (!r) return null;
-  return [Math.ceil(r[0] * 10) / 10, Math.floor(r[1] * 10) / 10];
+  return [Math.ceil(r[0] / step) * step, Math.floor(r[1] / step) * step];
+}
+
+/** Plage de direction du pull-back, au dixième de degré. */
+const pullBackAngleRange = computed(() => inwardRange(effectiveBumperView.value?.pullBackAngleRangeDeg, 0.1));
+const pullBackAngleField = useBoundedNumber(
+  () => pullBackAngleRange.value,
+  () => form.pullBackAngle,
+  (v) => (form.pullBackAngle = v),
+);
+
+/** Pull-back manuel : tensions saisissables, en kN au centième. */
+const pullBackTensionRange = computed(() => {
+  const r = effectiveBumperView.value?.pullBackTensionRangeN;
+  return r ? inwardRange([r[0] / 1000, r[1] / 1000], 0.01) : null;
+});
+const pullBackTensionField = useBoundedNumber(
+  () => pullBackTensionRange.value,
+  () => form.pullBackTensionKn,
+  (v) => (form.pullBackTensionKn = v),
+);
+
+/** Le bumper et sa barre ne suffisent pas : le pull-back est obligatoire, la
+ * case est cochée et grisée. */
+const pullBackForced = computed(() => !!effectiveBumperView.value?.bumperBarExceeded);
+const pullBackActive = computed(() => effectiveBumperView.value?.pullBackAngleRangeDeg != null);
+
+// Sans assiette imposée, un pull-back manuel n'a rien pour fixer la
+// répartition : décocher l'assiette le désactive aussi.
+watch(
+  () => form.imposedTiltEnabled,
+  (on) => {
+    if (!on && form.pullBackEnabled) {
+      form.pullBackEnabled = false;
+      form.pullBackTensionKn = null;
+    }
+  },
+);
+
+/** Accroche sur trous déclarés : présente dès que le bumper cote ses trous. */
+const rigging = computed(() => effectiveBumperView.value?.rigging ?? null);
+
+/** Les `Select` ne portent que des chaînes. */
+const riggingPointsModel = computed({
+  get: () => String(form.riggingPoints),
+  set: (v: string) => (form.riggingPoints = Number(v)),
+});
+const barMountModel = computed({
+  get: () => (form.barMountIndex === null ? "auto" : String(form.barMountIndex)),
+  set: (v: string) => (form.barMountIndex = v === "auto" ? null : Number(v)),
 });
 
-/** Force le champ à se redessiner quand la valeur bornée égale la valeur
- * déjà en place : sans ça, le texte hors plage tapé resterait affiché. */
-const pullBackAngleInputKey = ref(0);
+// À 2 points, la charge se répartit déjà entre les deux moteurs : le
+// pull-back manuel n'a plus de sens, le solveur le refuse.
+watch(
+  () => form.riggingPoints,
+  (n) => {
+    if (n === 2 && form.pullBackEnabled) {
+      form.pullBackEnabled = false;
+      form.pullBackTensionKn = null;
+    }
+  },
+);
 
-function clampPullBackAngle(v: number): number {
-  const r = pullBackAngleRange.value;
-  return r ? Math.min(r[1], Math.max(r[0], v)) : v;
-}
-
-/** Pendant la frappe : seule une valeur dans la plage part au solveur. Un
- * « 1 » ou un « 17 » intermédiaire n'est pas ramené de force à 170°. */
-function onPullBackAngleInput(v: string | number) {
-  if (v === "") return;
-  const n = Number(v);
-  if (!Number.isFinite(n)) return;
-  if (clampPullBackAngle(n) === n) form.pullBackAngle = n;
-}
-
-/** En sortie de champ (ou Entrée) : la valeur est ramenée dans la plage. */
-function onPullBackAngleCommit(e: Event) {
-  const raw = (e.target as HTMLInputElement).value;
-  const n = Number(raw);
-  if (raw === "" || !Number.isFinite(n)) {
-    pullBackAngleInputKey.value += 1;
-    return;
+/** Activer le pull-back à la main demande une assiette imposée : c'est elle
+ * qui fixe la répartition. On part de l'assiette actuelle, pour ne rien
+ * changer à la grappe au moment où on coche. */
+function onPullBackToggle(v: boolean | "indeterminate") {
+  const on = v === true;
+  form.pullBackEnabled = on;
+  if (on && !form.imposedTiltEnabled) {
+    const phi = clusterResult.value?.phiFreeHang;
+    if (phi != null) form.imposedTilt = Number(((phi * 180) / Math.PI).toFixed(1));
+    form.imposedTiltEnabled = true;
   }
-  form.pullBackAngle = clampPullBackAngle(n);
-  pullBackAngleInputKey.value += 1;
+  if (!on) form.pullBackTensionKn = null;
 }
-
-// Quand l'assiette change, la plage bouge : l'angle déjà saisi y est ramené,
-// pour que le champ affiche ce que le solveur calcule réellement.
-watch(pullBackAngleRange, (r) => {
-  if (r && form.pullBackAngle !== null) {
-    const c = clampPullBackAngle(form.pullBackAngle);
-    if (c !== form.pullBackAngle) form.pullBackAngle = c;
-  }
-});
 
 function speakerModelById(id: string) {
   return speakerModelsStore.items.find((s) => s.id === id) ?? null;
@@ -455,6 +550,15 @@ function buildCluster(): Cluster {
           ? form.imposedTilt
           : null,
     pullBackAngle: form.pullBackAngle,
+    pullBackEnabled: form.compartment === "flown" && form.pullBackEnabled,
+    manualPullBackTensionN:
+      form.pullBackEnabled && form.pullBackTensionKn !== null ? form.pullBackTensionKn * 1000 : null,
+    rigging: {
+      support: form.riggingSupport,
+      points: form.riggingPoints,
+      // Un montage n'a de sens que sur la barre.
+      barMountIndex: form.riggingSupport === "bar" ? form.barMountIndex : null,
+    },
     bumperHeight: form.bumperHeight,
   };
 }
@@ -646,31 +750,143 @@ watch(form, recomputeViewer, { deep: true, immediate: true });
           class="flex flex-col gap-1 rounded-md border border-border bg-muted/40 p-2 text-xs"
         >
           <div class="flex items-center text-muted-foreground">
-            Accroche calculée
+            Accroche
             <InfoTip
-              text="Toujours calculée, jamais saisie : centrée sur le bumper par défaut, décalée le long de la barre si l'assiette imposée l'exige. Si même la barre ne suffit plus, le solveur active lui-même un pull-back : un second moteur accroché au trou de couronne 0° de l'enceinte du bas, qui tire verticalement vers le haut. Il porte le bas de la grappe, met une partie de la chaîne en compression et décharge la manille principale. Sa direction reste dans 180° ± la tolérance des réglages (10° par défaut), 180° étant la verticale."
+              :text="rigging
+                ? 'Le solveur choisit le trou parmi ceux réellement percés. À 1 point, l\'assiette découle du trou : il prend celui qui approche le mieux l\'assiette imposée et affiche l\'écart. En Auto, le bumper seul passe avant la barre, qui n\'est montée que si elle fait nettement mieux. À 2 points, l\'assiette est tenue exactement par les longueurs de chaîne, et les deux trous sont choisis pour équilibrer les charges. Chaque point est comparé à sa charge maximale d\'utilisation (poids × k_dyn).'
+                : 'Calculée par défaut : centrée sur le bumper, décalée le long de la barre si l\'assiette imposée l\'exige. Si même la barre ne suffit plus, le pull-back devient obligatoire. Il peut aussi être activé à la main pour répartir la charge : on règle alors sa direction et sa tension, et l\'accroche en découle.'"
             />
           </div>
-          <!-- Deux cotes distinctes : où se trouve l'accroche sur le bumper, et
-               ce que la barre porte au-delà. La seconde est nulle tant que
-               l'accroche reste dans l'aplomb du bumper — l'afficher seule
-               donnait « centré » pour une accroche pourtant décalée. -->
-          <div>
-            Position : {{ Math.abs(effectiveBumperView.pickupOffsetMm ?? 0).toFixed(0) }} mm
-            ({{
-              (effectiveBumperView.pickupOffsetMm ?? 0) === 0
-                ? "centrée sur le bumper"
-                : effectiveBumperView.pickupOffsetMm! > 0
-                  ? "vers l'arrière"
-                  : "vers l'avant"
-            }})
+          <!-- Bumper aux trous déclarés : on choisit la famille et le nombre de
+               points, jamais le trou — c'est le solveur qui le choisit. -->
+          <template v-if="rigging">
+            <div class="grid grid-cols-2 gap-1.5">
+              <Select v-model="form.riggingSupport">
+                <SelectTrigger class="h-7 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">Auto</SelectItem>
+                  <SelectItem value="bumper">Bumper seul</SelectItem>
+                  <SelectItem value="bar">Barre de déport</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select v-model="riggingPointsModel">
+                <SelectTrigger class="h-7 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1 point</SelectItem>
+                  <SelectItem value="2">2 points</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Select v-if="form.riggingSupport === 'bar'" v-model="barMountModel">
+              <SelectTrigger class="h-7 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Montage auto</SelectItem>
+                <SelectItem v-for="(m, i) in rigging.barMounts" :key="i" :value="String(i)">
+                  Barre {{ m.label }}{{ m.flipped ? " (retournée)" : "" }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <div v-if="rigging.barMountIndex !== null" class="text-muted-foreground">
+              Barre montée : {{ rigging.barMounts[rigging.barMountIndex].label }}
+            </div>
+            <div v-else class="text-muted-foreground">Sur le bumper, sans barre.</div>
+            <div
+              v-for="(p, i) in rigging.points"
+              :key="i"
+              class="flex justify-between"
+              :class="p.overloaded ? 'text-status-alarm' : ''"
+            >
+              <span>{{ p.label }}</span>
+              <span>{{ (p.tensionN / 1000).toFixed(2) }} kN (CMU {{ p.wllKg.toFixed(0) }} kg)</span>
+            </div>
+            <div
+              v-for="(f, i) in rigging.barLinkForces"
+              :key="'link-' + i"
+              class="flex justify-between text-muted-foreground"
+            >
+              <span>Liaison barre {{ i + 1 }}</span>
+              <span>{{ (f.forceN / 1000).toFixed(2) }} kN @ {{ f.angleDeg.toFixed(1) }}°</span>
+            </div>
+            <div v-if="rigging.points.some((p) => p.overloaded)" class="text-status-alarm">
+              Charge maximale d'utilisation dépassée.
+            </div>
+            <div v-if="rigging.tiltErrorDeg !== null && rigging.points.length === 1">
+              Assiette obtenue : {{ rigging.achievedTiltDeg.toFixed(1) }}°
+              <span :class="Math.abs(rigging.tiltErrorDeg) > 0.5 ? 'text-status-warn' : 'text-muted-foreground'">
+                (écart {{ rigging.tiltErrorDeg >= 0 ? "+" : "" }}{{ rigging.tiltErrorDeg.toFixed(1) }}°)
+              </span>
+            </div>
+            <div v-else-if="rigging.targetTiltDeg === null && rigging.points.length === 1" class="text-muted-foreground">
+              Assiette obtenue : {{ rigging.achievedTiltDeg.toFixed(1) }}°
+            </div>
+          </template>
+          <template v-else>
+            <!-- Deux cotes distinctes : où se trouve l'accroche sur le bumper, et
+                 ce que la barre porte au-delà. La seconde est nulle tant que
+                 l'accroche reste dans l'aplomb du bumper — l'afficher seule
+                 donnait « centré » pour une accroche pourtant décalée. -->
+            <div>
+              Position : {{ Math.abs(effectiveBumperView.pickupOffsetMm ?? 0).toFixed(0) }} mm
+              ({{
+                (effectiveBumperView.pickupOffsetMm ?? 0) === 0
+                  ? "centrée sur le bumper"
+                  : effectiveBumperView.pickupOffsetMm! > 0
+                    ? "vers l'arrière"
+                    : "vers l'avant"
+              }})
+            </div>
+            <div v-if="(effectiveBumperView.barDeportMm ?? 0) !== 0">
+              Dont barre de déport : {{ Math.abs(effectiveBumperView.barDeportMm!).toFixed(0) }} mm
+            </div>
+            <div v-else class="text-muted-foreground">Dans l'aplomb du bumper : pas de barre.</div>
+          </template>
+          <!-- Pull-back : coché et grisé quand il est obligatoire (la barre ne
+               suffit plus), sinon activable à la main pour répartir la charge
+               quand les points d'accroche sont faibles. -->
+          <div class="mt-1 flex items-center gap-2">
+            <Checkbox
+              id="pull-back"
+              :model-value="pullBackForced || form.pullBackEnabled"
+              :disabled="pullBackForced || (!!rigging && form.riggingPoints === 2)"
+              @update:model-value="onPullBackToggle"
+            />
+            <Label for="pull-back" class="flex items-center text-xs">
+              Pull-back (compression)
+              <InfoTip
+                :text="pullBackForced
+                  ? 'Obligatoire : même la barre de déport ne suffit plus à tenir l\'assiette imposée. Le pull-back est un second moteur accroché au trou de couronne 0° de l\'enceinte du bas, qui tire verticalement vers le haut.'
+                  : 'Second moteur accroché au trou de couronne 0° de l\'enceinte du bas, qui tire verticalement vers le haut. Il porte le bas de la grappe, met une partie de la chaîne en compression et décharge la manille principale. À activer quand les points d\'accroche sont faibles, pour répartir la charge. Demande une assiette imposée. On règle sa direction et sa tension ; l\'accroche du moteur principal en découle.'"
+              />
+            </Label>
           </div>
-          <div v-if="(effectiveBumperView.barDeportMm ?? 0) !== 0">
-            Dont barre de déport : {{ Math.abs(effectiveBumperView.barDeportMm!).toFixed(0) }} mm
-          </div>
-          <div v-else class="text-muted-foreground">Dans l'aplomb du bumper : pas de barre.</div>
-          <div v-if="effectiveBumperView.bumperBarExceeded" class="flex flex-col gap-1.5 text-status-alarm">
-            <div v-if="clusterResult">Pull-back (compression) : {{ (clusterResult.pullBackTensionN / 1000).toFixed(2) }} kN</div>
+          <div
+            v-if="pullBackActive"
+            class="flex flex-col gap-1.5"
+            :class="pullBackForced ? 'text-status-alarm' : ''"
+          >
+            <div v-if="clusterResult">
+              Tension : {{ (clusterResult.pullBackTensionN / 1000).toFixed(2) }} kN, soit
+              {{ (effectiveBumperView.pullBackLoadShare * 100).toFixed(0) }} % de la charge
+              (manille : {{ (effectiveBumperView.supportForceN / 1000).toFixed(2) }} kN)
+            </div>
+            <div v-if="!pullBackForced && pullBackTensionRange" class="flex items-center gap-2">
+              <Label class="flex shrink-0 items-center text-[11px]">
+                Tension (entre {{ pullBackTensionRange[0].toFixed(2) }} et {{ pullBackTensionRange[1].toFixed(2) }} kN)
+                <InfoTip
+                  text="Tension voulue dans le pull-back, sur la même base que les efforts affichés (poids × k_dyn). Avec la direction et l'assiette imposée, elle fixe l'accroche du moteur principal, affichée plus haut. La plage correspond aux accroches atteignables sur le bumper et sa barre. Sans saisie, le pull-back reprend la moitié de la charge."
+                />
+              </Label>
+              <Input
+                class="h-7 w-20"
+                type="number"
+                step="0.1"
+                :min="pullBackTensionRange[0]"
+                :max="pullBackTensionRange[1]"
+                :model-value="form.pullBackTensionKn ?? (clusterResult ? (clusterResult.pullBackTensionN / 1000).toFixed(2) : undefined)"
+                @update:model-value="pullBackTensionField.onInput"
+                @change="pullBackTensionField.onCommit"
+              />
+            </div>
             <div class="flex items-center gap-2">
               <Label class="flex shrink-0 items-center text-[11px]">
                 Direction (entre {{ pullBackAngleRange?.[0].toFixed(1) }}° et
@@ -679,21 +895,15 @@ watch(form, recomputeViewer, { deep: true, immediate: true });
                   text="180° = verticale vers le haut. Le pull-back reste dans 180° ± la tolérance des réglages (10° par défaut, comme Meyer Sound). La suggestion par défaut est 180°."
                 />
               </Label>
-              <!-- Borné à la plage utilisable : les flèches s'arrêtent aux
-                   bornes, une valeur hors plage n'est pas envoyée au solveur
-                   pendant la frappe, et elle est ramenée sur la borne en
-                   sortie de champ. Seule la traversée d'une enceinte reste
-                   une erreur. -->
               <Input
-                :key="pullBackAngleInputKey"
                 class="h-7 w-20"
                 type="number"
                 step="0.5"
                 :min="pullBackAngleRange?.[0]"
                 :max="pullBackAngleRange?.[1]"
                 :model-value="form.pullBackAngle ?? undefined"
-                @update:model-value="onPullBackAngleInput"
-                @change="onPullBackAngleCommit"
+                @update:model-value="pullBackAngleField.onInput"
+                @change="pullBackAngleField.onCommit"
               />
             </div>
           </div>

@@ -123,6 +123,9 @@ fn flown_cluster(
         joints: joints(splays),
         imposed_tilt,
         pull_back_angle: None,
+        pull_back_enabled: false,
+        manual_pull_back_tension_n: None,
+        rigging: Default::default(),
         bumper_model_id: bumper_id.into(),
         // Références figées : au sol, pour que l'altitude n'introduise aucune
         // variable dans des valeurs vérifiées à la main.
@@ -140,6 +143,9 @@ fn stack_cluster(name: &str, splays: &[f64], bottom_angle_deg: f64, bumper_id: &
         joints: joints(splays),
         imposed_tilt: Some(bottom_angle_deg),
         pull_back_angle: None,
+        pull_back_enabled: false,
+        manual_pull_back_tension_n: None,
+        rigging: Default::default(),
         bumper_model_id: bumper_id.into(),
         // Références figées : au sol, pour que l'altitude n'introduise aucune
         // variable dans des valeurs vérifiées à la main.
@@ -213,6 +219,7 @@ fn default_bumper() -> BumperModel {
             top_hole_along_mm: 224.626,
             top_hole_lateral_mm: 1.822,
         }],
+        rigging: None,
         compatible_speakers: vec![BumperCompatibility {
             speaker_model_id: "sa303".into(),
             flown: true,
@@ -587,6 +594,7 @@ fn default_bumper_bar() -> BumperBarModel {
         name: "SA303-BUMPER-BAR".into(),
         schema_version: 1,
         max_deport_mm: 1500.0,
+        geometry: None,
         compatible_bumpers: vec![BumperBarCompatibility {
             bumper_model_id: "sa303-bumper".into(),
         }],
@@ -1098,6 +1106,7 @@ fn bar_is_derived_automatically_from_the_active_bumper_never_selected_manually()
         name: "Autre barre".into(),
         schema_version: 1,
         max_deport_mm: 1.0,
+        geometry: None,
         compatible_bumpers: vec![BumperBarCompatibility {
             bumper_model_id: "un-autre-bumper".into(),
         }],
@@ -1169,6 +1178,9 @@ fn mixed_cluster(splays: &[f64], model_ids: &[&str], bumper_id: &str) -> Cluster
         joints: joints(splays),
         imposed_tilt: None,
         pull_back_angle: None,
+        pull_back_enabled: false,
+        manual_pull_back_tension_n: None,
+        rigging: Default::default(),
         bumper_model_id: bumper_id.into(),
         // Références figées : au sol, pour que l'altitude n'introduise aucune
         // variable dans des valeurs vérifiées à la main.
@@ -2860,4 +2872,114 @@ fn the_crown_row_comes_from_the_declaration_not_from_the_splay() {
     let moved_geo = SpeakerGeometry::compute(&moved);
     assert!((moved_geo.crown_radius_at(20.0) - (crown.radius - crown.delta)).abs() < 1e-12);
     assert!((moved_geo.crown_radius_at(1.0) - crown.radius).abs() < 1e-12);
+}
+
+// ---------------------------------------------------------------------------
+// Pull-back manuel : activé par l'utilisateur alors que le bumper et sa barre
+// suffisent, pour répartir la charge quand les points d'accroche sont faibles.
+// ---------------------------------------------------------------------------
+
+fn manual_pull_back(tilt: Option<f64>, tension_n: Option<f64>) -> Cluster {
+    let bumper = default_bumper();
+    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
+    let mut c = flown_cluster("pull-back manuel", &splays, tilt, &bumper.id);
+    c.pull_back_enabled = true;
+    c.manual_pull_back_tension_n = tension_n;
+    c
+}
+
+fn run_with_default_bar(
+    cluster: &Cluster,
+) -> Result<sa303_core::cluster::ClusterResult, sa303_core::cluster::ImpossibleConfiguration> {
+    compute_cluster(
+        std::slice::from_ref(&default_speaker()),
+        cluster,
+        &default_settings(),
+        &default_bumper(),
+        std::slice::from_ref(&default_bumper_bar()),
+    )
+}
+
+fn dynamic_weight(r: &sa303_core::cluster::ClusterResult) -> f64 {
+    r.total_mass_kg * default_settings().gravity * default_settings().dynamic_factor
+}
+
+#[test]
+fn manual_pull_back_needs_an_imposed_tilt() {
+    let err = run_with_default_bar(&manual_pull_back(None, None))
+        .expect_err("sans assiette imposée, rien ne fixe la répartition");
+    assert!(err.reason.contains("assiette imposée"), "{}", err.reason);
+}
+
+#[test]
+fn manual_pull_back_defaults_to_half_the_load() {
+    let r = run_with_default_bar(&manual_pull_back(Some(0.0), None)).expect("pull-back manuel possible");
+    let bv = &r.bumper_view;
+    assert!(!bv.bumper_bar_exceeded, "la barre suffit : pull-back manuel, pas imposé");
+    assert!(bv.pull_back_tension_range_n.is_some(), "plage de tension attendue en manuel");
+    assert!((bv.pull_back_load_share - 0.5).abs() < 1e-6, "part {}", bv.pull_back_load_share);
+    let w = dynamic_weight(&r);
+    assert!((bv.support_force_n - 0.5 * w).abs() < 1e-3 * w, "manille {} pour W {w}", bv.support_force_n);
+}
+
+#[test]
+fn the_requested_tension_is_held_and_the_pickup_follows() {
+    let base = run_with_default_bar(&manual_pull_back(Some(0.0), None)).unwrap();
+    let [lo, hi] = base.bumper_view.pull_back_tension_range_n.unwrap();
+    assert!(0.0 < lo && lo < hi, "{lo}..{hi}");
+    let at = |t: f64| run_with_default_bar(&manual_pull_back(Some(0.0), Some(t))).unwrap();
+    let (a, b) = (at(lo + 0.25 * (hi - lo)), at(lo + 0.75 * (hi - lo)));
+    assert!((a.pull_back_tension_n - (lo + 0.25 * (hi - lo))).abs() < 1e-3, "tension tenue");
+    assert!((b.pull_back_tension_n - (lo + 0.75 * (hi - lo))).abs() < 1e-3, "tension tenue");
+    let (xa, xb) = (a.bumper_view.pickup_offset_mm.unwrap(), b.bumper_view.pickup_offset_mm.unwrap());
+    assert!((xa - xb).abs() > 10.0, "l'accroche doit suivre la tension : {xa} contre {xb}");
+
+    // Hors plage, la tension est ramenée sur la borne, jamais refusée.
+    assert!((at(hi * 10.0).pull_back_tension_n - hi).abs() < 1e-3);
+    assert!((at(0.0).pull_back_tension_n - lo).abs() < 1e-3);
+}
+
+#[test]
+fn manual_pull_back_keeps_the_cluster_in_equilibrium() {
+    let mut c = manual_pull_back(Some(5.0), Some(4000.0));
+    c.pull_back_angle = Some(185.0);
+    let r = run_with_default_bar(&c).unwrap();
+    let bv = &r.bumper_view;
+    let w = dynamic_weight(&r);
+    assert!((r.pull_back_direction_angle_deg.unwrap() - 185.0).abs() < 1e-9, "direction tenue");
+    let pb = r.pull_back_direction_global.unwrap() * r.pull_back_tension_n;
+    let residual = bv.support_force_global + pb - sa303_core::vector::Vec2::new(0.0, w);
+    assert!(residual.norm() < 1e-6 * w, "résidu {residual:?}");
+    assert!((bv.pull_back_load_share - pb.y / w).abs() < 1e-9);
+}
+
+#[test]
+fn a_forced_pull_back_ignores_the_manual_tension() {
+    let bar = BumperBarModel {
+        max_deport_mm: 50.0,
+        ..default_bumper_bar()
+    };
+    let cluster = manual_pull_back(Some(20.0), Some(1.0));
+    let r = compute_cluster(
+        std::slice::from_ref(&default_speaker()),
+        &cluster,
+        &default_settings(),
+        &default_bumper(),
+        std::slice::from_ref(&bar),
+    )
+    .expect("pull-back imposé");
+    let bv = &r.bumper_view;
+    assert!(bv.bumper_bar_exceeded, "la barre ne suffit pas : pull-back obligatoire");
+    assert!(bv.pull_back_tension_range_n.is_none(), "la tension n'est pas un choix quand il est imposé");
+    assert!((bv.pickup_offset_mm.unwrap().abs() - 50.0).abs() < 1e-9);
+    assert!(r.pull_back_tension_n > 100.0);
+}
+
+#[test]
+fn without_the_manual_flag_a_reachable_tilt_has_no_pull_back() {
+    let mut c = manual_pull_back(Some(0.0), None);
+    c.pull_back_enabled = false;
+    let r = run_with_default_bar(&c).unwrap();
+    assert_eq!(r.pull_back_tension_n, 0.0);
+    assert_eq!(r.bumper_view.pull_back_load_share, 0.0);
 }

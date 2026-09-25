@@ -167,6 +167,18 @@ export interface Cluster {
    * dans 180° ± `Settings.pullBackToleranceDeg`. `null` tant que
    * l'utilisateur n'a pas choisi : le solveur suggère alors la verticale. */
   pullBackAngle?: number | null;
+  /** Pull-back activé à la main, pour répartir la charge quand les points
+   * d'accroche sont faibles. Demande une assiette imposée. Sans effet quand le
+   * pull-back est de toute façon obligatoire, et en stack. */
+  pullBackEnabled?: boolean;
+  /** Pull-back manuel : tension voulue, N (même base que les efforts
+   * affichés, poids × k_dyn). Avec la direction et l'assiette imposée, elle
+   * fixe l'accroche. Ramenée dans `BumperView.pullBackTensionRangeN`. `null` :
+   * la moitié de la charge au pull-back. */
+  manualPullBackTensionN?: number | null;
+  /** Vol : famille d'accroche et nombre de points. Le trou est toujours
+   * choisi par le solveur. Absent : Auto, 1 point. */
+  rigging?: RiggingRequest;
   /** Bumper utilisé pour dériver le point d'accroche en vol ou comme support
    * en stack. Obligatoire : il n'existe pas de repli manuel. */
   bumperModelId: string;
@@ -227,7 +239,33 @@ export interface BumperModel {
   pivotBarUsableLengthMm: number;
   /** Barres arrière disponibles, une par inclinaison. */
   rearBars: BumperRearBar[];
+  /** Trous de manille et trous de liaison de la barre, repère bumper
+   * (origine au centre du dessous, x vers l'arrière, y vers le haut). */
+  rigging?: BumperRigging | null;
   compatibleSpeakers: BumperCompatibility[];
+}
+
+export interface BumperRigging {
+  shackleHoles: [number, number][];
+  barLinkHoles: [number, number][];
+  wllKg: number;
+}
+
+export interface BumperBarGeometry {
+  /** Repère barre : origine au centre, x le long de la barre, sens normal. */
+  pickupHoles: [number, number][];
+  linkPins: [[number, number], [number, number]];
+  wllKg: number;
+}
+
+export type RiggingSupport = "auto" | "bumper" | "bar";
+
+export interface RiggingRequest {
+  support: RiggingSupport;
+  /** 1 ou 2 moteurs. */
+  points: number;
+  /** Montage imposé, indice dans `RiggingView.barMounts`. */
+  barMountIndex: number | null;
 }
 
 export interface BumperBarCompatibility {
@@ -240,6 +278,7 @@ export interface BumperBarModel {
   schemaVersion: number;
   /** Portée max de déport depuis le centre du bumper, mm : au-delà, un pull-back prend le relais. */
   maxDeportMm: number;
+  geometry?: BumperBarGeometry | null;
   compatibleBumpers: BumperBarCompatibility[];
 }
 
@@ -455,6 +494,11 @@ export interface BumperView {
    * réel dépend du terrain : à choisir dedans, ce n'est pas à l'algorithme
    * de décider seul. */
   pullBackAngleRangeDeg: [number, number] | null;
+  /** Pull-back manuel seulement : tensions saisissables, N. Elles
+   * correspondent aux accroches atteignables sur le bumper et sa barre. */
+  pullBackTensionRangeN: [number, number] | null;
+  /** Part du poids dynamisé reprise par le pull-back, 0 sans pull-back. */
+  pullBackLoadShare: number;
   /** Efforts transmis par le bumper à l'enceinte de référence, repère de
    * cette enceinte, par flanc. Vol uniquement. */
   orientationForceN: number | null;
@@ -495,6 +539,53 @@ export interface BumperView {
   pinPairMomentNm: number;
   /** Entraxe des deux pions, le bras de ce couple. */
   pinSpanMm: number;
+  /** Vol, bumper aux trous déclarés : trous retenus et charge de chacun. */
+  rigging: RiggingView | null;
+}
+
+export interface RiggingPointView {
+  label: string;
+  bumperXMm: number;
+  pointGlobal: Vec2;
+  tensionN: number;
+  loadKg: number;
+  wllKg: number;
+  overloaded: boolean;
+}
+
+export interface BarMountView {
+  label: string;
+  flipped: boolean;
+  centerXMm: number;
+}
+
+export interface RiggingView {
+  /** Famille retenue, jamais "auto". */
+  support: RiggingSupport;
+  barMounts: BarMountView[];
+  barMountIndex: number | null;
+  points: RiggingPointView[];
+  targetTiltDeg: number | null;
+  achievedTiltDeg: number;
+  tiltErrorDeg: number | null;
+  bumperHolesGlobal: Vec2[];
+  /** Les 4 trous de liaison de la barre sur le bumper, montés ou non. */
+  bumperLinkHolesGlobal: Vec2[];
+  barHolesGlobal: Vec2[];
+  barPinsGlobal: Vec2[];
+  /** Silhouette schématique de la barre montée, polygone fermé. */
+  barOutlineGlobal: Vec2[];
+  /** Effort de chaque patte sur son trou de liaison du bumper, même ordre
+   * que `barPinsGlobal`. Charge entière, pas par flanc. */
+  barLinkForces: LinkForceView[];
+}
+
+export interface LinkForceView {
+  pointGlobal: Vec2;
+  forceGlobal: Vec2;
+  forceN: number;
+  /** Repère de l'enceinte du haut (convention §2). */
+  angleDeg: number;
 }
 
 export interface JointOffset {
