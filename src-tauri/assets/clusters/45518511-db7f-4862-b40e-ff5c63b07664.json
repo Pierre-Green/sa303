@@ -1,12 +1,7 @@
 {
   "id": "45518511-db7f-4862-b40e-ff5c63b07664",
   "name": "Stack cca20 - 3u - 2m",
-  "schemaVersion": 2,
-  "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-cca",
-    "sa303-cca"
-  ],
+  "speakerModelIds": ["sa303-isophase", "sa303-cca", "sa303-cca"],
   "compartment": "stacked",
   "joints": [
     {
@@ -18,6 +13,13 @@
   ],
   "imposedTilt": 30.0,
   "pullBackAngle": null,
+  "pullBackEnabled": false,
+  "manualPullBackTensionN": null,
+  "rigging": {
+    "support": "auto",
+    "points": 1,
+    "barMountIndex": null
+  },
   "bumperModelId": "sa303-bumper",
   "bumperHeight": 2000.0
 }

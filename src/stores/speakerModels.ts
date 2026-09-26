@@ -16,15 +16,5 @@ export const useSpeakerModelsStore = defineStore("speakerModels", () => {
     }
   }
 
-  async function save(speakerModel: SpeakerModel) {
-    await api.saveSpeakerModel(speakerModel);
-    await fetchAll();
-  }
-
-  async function remove(id: string) {
-    await api.deleteSpeakerModel(id);
-    await fetchAll();
-  }
-
-  return { items, loading, fetchAll, save, remove };
+  return { items, loading, fetchAll };
 });

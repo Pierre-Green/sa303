@@ -22,19 +22,12 @@ export const api = {
   // supprimables depuis l'application, seule une mise à jour les fait bouger.
   getBuiltinIds: () => invoke<BuiltinIds>("get_builtin_ids"),
 
+  // Catalogue d'équipement en lecture seule : il se modifie dans les JSON.
   listSpeakerModels: () => invoke<SpeakerModel[]>("list_speaker_models"),
-  saveSpeakerModel: (speakerModel: SpeakerModel) =>
-    invoke<void>("save_speaker_model", { speakerModel }),
-  deleteSpeakerModel: (id: string) => invoke<void>("delete_speaker_model", { id }),
 
   listBumperModels: () => invoke<BumperModel[]>("list_bumper_models"),
-  saveBumperModel: (bumperModel: BumperModel) => invoke<void>("save_bumper_model", { bumperModel }),
-  deleteBumperModel: (id: string) => invoke<void>("delete_bumper_model", { id }),
 
   listBumperBarModels: () => invoke<BumperBarModel[]>("list_bumper_bar_models"),
-  saveBumperBarModel: (bumperBarModel: BumperBarModel) =>
-    invoke<void>("save_bumper_bar_model", { bumperBarModel }),
-  deleteBumperBarModel: (id: string) => invoke<void>("delete_bumper_bar_model", { id }),
 
   listClusters: () => invoke<Cluster[]>("list_clusters"),
   saveCluster: (cluster: Cluster) => invoke<void>("save_cluster", { cluster }),

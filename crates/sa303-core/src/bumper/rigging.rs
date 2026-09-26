@@ -21,13 +21,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::vector::Vec2;
 
-/// Charge maximale d'utilisation d'une manille 3,25 t classique, kg.
-pub const DEFAULT_SHACKLE_WLL_KG: f64 = 3250.0;
-
-fn default_wll_kg() -> f64 {
-    DEFAULT_SHACKLE_WLL_KG
-}
-
 /// Écart toléré entre l'entraxe des pattes de la barre et celui de deux trous
 /// de liaison du bumper, mm : au-delà, la goupille ne passe pas.
 const LINK_MATCH_TOLERANCE_MM: f64 = 0.5;
@@ -41,7 +34,6 @@ pub struct BumperRigging {
     /// Trous où se goupillent les pattes de la barre de déport, `[x, y]` mm.
     pub bar_link_holes: Vec<[f64; 2]>,
     /// Charge maximale par trou de manille, kg.
-    #[serde(default = "default_wll_kg")]
     pub wll_kg: f64,
 }
 
@@ -54,7 +46,6 @@ pub struct BumperBarGeometry {
     /// Les deux pattes inférieures qui se goupillent au bumper, `[x, y]` mm.
     pub link_pins: [[f64; 2]; 2],
     /// Charge maximale par trou d'accroche, kg.
-    #[serde(default = "default_wll_kg")]
     pub wll_kg: f64,
 }
 
@@ -165,7 +156,7 @@ pub fn bar_outline_local(bar: &BumperBarGeometry) -> Vec<[f64; 2]> {
 mod tests {
     use super::*;
 
-    /// Données provisoires de la SA303 : les quatre montages attendus par le
+    /// Perçage de la SA303 : les quatre montages attendus par le
     /// rigger (centre de barre à ±258 et ±288 mm) doivent sortir des seuls
     /// perçages.
     #[test]
@@ -173,12 +164,12 @@ mod tests {
         let bumper = BumperRigging {
             shackle_holes: vec![],
             bar_link_holes: vec![[-210.0, 160.0], [-180.0, 160.0], [180.0, 160.0], [210.0, 160.0]],
-            wll_kg: DEFAULT_SHACKLE_WLL_KG,
+            wll_kg: 3250.0,
         };
         let bar = BumperBarGeometry {
             pickup_holes: vec![],
             link_pins: [[-468.0, 0.0], [-78.0, 0.0]],
-            wll_kg: DEFAULT_SHACKLE_WLL_KG,
+            wll_kg: 3250.0,
         };
         let centers: Vec<f64> = bar_mounts(&bumper, &bar).iter().map(|m| m.center_x_mm).collect();
         assert_eq!(centers, vec![-258.0, 258.0, -288.0, 288.0]);

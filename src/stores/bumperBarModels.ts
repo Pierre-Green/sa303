@@ -16,15 +16,5 @@ export const useBumperBarModelsStore = defineStore("bumperBarModels", () => {
     }
   }
 
-  async function save(bumperBarModel: BumperBarModel) {
-    await api.saveBumperBarModel(bumperBarModel);
-    await fetchAll();
-  }
-
-  async function remove(id: string) {
-    await api.deleteBumperBarModel(id);
-    await fetchAll();
-  }
-
-  return { items, loading, fetchAll, save, remove };
+  return { items, loading, fetchAll };
 });

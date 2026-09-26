@@ -1,8 +1,6 @@
 //! Cinématique de grappe (brief §4) : position, inclinaison et CG global de
 //! chaque enceinte une fois la chaîne assemblée, les deux façons de fixer
-//! `φ_initial` (pendaison libre, ou assiette de calage en stack), et
-//! l'inversion utilisée pour dériver le point d'accroche nécessaire à une
-//! assiette imposée.
+//! `φ_initial` (pendaison libre, ou assiette de calage en stack).
 //!
 //! Une grappe est **hétérogène** : chaque position porte son propre modèle
 //! d'enceinte (SA303-ISOPHASE, SA303-CCA, renfort de grave, ...), donc sa
@@ -134,21 +132,4 @@ pub fn phi_initial_free_hang(chain: &[ChainSpeaker], splays_deg: &[f64], pickup:
 pub fn phi_initial_stack(bottom_angle_deg: f64, splays_deg: &[f64]) -> f64 {
     let sum_splay_deg: f64 = splays_deg.iter().sum();
     (bottom_angle_deg - sum_splay_deg).to_radians()
-}
-
-/// Position d'accroche (x, le long de la barre de déport) nécessaire pour
-/// qu'une grappe suspendue sans pull-back adopte exactement `phi_initial` à la
-/// hauteur d'accroche donnée — l'inverse de `phi_initial_free_hang` : là on
-/// part de l'assiette voulue pour remonter au point d'accroche, plutôt que
-/// l'inverse.
-pub fn solve_pickup_x_for_imposed_tilt(
-    chain: &[ChainSpeaker],
-    splays_deg: &[f64],
-    phi_initial: f64,
-    pickup_height: f64,
-) -> f64 {
-    let speakers = build_cluster(chain, splays_deg, phi_initial);
-    let cm = weighted_cg(chain, &speakers);
-    let (s, c) = phi_initial.sin_cos();
-    (cm.x + pickup_height * s) / c
 }

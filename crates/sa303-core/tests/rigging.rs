@@ -1,6 +1,5 @@
 //! Accroche sur trous réels (bumper + barre de déport), avec le perçage livré
-//! dans `src-tauri/assets` — provisoire tant que les cotes CAO ne sont pas
-//! reportées, mais la logique de choix ne dépend pas des valeurs exactes.
+//! dans `src-tauri/assets`.
 
 use sa303_core::bumper::{BumperBarModel, BumperModel};
 use sa303_core::cluster::{
@@ -54,7 +53,6 @@ fn flown(splays: &[f64], tilt: Option<f64>, rigging: RiggingRequest) -> Cluster 
     Cluster {
         id: "t".into(),
         name: "t".into(),
-        schema_version: 1,
         speaker_model_ids: vec!["sa303-isophase".into(); splays.len() + 1],
         compartment: Compartment::Flown,
         joints: splays.iter().map(|&splay| JointSetting { splay }).collect(),
@@ -87,7 +85,7 @@ fn request(support: RiggingSupport, points: u8) -> RiggingRequest {
 #[test]
 fn single_point_lands_on_a_declared_hole() {
     let (_, bumper, _) = catalogue();
-    let holes: Vec<f64> = bumper.rigging.unwrap().shackle_holes.iter().map(|h| h[0]).collect();
+    let holes: Vec<f64> = bumper.rigging.shackle_holes.iter().map(|h| h[0]).collect();
     let view = solve(&flown(&[2.0, 4.0, 5.0], Some(-2.0), request(RiggingSupport::Bumper, 1)));
     assert_eq!(view.support, RiggingSupport::Bumper);
     assert_eq!(view.points.len(), 1);
@@ -168,4 +166,53 @@ fn bar_link_forces_balance_the_chains() {
         assert!((links - chains).abs() < 1e-6 * chains, "{links} ≠ {chains}");
         assert!(!view.bar_outline_global.is_empty());
     }
+}
+
+fn with_pull_back(mut c: Cluster, tension_n: Option<f64>) -> Cluster {
+    c.pull_back_enabled = true;
+    c.manual_pull_back_tension_n = tension_n;
+    c
+}
+
+/// Plus on tend le pull-back, moins la manille du haut porte — c'est tout
+/// l'intérêt de pouvoir le régler.
+#[test]
+fn a_tighter_pull_back_unloads_the_top_shackle() {
+    let (speaker, bumper, bar) = catalogue();
+    let base = flown(&[2.0, 3.0, 4.0, 5.0, 5.0], Some(0.0), RiggingRequest::default());
+    let top_load = |t: f64| {
+        let r = compute_cluster(std::slice::from_ref(&speaker), &with_pull_back(base.clone(), Some(t)), &settings(), &bumper, std::slice::from_ref(&bar))
+            .unwrap_or_else(|e| panic!("{}", e.reason));
+        assert!((r.pull_back_tension_n - t).abs() < 1e-6, "tension saisie non respectée");
+        r.bumper_view.rigging.unwrap().points[0].tension_n
+    };
+    assert!(top_load(4000.0) < top_load(1000.0));
+}
+
+/// Pull-back obligatoire sans tension saisie : il tient l'assiette visée, et
+/// sa tension reste réglable ensuite.
+#[test]
+fn a_forced_pull_back_starts_on_the_target_and_stays_adjustable() {
+    let (speaker, bumper, bar) = catalogue();
+    let c = flown(&[2.0, 3.0, 4.0, 5.0, 5.0], Some(5.0), request(RiggingSupport::Bumper, 1));
+    let r = compute_cluster(std::slice::from_ref(&speaker), &c, &settings(), &bumper, std::slice::from_ref(&bar)).unwrap();
+    assert!(r.bumper_view.pull_back_forced);
+    let view = r.bumper_view.rigging.unwrap();
+    assert!(view.tilt_error_deg.unwrap().abs() < 0.5, "{:?}", view.tilt_error_deg);
+    assert!(r.bumper_view.pull_back_tension_range_n.is_some());
+
+    let mut tighter = c.clone();
+    tighter.manual_pull_back_tension_n = Some(r.pull_back_tension_n * 1.2);
+    let r2 = compute_cluster(&[speaker], &tighter, &settings(), &bumper, &[bar]).unwrap();
+    assert!((r2.pull_back_tension_n - r.pull_back_tension_n * 1.2).abs() < 1e-6);
+}
+
+
+/// Pull-back choisi sans tension saisie : il part d'une tension qui tient
+/// l'assiette visée.
+#[test]
+fn a_chosen_pull_back_starts_on_the_target() {
+    let c = with_pull_back(flown(&[2.0, 3.0, 4.0, 5.0, 5.0], Some(0.0), RiggingRequest::default()), None);
+    let view = solve(&c);
+    assert!(view.tilt_error_deg.unwrap().abs() < 0.5, "{:?}", view.tilt_error_deg);
 }

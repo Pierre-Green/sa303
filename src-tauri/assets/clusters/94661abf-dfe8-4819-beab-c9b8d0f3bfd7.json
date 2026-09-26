@@ -1,14 +1,7 @@
 {
   "id": "94661abf-dfe8-4819-beab-c9b8d0f3bfd7",
   "name": "Stack isophase5-0 - 5u -5m",
-  "schemaVersion": 2,
-  "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-  ],
+  "speakerModelIds": ["sa303-isophase", "sa303-isophase", "sa303-isophase", "sa303-isophase", "sa303-isophase"],
   "compartment": "stacked",
   "joints": [
     {
@@ -26,6 +19,13 @@
   ],
   "imposedTilt": 5.0,
   "pullBackAngle": null,
+  "pullBackEnabled": false,
+  "manualPullBackTensionN": null,
+  "rigging": {
+    "support": "auto",
+    "points": 1,
+    "barMountIndex": null
+  },
   "bumperModelId": "sa303-bumper",
   "bumperHeight": 5000.0
 }

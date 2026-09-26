@@ -14,13 +14,22 @@ import { toLocal } from "../geometry";
 
 export const DEFAULT_LISTENING_HEIGHT_MM = 1700;
 
+/** Longueur du trait quand l'axe ne croise jamais la ligne, mm : assez pour
+ * sortir de n'importe quel cadrage, donc vu comme une demi-droite infinie. */
+const UNBOUNDED_RAY_MM = 1e7;
+
 export interface ListeningRay {
   /** Départ : le centre de la face avant de l'enceinte, en repère de dessin. */
   fromLocal: Vec2;
-  /** Croisement de l'axe avec la ligne d'écoute, en repère de dessin. */
+  /** Bout du trait, en repère de dessin : le croisement avec la ligne d'écoute
+   * s'il existe, sinon un point très lointain sur l'axe. */
   toLocal: Vec2;
-  /** Longueur réelle du trajet, en mètres — la cote lue dans la fiche. */
-  distanceM: number;
+  /** Croisement de l'axe avec la ligne d'écoute ; `null` quand il ne la croise
+   * jamais (il s'en éloigne, ou il est parfaitement horizontal). */
+  hitLocal: Vec2 | null;
+  /** Longueur réelle du trajet jusqu'à la ligne, en mètres — la cote lue dans
+   * la fiche. `null` sans croisement. */
+  distanceM: number | null;
 }
 
 export interface ListeningLine {
@@ -28,9 +37,9 @@ export interface ListeningLine {
   heightMm: Ref<number>;
   /** La même altitude en ordonnée du repère de dessin local. */
   localY: ComputedRef<number>;
-  /** Le trajet de chaque enceinte, `null` quand son axe ne croise jamais la
-   * ligne (il s'en éloigne, ou il est parfaitement horizontal). */
-  rays: ComputedRef<(ListeningRay | null)[]>;
+  /** L'axe de chaque enceinte, toujours tracé : jusqu'à la ligne quand il la
+   * croise, à l'infini sinon. */
+  rays: ComputedRef<ListeningRay[]>;
 }
 
 /** Centre de la face avant : milieu des deux coins avant de la silhouette
@@ -62,17 +71,24 @@ export function useListeningLine(result: ComputedRef<ClusterResult>): ListeningL
   const modelY = computed(() => heightMm.value - result.value.elevation.offsetMm);
   const localY = computed(() => -modelY.value);
 
-  const rays = computed<(ListeningRay | null)[]>(() =>
+  const rays = computed<ListeningRay[]>(() =>
     result.value.speakers.map((speaker) => {
       const from = frontCenter(speaker);
       const dir = axisDirection(speaker);
-      // Axe horizontal, ou qui s'éloigne de la ligne : pas de croisement à
-      // montrer — mieux vaut ne rien tracer qu'un trait qui part en arrière.
-      if (Math.abs(dir.y) < 1e-9) return null;
-      const t = (modelY.value - from.y) / dir.y;
-      if (t <= 0) return null;
-      const hit = { x: from.x + dir.x * t, y: from.y + dir.y * t };
-      return { fromLocal: toLocal(from), toLocal: toLocal(hit), distanceM: t / 1000 };
+      const at = (t: number) => ({ x: from.x + dir.x * t, y: from.y + dir.y * t });
+      // Axe horizontal, ou qui s'éloigne de la ligne : pas de croisement, mais
+      // l'axe reste tracé — il dit toujours où l'enceinte regarde.
+      const t = Math.abs(dir.y) < 1e-9 ? -1 : (modelY.value - from.y) / dir.y;
+      if (t <= 0) {
+        return {
+          fromLocal: toLocal(from),
+          toLocal: toLocal(at(UNBOUNDED_RAY_MM)),
+          hitLocal: null,
+          distanceM: null,
+        };
+      }
+      const hit = toLocal(at(t));
+      return { fromLocal: toLocal(from), toLocal: hit, hitLocal: hit, distanceM: t / 1000 };
     }),
   );
 

@@ -20,7 +20,7 @@ pub use aggregate::{
 };
 pub use joint::{compute_joint, JointInput, JointResult};
 pub use kinematics::{
-    build_cluster, phi_initial_free_hang, phi_initial_stack, solve_pickup_x_for_imposed_tilt,
+    build_cluster, phi_initial_free_hang, phi_initial_stack,
     weighted_cg, ChainSpeaker, SpeakerInstance,
 };
 pub use model::{Cluster, Compartment, JointSetting, RiggingRequest, RiggingSupport};

@@ -1,5 +1,5 @@
 //! Géométrie du bumper de capotage : silhouette rigidement fixée à l'enceinte
-//! du haut en vol, et hauteur de la manille. Le rendu du bumper en stack
+//! du haut en vol, et ses deux pions. Le rendu du bumper en stack
 //! (toujours parallèle au sol, jamais fixé à l'enceinte) n'est pas ici : il
 //! dépend de la grappe assemblée, pas seulement de l'enceinte, et vit dans
 //! `crate::cluster::solver`.
@@ -59,10 +59,4 @@ pub fn bumper_pin_points(outline: &[Vec2; 4], bumper: &BumperModel) -> [Vec2; 2]
         front_bottom + along_unit * bumper.pins.front_from_front_mm + rise,
         rear_bottom - along_unit * bumper.pins.rear_from_rear_mm + rise,
     ]
-}
-
-/// Hauteur du point d'accroche (la manille) au-dessus du centre de l'enceinte
-/// du haut — le bumper posé sur l'enceinte, la manille se fermant au-dessus.
-pub fn bumper_pickup_height(speaker: &SpeakerModel, bumper: &BumperModel) -> f64 {
-    speaker.mechanical.height / 2.0 + bumper.height + bumper.shackle_height_above_bumper
 }

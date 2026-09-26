@@ -1,6 +1,6 @@
 //! Domaine "bumper" (capotage) : modèle persisté — compatibilité déclarée par
 //! enceinte et par compartiment (`model`) — et géométrie dérivée — silhouette,
-//! hauteur de manille (`geometry`). La barre de déport associée
+//! pions (`geometry`), trous d'accroche et montages de barre (`rigging`). La barre de déport associée
 //! (SA303-BUMPER-BAR) vit ici aussi (`bumper_bar`) : c'est le bumper actif
 //! qui déclare quelle barre s'applique, jamais l'inverse.
 
@@ -10,8 +10,8 @@ mod model;
 mod rigging;
 
 pub use bumper_bar::{BumperBarCompatibility, BumperBarModel};
-pub use geometry::{bumper_outline_top, bumper_pickup_height, bumper_pin_points};
+pub use geometry::{bumper_outline_top, bumper_pin_points};
 pub use model::{BumperCompatibility, BumperModel, BumperPins, BumperRearBar};
 pub use rigging::{
-    bar_mounts, bar_outline_local, BarMount, BumperBarGeometry, BumperRigging, DEFAULT_SHACKLE_WLL_KG,
+    bar_mounts, bar_outline_local, BarMount, BumperBarGeometry, BumperRigging,
 };

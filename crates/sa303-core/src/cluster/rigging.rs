@@ -59,6 +59,9 @@ pub(super) struct RiggingOptions {
     pub link_holes_local: Vec<Vec2>,
     /// Décalage repère bumper → repère enceinte du haut, mm.
     pub speaker_half_height: f64,
+    /// Trou de manille le plus centré côté arrière, repère enceinte du haut :
+    /// référence de « φ libre ». `None` si le bumper n'a pas de manille arrière.
+    pub reference_hole_local: Option<Vec2>,
 }
 
 fn side_label(x: f64) -> &'static str {
@@ -69,15 +72,15 @@ fn side_label(x: f64) -> &'static str {
     }
 }
 
-/// `None` si le bumper ne déclare pas ses trous : le solveur garde alors
-/// l'ancienne accroche continue.
+/// Les trous que le bumper et sa barre offrent pour cette demande. Un bumper
+/// sans aucun trou utilisable pour elle est une configuration impossible.
 pub(super) fn rigging_options(
     bumper: &BumperModel,
     bar: Option<&BumperBarModel>,
     speaker_half_height: f64,
     request: &RiggingRequest,
-) -> Option<Result<RiggingOptions, ImpossibleConfiguration>> {
-    let rigging = bumper.rigging.as_ref()?;
+) -> Result<RiggingOptions, ImpossibleConfiguration> {
+    let rigging = &bumper.rigging;
     let to_speaker = |p: Vec2| Vec2::new(p.x, p.y + speaker_half_height);
 
     let bumper_holes: Vec<Vec2> = rigging
@@ -103,7 +106,7 @@ pub(super) fn rigging_options(
         })
         .collect();
 
-    let bar_geometry = bar.and_then(|b| b.geometry.as_ref());
+    let bar_geometry = bar.map(|b| &b.geometry);
     let mounts = bar_geometry
         .map(|g| bar_mounts(rigging, g))
         .unwrap_or_default();
@@ -158,10 +161,19 @@ pub(super) fn rigging_options(
             RiggingSupport::Bar => "Le montage de barre demandé n'existe pas avec ces perçages.".into(),
             _ => format!("Le bumper \"{}\" ne déclare aucun trou d'accroche.", bumper.name),
         };
-        return Some(Err(ImpossibleConfiguration { reason }));
+        return Err(ImpossibleConfiguration { reason });
     }
 
-    Some(Ok(RiggingOptions {
+    // Référence de « φ libre » : le trou de manille le plus centré côté
+    // arrière, où la grappe penche naturellement vers l'avant — ou le trou
+    // central, s'il y en a un.
+    let reference_hole_local = bumper_holes
+        .iter()
+        .filter(|p| p.x >= 0.0)
+        .min_by(|a, b| a.x.total_cmp(&b.x))
+        .map(|&p| to_speaker(p));
+
+    Ok(RiggingOptions {
         groups,
         mounts,
         bumper_holes_local: bumper_holes.into_iter().map(to_speaker).collect(),
@@ -171,7 +183,8 @@ pub(super) fn rigging_options(
             .map(|&[x, y]| to_speaker(Vec2::new(x, y)))
             .collect(),
         speaker_half_height,
-    }))
+        reference_hole_local,
+    })
 }
 
 pub(super) fn mount_label(mount: &BarMount) -> String {

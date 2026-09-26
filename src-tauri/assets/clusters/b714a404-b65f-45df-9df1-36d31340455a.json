@@ -1,13 +1,7 @@
 {
   "id": "b714a404-b65f-45df-9df1-36d31340455a",
   "name": "Grappe 4u - 8m - (-10-50m)",
-  "schemaVersion": 2,
-  "speakerModelIds": [
-    "sa303-cca",
-    "sa303-cca",
-    "sa303-cca",
-    "sa303-cca"
-  ],
+  "speakerModelIds": ["sa303-cca", "sa303-cca", "sa303-cca", "sa303-cca"],
   "compartment": "flown",
   "joints": [
     {
@@ -22,6 +16,13 @@
   ],
   "imposedTilt": 18.5,
   "pullBackAngle": null,
+  "pullBackEnabled": false,
+  "manualPullBackTensionN": null,
+  "rigging": {
+    "support": "auto",
+    "points": 1,
+    "barMountIndex": null
+  },
   "bumperModelId": "sa303-bumper",
   "bumperHeight": 8000.0
 }

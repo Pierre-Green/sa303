@@ -11,7 +11,33 @@ import { useViewer } from "../context";
 import { toLocal } from "../geometry";
 import { BUMPER_IDX } from "../composables/useHoverPin";
 
+const props = defineProps<{
+  /** Liaisons pleines (aperçu du bumper seul) ou en simple contour (vue de
+   * grappe, où elles passent devant l'enceinte et ne doivent pas la masquer). */
+  filledBars?: boolean;
+}>();
+
 const { result, colors, px, hover } = useViewer();
+
+/// Bielle avant et barre arrière, telles que placées par Rust.
+const barConfigs = computed(() => {
+  const bv = result.value.bumperView;
+  if (!bv) return [];
+  return [bv.frontBarOutlineGlobal, bv.rearBarOutlineGlobal].flatMap((outline) =>
+    outline
+      ? [
+          {
+            points: outline.map(toLocal).flatMap((p) => [p.x, p.y]),
+            closed: true,
+            fill: props.filledBars ? colors.value.muted : undefined,
+            stroke: props.filledBars ? colors.value.border : colors.value.mutedForeground,
+            strokeWidth: px(1),
+            listening: false,
+          },
+        ]
+      : [],
+  );
+});
 
 const outlineConfig = computed(() => {
   const bv = result.value.bumperView;
@@ -27,6 +53,7 @@ const outlineConfig = computed(() => {
 </script>
 
 <template>
+  <v-line v-for="(bar, i) in barConfigs" :key="'bar-' + i" :config="bar" />
   <v-line
     v-if="outlineConfig"
     :config="outlineConfig"

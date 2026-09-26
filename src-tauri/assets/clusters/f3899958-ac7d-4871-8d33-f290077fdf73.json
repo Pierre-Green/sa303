@@ -1,23 +1,7 @@
 {
   "id": "f3899958-ac7d-4871-8d33-f290077fdf73",
   "name": "Grappe - 14u - 12m - 0-80m",
-  "schemaVersion": 2,
-  "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca",
-    "sa303-cca"
-  ],
+  "speakerModelIds": ["sa303-isophase", "sa303-isophase", "sa303-isophase", "sa303-isophase", "sa303-isophase", "sa303-isophase", "sa303-isophase", "sa303-isophase", "sa303-isophase", "sa303-isophase", "sa303-isophase", "sa303-isophase", "sa303-cca", "sa303-cca"],
   "compartment": "flown",
   "joints": [
     {
@@ -62,6 +46,13 @@
   ],
   "imposedTilt": 8.5,
   "pullBackAngle": 180.0,
+  "pullBackEnabled": false,
+  "manualPullBackTensionN": null,
+  "rigging": {
+    "support": "auto",
+    "points": 1,
+    "barMountIndex": null
+  },
   "bumperModelId": "sa303-bumper",
   "bumperHeight": 12000.0
 }

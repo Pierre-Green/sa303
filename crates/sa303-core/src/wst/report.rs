@@ -970,7 +970,6 @@ mod tests {
         SpeakerModel {
             id: "sa303".into(),
             name: "SA303".into(),
-            schema_version: 1,
             mechanical: SpeakerMechanicalModel {
                 depth: 700.0,
                 height: 550.0,

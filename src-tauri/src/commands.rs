@@ -23,37 +23,37 @@ pub fn get_builtin_ids() -> persistence::BuiltinIds {
 
 #[tauri::command]
 pub fn list_speaker_models(app: AppHandle) -> Result<Vec<SpeakerModel>, String> {
-    persistence::list_speaker_models(&app)
+    persistence::list::<SpeakerModel>(&app)
 }
 
 #[tauri::command]
 pub fn save_speaker_model(app: AppHandle, speaker_model: SpeakerModel) -> Result<(), String> {
-    persistence::save_speaker_model(&app, &speaker_model)
+    persistence::save(&app, &speaker_model)
 }
 
 #[tauri::command]
 pub fn delete_speaker_model(app: AppHandle, id: String) -> Result<(), String> {
-    persistence::delete_speaker_model(&app, &id)
+    persistence::delete::<SpeakerModel>(&app, &id)
 }
 
 #[tauri::command]
 pub fn list_bumper_models(app: AppHandle) -> Result<Vec<BumperModel>, String> {
-    persistence::list_bumper_models(&app)
+    persistence::list::<BumperModel>(&app)
 }
 
 #[tauri::command]
 pub fn save_bumper_model(app: AppHandle, bumper_model: BumperModel) -> Result<(), String> {
-    persistence::save_bumper_model(&app, &bumper_model)
+    persistence::save(&app, &bumper_model)
 }
 
 #[tauri::command]
 pub fn delete_bumper_model(app: AppHandle, id: String) -> Result<(), String> {
-    persistence::delete_bumper_model(&app, &id)
+    persistence::delete::<BumperModel>(&app, &id)
 }
 
 #[tauri::command]
 pub fn list_bumper_bar_models(app: AppHandle) -> Result<Vec<BumperBarModel>, String> {
-    persistence::list_bumper_bar_models(&app)
+    persistence::list::<BumperBarModel>(&app)
 }
 
 #[tauri::command]
@@ -61,27 +61,27 @@ pub fn save_bumper_bar_model(
     app: AppHandle,
     bumper_bar_model: BumperBarModel,
 ) -> Result<(), String> {
-    persistence::save_bumper_bar_model(&app, &bumper_bar_model)
+    persistence::save(&app, &bumper_bar_model)
 }
 
 #[tauri::command]
 pub fn delete_bumper_bar_model(app: AppHandle, id: String) -> Result<(), String> {
-    persistence::delete_bumper_bar_model(&app, &id)
+    persistence::delete::<BumperBarModel>(&app, &id)
 }
 
 #[tauri::command]
 pub fn list_clusters(app: AppHandle) -> Result<Vec<Cluster>, String> {
-    persistence::list_clusters(&app)
+    persistence::list::<Cluster>(&app)
 }
 
 #[tauri::command]
 pub fn save_cluster(app: AppHandle, cluster: Cluster) -> Result<(), String> {
-    persistence::save_cluster(&app, &cluster)
+    persistence::save(&app, &cluster)
 }
 
 #[tauri::command]
 pub fn delete_cluster(app: AppHandle, id: String) -> Result<(), String> {
-    persistence::delete_cluster(&app, &id)
+    persistence::delete::<Cluster>(&app, &id)
 }
 
 #[tauri::command]
@@ -102,10 +102,10 @@ pub fn compute_cluster_result(app: AppHandle, cluster: Cluster) -> Result<Cluste
     // Une grappe est hétérogène : elle peut référencer plusieurs modèles
     // d'enceinte, donc on passe le catalogue complet plutôt qu'un modèle
     // unique — c'est le solveur qui résout chaque position.
-    let speaker_models = persistence::list_speaker_models(&app)?;
+    let speaker_models = persistence::list::<SpeakerModel>(&app)?;
     let settings = persistence::load_settings(&app)?;
-    let bumper_model = persistence::load_bumper_model(&app, &cluster.bumper_model_id)?;
-    let bumper_bars = persistence::list_bumper_bar_models(&app)?;
+    let bumper_model = persistence::load::<BumperModel>(&app, &cluster.bumper_model_id)?;
+    let bumper_bars = persistence::list::<BumperBarModel>(&app)?;
 
     compute_cluster(
         &speaker_models,
@@ -122,7 +122,7 @@ pub fn get_speaker_geometry_report(
     app: AppHandle,
     speaker_model_id: String,
 ) -> Result<SpeakerGeometryReport, String> {
-    let speaker_model = persistence::load_speaker_model(&app, &speaker_model_id)?;
+    let speaker_model = persistence::load::<SpeakerModel>(&app, &speaker_model_id)?;
     geometry_report(&speaker_model).map_err(|e| {
         format!(
             "incohérence géométrique au splay {}° : bras {:.1} mm vs recoupement {:.1} mm (écart {:.2} mm au-delà de la tolérance)",
@@ -142,7 +142,7 @@ pub fn compute_wst_report(
     speaker_model_id: Option<String>,
 ) -> Result<WstReport, String> {
     let speaker_model = match &speaker_model_id {
-        Some(id) => Some(persistence::load_speaker_model(&app, id)?),
+        Some(id) => Some(persistence::load::<SpeakerModel>(&app, id)?),
         None => None,
     };
     Ok(wst_report(&inputs, speaker_model.as_ref()))
@@ -150,11 +150,11 @@ pub fn compute_wst_report(
 
 #[tauri::command]
 pub fn compute_aggregate_report(app: AppHandle) -> Result<AggregateReport, String> {
-    let speakers = persistence::list_speaker_models(&app)?;
-    let clusters = persistence::list_clusters(&app)?;
+    let speakers = persistence::list::<SpeakerModel>(&app)?;
+    let clusters = persistence::list::<Cluster>(&app)?;
     let settings = persistence::load_settings(&app)?;
-    let bumpers = persistence::list_bumper_models(&app)?;
-    let bumper_bars = persistence::list_bumper_bar_models(&app)?;
+    let bumpers = persistence::list::<BumperModel>(&app)?;
+    let bumper_bars = persistence::list::<BumperBarModel>(&app)?;
     Ok(compute_aggregate(
         &speakers,
         &clusters,
@@ -179,7 +179,7 @@ pub fn build_cluster_audit_export(
     cluster_ids: Option<Vec<String>>,
     generated_at: String,
 ) -> Result<AuditExport, String> {
-    let all = persistence::list_clusters(&app)?;
+    let all = persistence::list::<Cluster>(&app)?;
     let selection: Vec<Cluster> = match cluster_ids {
         Some(ids) if !ids.is_empty() => {
             // Résolus dans l'ordre demandé, et une absence est une erreur :
@@ -203,9 +203,9 @@ pub fn build_cluster_audit_export(
     Ok(build_audit_export(
         generated_at,
         &selection,
-        &persistence::list_speaker_models(&app)?,
-        &persistence::list_bumper_models(&app)?,
-        &persistence::list_bumper_bar_models(&app)?,
+        &persistence::list::<SpeakerModel>(&app)?,
+        &persistence::list::<BumperModel>(&app)?,
+        &persistence::list::<BumperBarModel>(&app)?,
         &persistence::load_settings(&app)?,
     ))
 }

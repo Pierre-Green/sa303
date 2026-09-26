@@ -38,17 +38,9 @@ defineProps<{ data: BumperPopupData; compartment: Compartment }>();
         :angle-deg="f.angleDeg"
       />
     </template>
-    <template v-else>
-      <PopupRow label="Accroche">
-        {{ data.pickupOffsetMm !== null ? `${Math.abs(data.pickupOffsetMm).toFixed(0)} mm` : "—" }}
-      </PopupRow>
-      <PopupRow v-if="(data.barDeportMm ?? 0) !== 0" label="Dont barre">
-        {{ Math.abs(data.barDeportMm!).toFixed(0) }} mm
-      </PopupRow>
-    </template>
 
-    <div v-if="data.bumperBarExceeded" class="text-status-alarm">
-      Portée barre dépassée : pull-back actif.
+    <div v-if="data.pullBackForced" class="text-status-alarm">
+      Aucun trou n'approche l'assiette : pull-back obligatoire.
     </div>
 
     <PopupRow

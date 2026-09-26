@@ -1,55 +1,30 @@
 <script setup lang="ts">
-// Tout ce que le bumper porte : sa barre de déport, le point d'accroche, la
-// charge qu'il reprend, la paire qui le boulonne sur l'enceinte de référence et
+// Tout ce que le bumper porte : ses trous et sa barre de déport, les manilles
+// retenues et leur charge, la réaction du sol en stack, la paire qui le boulonne sur l'enceinte de référence et
 // ses deux pions.
 
 import { computed } from "vue";
 import type { Vec2 } from "@/lib/types";
 import { useViewer } from "../context";
-import { add, localPoints, magnitude, midpoint, toLocal } from "../geometry";
+import { add, localPoints, magnitude, midpoint } from "../geometry";
 import { useShapes } from "../composables/useShapes";
 import { BUMPER_IDX } from "../composables/useHoverPin";
 
-const { result, compartment, colors, px, annotation, referenceDepth, hover } = useViewer();
+const { result, colors, px, annotation, referenceDepth, hover } = useViewer();
 const { arrow, hole, span, label } = useShapes();
 
 const bumperView = computed(() => result.value.bumperView);
 
 const rigging = computed(() => bumperView.value?.rigging ?? null);
 
-const barConfig = computed(() => {
-  const bv = bumperView.value;
-  if (bv?.rigging || !bv?.bumperBarStartGlobal || !bv.pickupGlobal) return null;
-  return {
-    points: localPoints(bv.bumperBarStartGlobal, bv.pickupGlobal),
-    stroke: colors.value.lift,
-    strokeWidth: px(4),
-    lineCap: "round" as const,
-  };
-});
-
-const pickupMarkerConfig = computed(() => {
-  if (compartment.value !== "flown" || !result.value.pickupGlobal || rigging.value) return null;
-  const p = toLocal(result.value.pickupGlobal);
-  return {
-    x: p.x,
-    y: p.y,
-    radius: px(6),
-    stroke: colors.value.lift,
-    strokeWidth: px(2.5),
-    fill: colors.value.card,
-  };
-});
-
-// La charge de manille est hors de l'échelle commune des flèches,
-// volontairement : elle porte toute la grappe, donc elle vaut plusieurs fois le
-// plus gros effort de jonction. La mettre à la même échelle écraserait toutes
-// les autres à quelques pixels. Elle a donc sa propre longueur, fixe, et son
-// intensité se lit sur son étiquette — pas sur sa taille.
+// Réaction du sol en stack. Hors de l'échelle commune des flèches,
+// volontairement : elle porte toute la pile, donc elle vaut plusieurs fois le
+// plus gros effort de jonction. Elle a sa propre longueur, fixe, et son
+// intensité se lit sur son étiquette — pas sur sa taille. En vol, chaque
+// manille a sa flèche, dessinée avec les trous.
 const supportArrow = computed(() => {
   const bv = bumperView.value;
   const mag = magnitude(bv.supportForceGlobal);
-  // Trous déclarés : une flèche par point retenu, dessinée plus bas.
   if (mag <= 0 || bv.rigging) return null;
   const from = bv.supportPointGlobal;
   const len = annotation(referenceDepth.value * 0.9);
@@ -212,7 +187,6 @@ function pinLabel(p: Vec2, text: string) {
 </script>
 
 <template>
-  <v-line v-if="barConfig" :config="barConfig" />
 
   <!-- Trous déclarés du bumper et de sa barre, et les points retenus. -->
   <template v-if="riggingShapes">
@@ -238,7 +212,6 @@ function pinLabel(p: Vec2, text: string) {
       <v-text :config="p.label" />
     </template>
   </template>
-  <v-circle v-if="pickupMarkerConfig" :config="pickupMarkerConfig" />
 
   <!-- Charge reprise par le bumper : la manille en vol, la réaction du sol en
        stack. Toute la grappe pend dessus, c'est donc le chiffre qui dit le

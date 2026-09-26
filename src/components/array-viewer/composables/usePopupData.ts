@@ -45,9 +45,7 @@ export interface SpeakerPopupData {
 export interface BumperPopupData {
   kind: "bumper";
   pinned: boolean;
-  pickupOffsetMm: number | null;
-  barDeportMm: number | null;
-  bumperBarExceeded: boolean;
+  pullBackForced: boolean;
   /** Trous déclarés : points retenus et leur charge. */
   rigging: RiggingView | null;
   supportForceN: number;
@@ -130,9 +128,7 @@ export function usePopupData(ctx?: ViewerContext) {
       return {
         kind: "bumper",
         pinned: hover.pinnedIdx.value === BUMPER_IDX,
-        pickupOffsetMm: bv.pickupOffsetMm,
-        barDeportMm: bv.barDeportMm,
-        bumperBarExceeded: bv.bumperBarExceeded,
+        pullBackForced: bv.pullBackForced,
         rigging: bv.rigging,
         supportForceN: bv.supportForceN,
         supportAngleDeg: bv.supportAngleDeg,

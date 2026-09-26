@@ -1,13 +1,7 @@
 {
   "id": "2704f445-151e-48d9-a196-3453aafb8fb3",
   "name": "Grappe - 4u - cca20 - -15d-45d",
-  "schemaVersion": 2,
-  "speakerModelIds": [
-    "sa303-cca",
-    "sa303-cca",
-    "sa303-cca",
-    "sa303-cca"
-  ],
+  "speakerModelIds": ["sa303-cca", "sa303-cca", "sa303-cca", "sa303-cca"],
   "compartment": "flown",
   "joints": [
     {
@@ -22,6 +16,13 @@
   ],
   "imposedTilt": -15.0,
   "pullBackAngle": null,
+  "pullBackEnabled": false,
+  "manualPullBackTensionN": null,
+  "rigging": {
+    "support": "auto",
+    "points": 1,
+    "barMountIndex": null
+  },
   "bumperModelId": "sa303-bumper",
   "bumperHeight": 5000.0
 }

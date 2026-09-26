@@ -2,9 +2,12 @@
 //! puis valeurs de référence (golden test).
 
 use sa303_core::bumper::{
-    BumperBarCompatibility, BumperBarModel, BumperCompatibility, BumperModel, BumperPins,
+    BumperBarCompatibility, BumperBarGeometry, BumperBarModel, BumperCompatibility, BumperModel,
+    BumperPins, BumperRigging,
 };
-use sa303_core::cluster::{Cluster, Compartment, JointResult, JointSetting};
+use sa303_core::cluster::{
+    Cluster, Compartment, JointResult, JointSetting, RiggingRequest, RiggingSupport,
+};
 use sa303_core::settings::{AxisMapping, PinSpec, PlateSpec, Settings};
 use sa303_core::speaker::{
     BarHole, BarHoles, BelowCompatibility, Crown, Hinge, PolarHole, RearBar,
@@ -17,7 +20,6 @@ fn default_speaker() -> SpeakerModel {
     SpeakerModel {
         id: "sa303".into(),
         name: "SA303".into(),
-        schema_version: 1,
         mechanical: SpeakerMechanicalModel {
             depth: 700.0,
             height: 550.0,
@@ -108,6 +110,12 @@ fn joints(splays: &[f64]) -> Vec<JointSetting> {
 
 /// Un bumper est obligatoire (brief §11.6), en vol comme en stack : `bumper_id`
 /// doit référencer un bumper compatible avec l'enceinte utilisée.
+///
+/// Accroche sur le bumper seul. Assiette imposée : 2 points, pour qu'elle soit
+/// tenue **exactement** — les efforts de jonction ne dépendent que de
+/// l'assiette, jamais de l'endroit où pendent les chaînes, donc les valeurs de
+/// référence restent celles vérifiées. Sans assiette : un point, le trou
+/// central de `default_bumper`.
 fn flown_cluster(
     name: &str,
     splays: &[f64],
@@ -117,7 +125,6 @@ fn flown_cluster(
     Cluster {
         id: name.into(),
         name: name.into(),
-        schema_version: 1,
         speaker_model_ids: vec!["sa303".into(); splays.len() + 1],
         compartment: Compartment::Flown,
         joints: joints(splays),
@@ -125,7 +132,11 @@ fn flown_cluster(
         pull_back_angle: None,
         pull_back_enabled: false,
         manual_pull_back_tension_n: None,
-        rigging: Default::default(),
+        rigging: RiggingRequest {
+            support: RiggingSupport::Bumper,
+            points: if imposed_tilt.is_some() { 2 } else { 1 },
+            bar_mount_index: None,
+        },
         bumper_model_id: bumper_id.into(),
         // Références figées : au sol, pour que l'altitude n'introduise aucune
         // variable dans des valeurs vérifiées à la main.
@@ -137,7 +148,6 @@ fn stack_cluster(name: &str, splays: &[f64], bottom_angle_deg: f64, bumper_id: &
     Cluster {
         id: name.into(),
         name: name.into(),
-        schema_version: 1,
         speaker_model_ids: vec!["sa303".into(); splays.len() + 1],
         compartment: Compartment::Stacked,
         joints: joints(splays),
@@ -196,15 +206,46 @@ fn representative_clusters(bumper_id: &str) -> Vec<Cluster> {
     ]
 }
 
+/// Trous de test : un trou central à `y` au-dessus du dessous du bumper — là où
+/// pendait l'ancienne manille fictive, donc la même pendaison libre — et deux
+/// trous très écartés, qui encadrent le CG de toute grappe pour l'accroche 2
+/// points sans jamais être retenus seuls : ils la pencheraient bien plus que le
+/// trou central. Liaisons de barre : celles de la SA303.
+fn test_rigging(y: f64) -> BumperRigging {
+    BumperRigging {
+        shackle_holes: vec![[-3000.0, y], [0.0, y], [3000.0, y]],
+        bar_link_holes: vec![[-210.0, 60.0], [-180.0, 60.0], [180.0, 60.0], [210.0, 60.0]],
+        wll_kg: 3250.0,
+    }
+}
+
+/// Bumper à un seul trou, au centre : aucune assiette éloignée de la pendaison
+/// libre n'est atteignable sans pull-back.
+fn centre_only_bumper() -> BumperModel {
+    BumperModel {
+        rigging: BumperRigging {
+            shackle_holes: vec![[0.0, 140.0]],
+            bar_link_holes: vec![],
+            wll_kg: 3250.0,
+        },
+        ..default_bumper()
+    }
+}
+
+/// Grappe à un point sur `centre_only_bumper`, dont l'assiette imposée
+/// force un pull-back.
+fn forced_pull_back_cluster(name: &str, splays: &[f64], tilt: f64, bumper_id: &str) -> Cluster {
+    let mut c = flown_cluster(name, splays, Some(tilt), bumper_id);
+    c.rigging.points = 1;
+    c
+}
+
 fn default_bumper() -> BumperModel {
     BumperModel {
         id: "sa303-bumper".into(),
         name: "SA303-BUMPER".into(),
-        schema_version: 1,
         depth: 702.0,
         height: 100.0,
-        shackle_height_above_bumper: 40.0,
-        max_direct_deport_mm: 702.0 / 2.0,
         // Perçage relevé de la SA303-BUMPER : deux pions à mi-épaisseur.
         pins: BumperPins {
             front_from_front_mm: 12.567,
@@ -219,7 +260,8 @@ fn default_bumper() -> BumperModel {
             top_hole_along_mm: 224.626,
             top_hole_lateral_mm: 1.822,
         }],
-        rigging: None,
+        // 100 mm d'épaisseur + 40 mm de manille.
+        rigging: test_rigging(140.0),
         compatible_speakers: vec![BumperCompatibility {
             speaker_model_id: "sa303".into(),
             flown: true,
@@ -416,13 +458,13 @@ fn check_case(j: &JointResult, force_n: f64, dir_deg: f64, tol_n: f64, tol_deg: 
 }
 
 /// Bumper dédié aux valeurs de référence ci-dessous : sa hauteur d'accroche
-/// (275 + 100 + 105 = 480 mm) reproduit exactement le point de levage utilisé
+/// (275 + 100 + 105 = 480 mm, trou central de `test_rigging(205)`) reproduit exactement le point de levage utilisé
 /// pour vérifier ces valeurs à la main, avant que le bumper ne devienne
 /// obligatoire (brief) — un bumper obligatoire ne doit pas changer
 /// silencieusement des valeurs déjà vérifiées.
 fn golden_reference_bumper() -> BumperModel {
     BumperModel {
-        shackle_height_above_bumper: 105.0,
+        rigging: test_rigging(205.0),
         ..default_bumper()
     }
 }
@@ -588,13 +630,24 @@ fn missing_bumper_reference_is_reported_as_impossible_not_a_panic() {
     assert!(report.flown.block_b.is_empty());
 }
 
+/// Barre SA303 : 21 trous au pas de 70,141 mm sur un arc, deux pattes.
 fn default_bumper_bar() -> BumperBarModel {
+    let half = [
+        [-701.411, -16.518], [-631.27, -10.382], [-561.129, -4.245], [-490.988, 1.891],
+        [-420.847, 8.028], [-350.706, 14.164], [-280.565, 20.301], [-210.423, 26.438],
+        [-140.282, 32.574], [-70.141, 38.711],
+    ];
+    let mut pickup_holes: Vec<[f64; 2]> = half.to_vec();
+    pickup_holes.push([0.0, 44.847]);
+    pickup_holes.extend(half.iter().rev().map(|&[x, y]| [-x, y]));
     BumperBarModel {
         id: "sa303-bumper-bar".into(),
         name: "SA303-BUMPER-BAR".into(),
-        schema_version: 1,
-        max_deport_mm: 1500.0,
-        geometry: None,
+        geometry: BumperBarGeometry {
+            pickup_holes,
+            link_pins: [[-468.0, -150.0], [-78.0, -150.0]],
+            wll_kg: 3250.0,
+        },
         compatible_bumpers: vec![BumperBarCompatibility {
             bumper_model_id: "sa303-bumper".into(),
         }],
@@ -620,8 +673,7 @@ fn bumper_free_hang_matches_manual_pickup_at_bumper_center() {
     let result = compute_cluster(std::slice::from_ref(&sm), &cluster, &settings, &bumper, &[])
         .expect("configuration possible");
 
-    let pickup_height =
-        sm.mechanical.height / 2.0 + bumper.height + bumper.shackle_height_above_bumper;
+    let pickup_height = sm.mechanical.height / 2.0 + bumper.rigging.shackle_holes[1][1];
     assert!(
         (pickup_height - 415.0).abs() < 1e-9,
         "hauteur attendue 415 mm, obtenu {pickup_height}"
@@ -631,66 +683,6 @@ fn bumper_free_hang_matches_manual_pickup_at_bumper_center() {
     let expected_phi = phi_initial_free_hang(&chain, &splays, Vec2::new(0.0, pickup_height));
 
     assert!((result.phi_initial - expected_phi).abs() < 1e-9);
-}
-
-#[test]
-fn bumper_imposed_tilt_solves_pickup_directly_above_cm() {
-    // Propriété physique que le point d'accroche résolu doit vérifier : sans
-    // pull-back, la grappe suspendue s'oriente pour que le CG passe sous
-    // l'accroche — donc pickup_global.x == cg.x exactement.
-    let sm = default_speaker();
-    let bumper = default_bumper();
-    let settings = default_settings();
-    let cluster = flown_cluster(
-        "assiette imposée",
-        &[1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5],
-        Some(-6.0),
-        &bumper.id,
-    );
-    let result = compute_cluster(std::slice::from_ref(&sm), &cluster, &settings, &bumper, &[])
-        .expect("configuration possible");
-    let pickup_global = result.pickup_global.expect("pickup dérivé attendu en vol");
-    assert!(
-        (pickup_global.x - result.cg.x).abs() < 1e-6,
-        "pickup.x {} != cg.x {}",
-        pickup_global.x,
-        result.cg.x
-    );
-}
-
-#[test]
-fn bumper_reports_deport_bar_only_when_pickup_exceeds_bumper_depth() {
-    let sm = default_speaker();
-    let bumper = default_bumper();
-    let bumper_bar = default_bumper_bar();
-    let settings = default_settings();
-    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
-
-    // Assiette libre, accrochage centré : tient dans le bumper, pas de barre.
-    let free = flown_cluster("libre", &splays, None, &bumper.id);
-    let free_result = compute_cluster(std::slice::from_ref(&sm), &free, &settings, &bumper, &[])
-        .expect("configuration possible");
-    let free_view = free_result.bumper_view;
-    assert_eq!(free_view.bar_deport_mm, Some(0.0));
-    assert!(free_view.bumper_bar_start_global.is_none());
-
-    // Assiette imposée modérée, loin de l'assiette libre naturelle : le point
-    // d'accroche résolu doit sortir de l'aplomb du bumper (±351 mm), mais
-    // rester dans la portée de la SA303-BUMPER-BAR (1500 mm, dérivée automatiquement
-    // du bumper actif) : pas de pull-back ici.
-    let imposed = flown_cluster("imposée extrême", &splays, Some(-20.0), &bumper.id);
-    let imposed_result = compute_cluster(
-        std::slice::from_ref(&sm),
-        &imposed,
-        &settings,
-        &bumper,
-        std::slice::from_ref(&bumper_bar),
-    )
-    .expect("configuration possible");
-    let imposed_view = imposed_result.bumper_view;
-    let deport = imposed_view.bar_deport_mm.expect("déport calculé en vol");
-    assert!(deport.abs() > 0.0, "un déport était attendu, obtenu 0");
-    assert!(imposed_view.bumper_bar_start_global.is_some());
 }
 
 #[test]
@@ -706,9 +698,7 @@ fn bumper_view_on_stack_has_no_pickup_fields() {
         .expect("configuration possible");
     let view = result.bumper_view;
     assert!(view.pickup_global.is_none());
-    assert!(view.bumper_bar_start_global.is_none());
-    assert!(view.bar_deport_mm.is_none());
-    assert!(view.pickup_offset_mm.is_none());
+    assert!(view.rigging.is_none());
 }
 
 #[test]
@@ -778,40 +768,31 @@ fn stack_bumper_front_top_corner_touches_bottom_speaker_front_bottom_corner() {
 }
 
 #[test]
-fn deport_beyond_bar_max_reach_auto_activates_a_pull_back_and_keeps_equilibrium() {
-    // Au-delà de la portée de la SA303-BUMPER-BAR (dérivée automatiquement du bumper
-    // actif — pas de sélection manuelle), le solveur plafonne l'accroche et
-    // met lui-même en place un pull-back — il n'y a pas de case à cocher, ni de
-    // barre à choisir — sur le point 0° arrière-bas de l'enceinte du bas (même
-    // référence que le bumper).
+fn an_unreachable_tilt_auto_activates_a_pull_back_on_the_bottom_crown() {
+    // Quand aucun trou n'approche l'assiette imposée, le solveur met lui-même
+    // en place un pull-back, sur le trou de couronne 0° de l'enceinte du bas.
     let sm = default_speaker();
-    let bumper = default_bumper();
-    // Portée volontairement minuscule : garantit le dépassement quel que soit
-    // le déport réellement nécessaire à -20°, sans avoir à le prédire.
-    let bumper_bar = BumperBarModel {
-        max_deport_mm: 50.0,
-        ..default_bumper_bar()
-    };
+    let bumper = centre_only_bumper();
     let settings = default_settings();
     let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5]; // somme 65°
 
     // Assiette imposée à +20° (nez vers le bas), pull-back vertical à 180° :
     // le câble monte derrière la grappe sans rien traverser.
-    let mut cluster = flown_cluster("hors de portée", &splays, Some(20.0), &bumper.id);
+    let mut cluster = forced_pull_back_cluster("hors de portée", &splays, 20.0, &bumper.id);
     cluster.pull_back_angle = Some(180.0);
     let result = compute_cluster(
         std::slice::from_ref(&sm),
         &cluster,
         &settings,
         &bumper,
-        std::slice::from_ref(&bumper_bar),
+        &[],
     )
     .expect("configuration possible via pull-back");
     let view = result.bumper_view;
 
     assert!(
-        view.bumper_bar_exceeded,
-        "la barre aurait dû être jugée insuffisante"
+        view.pull_back_forced,
+        "aucun trou n'approche l'assiette : pull-back obligatoire"
     );
     assert!(
         result.pull_back_tension_n > 0.0,
@@ -839,14 +820,14 @@ fn deport_beyond_bar_max_reach_auto_activates_a_pull_back_and_keeps_equilibrium(
         "le pull-back doit s'accrocher au trou de couronne 0° de l'enceinte du bas"
     );
 
-    // L'accroche est plafonnée exactement à la portée de la barre.
+    // L'accroche reste sur le seul trou percé, et le pull-back tient
+    // l'assiette demandée : sans tension saisie, il part de celle qui la tient
+    // exactement.
     let pickup_local = (result.pickup_global.unwrap() - result.speakers[0].o)
         .rotate_transpose(result.speakers[0].phi);
-    assert!(
-        (pickup_local.x.abs() - bumper_bar.max_deport_mm).abs() < 1e-6,
-        "l'accroche doit être plafonnée exactement à la portée de la barre, obtenu x={}",
-        pickup_local.x
-    );
+    assert!(pickup_local.x.abs() < 1e-9, "trou central attendu, obtenu x={}", pickup_local.x);
+    let achieved = view.rigging.as_ref().unwrap().achieved_tilt_deg;
+    assert!((achieved - 20.0).abs() < 1e-6, "assiette obtenue {achieved}°")
 }
 
 #[test]
@@ -856,22 +837,18 @@ fn pull_back_direction_that_crosses_another_enceinte_is_impossible() {
     // vertical à 180° remonte à travers les enceintes du dessus —
     // physiquement impossible quelle que soit la tension.
     let sm = default_speaker();
-    let bumper = default_bumper();
-    let bumper_bar = BumperBarModel {
-        max_deport_mm: 50.0,
-        ..default_bumper_bar()
-    };
+    let bumper = centre_only_bumper();
     let settings = default_settings();
     let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
 
-    let mut cluster = flown_cluster("pull-back bloqué", &splays, Some(-25.0), &bumper.id);
+    let mut cluster = forced_pull_back_cluster("pull-back bloqué", &splays, -25.0, &bumper.id);
     cluster.pull_back_angle = Some(180.0);
     let err = compute_cluster(
         std::slice::from_ref(&sm),
         &cluster,
         &settings,
         &bumper,
-        std::slice::from_ref(&bumper_bar),
+        &[],
     )
     .expect_err("le pull-back à 180° traverse une autre enceinte de la grappe");
     assert!(
@@ -883,26 +860,22 @@ fn pull_back_direction_that_crosses_another_enceinte_is_impossible() {
 
 #[test]
 fn pull_back_direction_clear_of_other_enceintes_stays_possible() {
-    // Même mécanisme (barre insuffisante) mais nez vers le bas : le pull-back
+    // Même mécanisme (aucun trou suffisant) mais nez vers le bas : le pull-back
     // vertical ne traverse rien et tire vraiment (tension positive) — il
     // s'active normalement.
     let sm = default_speaker();
-    let bumper = default_bumper();
-    let bumper_bar = BumperBarModel {
-        max_deport_mm: 50.0,
-        ..default_bumper_bar()
-    };
+    let bumper = centre_only_bumper();
     let settings = default_settings();
     let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
 
-    let mut cluster = flown_cluster("pull-back possible", &splays, Some(20.0), &bumper.id);
+    let mut cluster = forced_pull_back_cluster("pull-back possible", &splays, 20.0, &bumper.id);
     cluster.pull_back_angle = Some(180.0);
     let result = compute_cluster(
         std::slice::from_ref(&sm),
         &cluster,
         &settings,
         &bumper,
-        std::slice::from_ref(&bumper_bar),
+        &[],
     )
     .expect("cette direction ne traverse rien et tire (ne pousse pas)");
     assert!(result.pull_back_tension_n > 0.0);
@@ -921,22 +894,18 @@ fn user_can_pick_their_own_angle_inside_the_reported_range() {
     // angle choisi), puis on ré-exécute avec un angle explicite pris dedans : le
     // même résultat doit rester possible, avec la tension attendue pour CET angle.
     let sm = default_speaker();
-    let bumper = default_bumper();
-    let bumper_bar = BumperBarModel {
-        max_deport_mm: 50.0,
-        ..default_bumper_bar()
-    };
+    let bumper = centre_only_bumper();
     let settings = default_settings();
     let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
 
-    let mut baseline = flown_cluster("angle connu", &splays, Some(20.0), &bumper.id);
+    let mut baseline = forced_pull_back_cluster("angle connu", &splays, 20.0, &bumper.id);
     baseline.pull_back_angle = Some(180.0);
     let baseline_result = compute_cluster(
         std::slice::from_ref(&sm),
         &baseline,
         &settings,
         &bumper,
-        std::slice::from_ref(&bumper_bar),
+        &[],
     )
     .expect("angle de référence possible");
     let range = baseline_result
@@ -945,14 +914,14 @@ fn user_can_pick_their_own_angle_inside_the_reported_range() {
         .expect("plage attendue dès qu'un pull-back est nécessaire");
 
     let chosen_angle = (range[0] + range[1]) / 2.0 + 5.0; // hors verticale exacte, mais dans la plage
-    let mut chosen = flown_cluster("avec choix", &splays, Some(20.0), &bumper.id);
+    let mut chosen = forced_pull_back_cluster("avec choix", &splays, 20.0, &bumper.id);
     chosen.pull_back_angle = Some(chosen_angle);
     let chosen_result = compute_cluster(
         std::slice::from_ref(&sm),
         &chosen,
         &settings,
         &bumper,
-        std::slice::from_ref(&bumper_bar),
+        &[],
     )
     .expect("un angle dans la plage annoncée doit rester tenable");
     let returned = chosen_result.pull_back_direction_angle_deg.unwrap();
@@ -967,11 +936,7 @@ fn user_can_pick_their_own_angle_inside_the_reported_range() {
 #[test]
 fn user_chosen_angle_outside_the_valid_range_is_clamped() {
     let sm = default_speaker();
-    let bumper = default_bumper();
-    let bumper_bar = BumperBarModel {
-        max_deport_mm: 50.0,
-        ..default_bumper_bar()
-    };
+    let bumper = centre_only_bumper();
     let settings = default_settings();
     let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
 
@@ -980,14 +945,14 @@ fn user_chosen_angle_outside_the_valid_range_is_clamped() {
     // il est ramené sur la borne la plus proche, comme le fait le champ de
     // saisie. Seule la traversée d'une enceinte reste une erreur.
     for (asked, expected) in [(0.0, 170.0), (90.0, 170.0), (195.0, 190.0), (270.0, 190.0), (300.0, 190.0)] {
-        let mut cluster = flown_cluster("hors plage", &splays, Some(20.0), &bumper.id);
+        let mut cluster = forced_pull_back_cluster("hors plage", &splays, 20.0, &bumper.id);
         cluster.pull_back_angle = Some(asked);
         let r = compute_cluster(
             std::slice::from_ref(&sm),
             &cluster,
             &settings,
             &bumper,
-            std::slice::from_ref(&bumper_bar),
+            &[],
         )
         .expect("un angle hors plage est ramené dans la plage, pas refusé");
         let got = r.pull_back_direction_angle_deg.unwrap();
@@ -999,13 +964,9 @@ fn user_chosen_angle_outside_the_valid_range_is_clamped() {
 #[test]
 fn pull_back_tolerance_comes_from_the_settings() {
     let sm = default_speaker();
-    let bumper = default_bumper();
-    let bumper_bar = BumperBarModel {
-        max_deport_mm: 50.0,
-        ..default_bumper_bar()
-    };
+    let bumper = centre_only_bumper();
     let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
-    let mut cluster = flown_cluster("tolérance", &splays, Some(20.0), &bumper.id);
+    let mut cluster = forced_pull_back_cluster("tolérance", &splays, 20.0, &bumper.id);
     cluster.pull_back_angle = Some(195.0);
     let run = |tol: f64| {
         let mut s = default_settings();
@@ -1015,7 +976,7 @@ fn pull_back_tolerance_comes_from_the_settings() {
             &cluster,
             &s,
             &bumper,
-            std::slice::from_ref(&bumper_bar),
+            &[],
         )
     };
     let r = run(10.0).expect("195° ramené à 190° à ±10°");
@@ -1030,20 +991,16 @@ fn pull_back_default_is_vertical_and_pulls() {
     // Sans angle choisi, le solveur suggère la verticale exacte, et la tension
     // est positive : un pull-back tire, il ne pousse jamais.
     let sm = default_speaker();
-    let bumper = default_bumper();
-    let bumper_bar = BumperBarModel {
-        max_deport_mm: 50.0,
-        ..default_bumper_bar()
-    };
+    let bumper = centre_only_bumper();
     let settings = default_settings();
     let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
-    let cluster = flown_cluster("défaut", &splays, Some(20.0), &bumper.id);
+    let cluster = forced_pull_back_cluster("défaut", &splays, 20.0, &bumper.id);
     let result = compute_cluster(
         std::slice::from_ref(&sm),
         &cluster,
         &settings,
         &bumper,
-        std::slice::from_ref(&bumper_bar),
+        &[],
     )
     .expect("pull-back vertical tenable nez vers le bas");
     assert!(result.pull_back_tension_n > 0.0, "une tension positive était attendue");
@@ -1093,46 +1050,27 @@ fn bumper_loads_satisfy_equilibrium_like_a_real_joint() {
 fn bar_is_derived_automatically_from_the_active_bumper_never_selected_manually() {
     // Il n'y a pas de sélection de barre côté grappe : si plusieurs barres
     // sont connues, seule celle qui déclare le bumper actif compatible est
-    // utilisée — les autres sont ignorées silencieusement, comme il se doit
-    // pour un paramètre qui n'existe plus côté utilisateur.
+    // utilisée. L'autre a des pattes qui ne tombent sur aucune paire de trous
+    // de liaison : si elle était retenue, aucun montage n'existerait.
     let sm = default_speaker();
     let bumper = default_bumper();
-    let compatible_bar = BumperBarModel {
-        max_deport_mm: 50.0,
-        ..default_bumper_bar()
-    };
-    let irrelevant_bar = BumperBarModel {
-        id: "autre-barre".into(),
-        name: "Autre barre".into(),
-        schema_version: 1,
-        max_deport_mm: 1.0,
-        geometry: None,
-        compatible_bumpers: vec![BumperBarCompatibility {
-            bumper_model_id: "un-autre-bumper".into(),
-        }],
-    };
+    let mut irrelevant_bar = default_bumper_bar();
+    irrelevant_bar.id = "autre-barre".into();
+    irrelevant_bar.geometry.link_pins = [[0.0, 0.0], [999.0, 0.0]];
+    irrelevant_bar.compatible_bumpers = vec![BumperBarCompatibility {
+        bumper_model_id: "un-autre-bumper".into(),
+    }];
     let settings = default_settings();
     let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
-    let mut cluster = flown_cluster("auto barre", &splays, Some(20.0), &bumper.id);
-    cluster.pull_back_angle = Some(180.0);
+    let mut cluster = flown_cluster("auto barre", &splays, Some(0.0), &bumper.id);
+    cluster.rigging.support = RiggingSupport::Bar;
 
-    let bars = [irrelevant_bar, compatible_bar.clone()];
-    let result = compute_cluster(
-        std::slice::from_ref(&sm),
-        &cluster,
-        &settings,
-        &bumper,
-        &bars,
-    )
-    .expect("configuration possible");
-
-    let pickup_local = (result.pickup_global.unwrap() - result.speakers[0].o)
-        .rotate_transpose(result.speakers[0].phi);
-    assert!(
-        (pickup_local.x.abs() - compatible_bar.max_deport_mm).abs() < 1e-6,
-        "la barre compatible avec le bumper actif aurait dû être choisie automatiquement, obtenu x={}",
-        pickup_local.x
-    );
+    let bars = [irrelevant_bar, default_bumper_bar()];
+    let result = compute_cluster(std::slice::from_ref(&sm), &cluster, &settings, &bumper, &bars)
+        .expect("configuration possible");
+    let rigging = result.bumper_view.rigging.expect("accroche en vol");
+    assert_eq!(rigging.support, RiggingSupport::Bar);
+    assert_eq!(rigging.bar_mounts.len(), 4, "les montages de la barre compatible");
 }
 
 // ---------------------------------------------------------------------------
@@ -1172,7 +1110,6 @@ fn mixed_cluster(splays: &[f64], model_ids: &[&str], bumper_id: &str) -> Cluster
     Cluster {
         id: "mixte".into(),
         name: "Mixte".into(),
-        schema_version: 2,
         speaker_model_ids: model_ids.iter().map(|id| (*id).to_string()).collect(),
         compartment: Compartment::Flown,
         joints: joints(splays),
@@ -1555,73 +1492,6 @@ fn each_speaker_reports_the_height_a_rigger_would_measure() {
     assert!(bottoms[0] < result.elevation.bumper_bottom_mm);
 }
 
-/// Le bug corrigé : tant que l'accroche glissait le long du bumper, l'écran
-/// affichait « 0 mm (centré) » parce qu'il lisait le déport de **barre**, nul
-/// par définition dans cette zone. La position de l'accroche par rapport au
-/// centre du bumper est une autre grandeur, et elle doit bouger dès que
-/// l'accroche n'est plus centrée.
-#[test]
-fn a_pickup_that_slides_along_the_bumper_is_reported_as_off_centre() {
-    let sm = default_speaker();
-    let bumper = default_bumper();
-    let bumper_bar = default_bumper_bar();
-    let settings = default_settings();
-    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
-
-    let view_at = |tilt: Option<f64>| {
-        let cluster = flown_cluster("accroche", &splays, tilt, &bumper.id);
-        compute_cluster(
-            std::slice::from_ref(&sm),
-            &cluster,
-            &settings,
-            &bumper,
-            std::slice::from_ref(&bumper_bar),
-        )
-        .expect("configuration possible")
-        .bumper_view
-    };
-
-    // Pendaison libre : l'accroche est bien centrée, les deux cotes sont nulles.
-    let free = view_at(None);
-    assert_eq!(free.pickup_offset_mm, Some(0.0));
-    assert_eq!(free.bar_deport_mm, Some(0.0));
-
-    // Assiette imposée proche de la pendaison libre : l'accroche se décale de
-    // quelques dizaines de millimètres et reste dans l'aplomb du bumper. Aucune
-    // barre n'est nécessaire — et pourtant la cote ne doit pas être nulle.
-    // C'est exactement le cas que l'écran donnait pour « centré ».
-    let nudged = view_at(Some(-10.0));
-    let offset = nudged.pickup_offset_mm.expect("accroche calculée en vol");
-    assert!(
-        offset.abs() > 1.0,
-        "accroche donnée pour centrée alors qu'elle est décalée : {offset} mm"
-    );
-    assert!(
-        offset.abs() <= bumper.max_direct_deport_mm,
-        "ce cas doit rester dans l'aplomb du bumper, obtenu {offset} mm"
-    );
-    assert_eq!(
-        nudged.bar_deport_mm,
-        Some(0.0),
-        "aucune barre n'est engagée tant que l'accroche est sur le bumper"
-    );
-    assert!(nudged.bumper_bar_start_global.is_none());
-
-    // Hors du bumper : les deux cotes deviennent non nulles, et l'accroche est
-    // toujours plus loin du centre que ce que porte la barre.
-    let far = view_at(Some(-20.0));
-    let far_offset = far.pickup_offset_mm.expect("accroche calculée en vol");
-    let far_bar = far.bar_deport_mm.expect("déport de barre calculé en vol");
-    assert!(far_bar.abs() > 0.0);
-    assert!(
-        far_offset.abs() > far_bar.abs(),
-        "l'accroche ({far_offset}) doit être plus excentrée que le déport de barre ({far_bar})"
-    );
-    // Et l'écart entre les deux vaut exactement la demi-longueur du bumper.
-    let bumper_share = far_offset.abs() - far_bar.abs();
-    assert!((bumper_share - bumper.max_direct_deport_mm).abs() < 1e-9);
-}
-
 /// L'enveloppe par splay ne dimensionne que les angles réellement montés. Les
 /// trous percés qu'aucune grappe n'exploite doivent être nommés : sans ça, un
 /// tableau de sept lignes pour dix-sept trous a l'air complet et laisse croire
@@ -1830,15 +1700,10 @@ fn the_pair_is_checked_and_sees_far_more_than_the_crown_resultant() {
 #[test]
 fn the_pull_back_tension_already_carries_the_dynamic_factor() {
     let sm = default_speaker();
-    let bumper = default_bumper();
-    // Portée minuscule : force le solveur à mettre un pull-back en place.
-    let bumper_bar = BumperBarModel {
-        max_deport_mm: 50.0,
-        ..default_bumper_bar()
-    };
+    let bumper = centre_only_bumper();
     let settings = default_settings();
     let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
-    let mut cluster = flown_cluster("pull-back", &splays, Some(20.0), &bumper.id);
+    let mut cluster = forced_pull_back_cluster("pull-back", &splays, 20.0, &bumper.id);
     cluster.pull_back_angle = Some(180.0);
 
     let run = |k_dyn: f64| {
@@ -1849,7 +1714,7 @@ fn the_pull_back_tension_already_carries_the_dynamic_factor() {
             &cluster,
             &s,
             &bumper,
-            std::slice::from_ref(&bumper_bar),
+            &[],
         )
         .expect("configuration possible")
     };
@@ -2872,114 +2737,4 @@ fn the_crown_row_comes_from_the_declaration_not_from_the_splay() {
     let moved_geo = SpeakerGeometry::compute(&moved);
     assert!((moved_geo.crown_radius_at(20.0) - (crown.radius - crown.delta)).abs() < 1e-12);
     assert!((moved_geo.crown_radius_at(1.0) - crown.radius).abs() < 1e-12);
-}
-
-// ---------------------------------------------------------------------------
-// Pull-back manuel : activé par l'utilisateur alors que le bumper et sa barre
-// suffisent, pour répartir la charge quand les points d'accroche sont faibles.
-// ---------------------------------------------------------------------------
-
-fn manual_pull_back(tilt: Option<f64>, tension_n: Option<f64>) -> Cluster {
-    let bumper = default_bumper();
-    let splays = [1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 10.5, 10.5, 10.5, 10.5];
-    let mut c = flown_cluster("pull-back manuel", &splays, tilt, &bumper.id);
-    c.pull_back_enabled = true;
-    c.manual_pull_back_tension_n = tension_n;
-    c
-}
-
-fn run_with_default_bar(
-    cluster: &Cluster,
-) -> Result<sa303_core::cluster::ClusterResult, sa303_core::cluster::ImpossibleConfiguration> {
-    compute_cluster(
-        std::slice::from_ref(&default_speaker()),
-        cluster,
-        &default_settings(),
-        &default_bumper(),
-        std::slice::from_ref(&default_bumper_bar()),
-    )
-}
-
-fn dynamic_weight(r: &sa303_core::cluster::ClusterResult) -> f64 {
-    r.total_mass_kg * default_settings().gravity * default_settings().dynamic_factor
-}
-
-#[test]
-fn manual_pull_back_needs_an_imposed_tilt() {
-    let err = run_with_default_bar(&manual_pull_back(None, None))
-        .expect_err("sans assiette imposée, rien ne fixe la répartition");
-    assert!(err.reason.contains("assiette imposée"), "{}", err.reason);
-}
-
-#[test]
-fn manual_pull_back_defaults_to_half_the_load() {
-    let r = run_with_default_bar(&manual_pull_back(Some(0.0), None)).expect("pull-back manuel possible");
-    let bv = &r.bumper_view;
-    assert!(!bv.bumper_bar_exceeded, "la barre suffit : pull-back manuel, pas imposé");
-    assert!(bv.pull_back_tension_range_n.is_some(), "plage de tension attendue en manuel");
-    assert!((bv.pull_back_load_share - 0.5).abs() < 1e-6, "part {}", bv.pull_back_load_share);
-    let w = dynamic_weight(&r);
-    assert!((bv.support_force_n - 0.5 * w).abs() < 1e-3 * w, "manille {} pour W {w}", bv.support_force_n);
-}
-
-#[test]
-fn the_requested_tension_is_held_and_the_pickup_follows() {
-    let base = run_with_default_bar(&manual_pull_back(Some(0.0), None)).unwrap();
-    let [lo, hi] = base.bumper_view.pull_back_tension_range_n.unwrap();
-    assert!(0.0 < lo && lo < hi, "{lo}..{hi}");
-    let at = |t: f64| run_with_default_bar(&manual_pull_back(Some(0.0), Some(t))).unwrap();
-    let (a, b) = (at(lo + 0.25 * (hi - lo)), at(lo + 0.75 * (hi - lo)));
-    assert!((a.pull_back_tension_n - (lo + 0.25 * (hi - lo))).abs() < 1e-3, "tension tenue");
-    assert!((b.pull_back_tension_n - (lo + 0.75 * (hi - lo))).abs() < 1e-3, "tension tenue");
-    let (xa, xb) = (a.bumper_view.pickup_offset_mm.unwrap(), b.bumper_view.pickup_offset_mm.unwrap());
-    assert!((xa - xb).abs() > 10.0, "l'accroche doit suivre la tension : {xa} contre {xb}");
-
-    // Hors plage, la tension est ramenée sur la borne, jamais refusée.
-    assert!((at(hi * 10.0).pull_back_tension_n - hi).abs() < 1e-3);
-    assert!((at(0.0).pull_back_tension_n - lo).abs() < 1e-3);
-}
-
-#[test]
-fn manual_pull_back_keeps_the_cluster_in_equilibrium() {
-    let mut c = manual_pull_back(Some(5.0), Some(4000.0));
-    c.pull_back_angle = Some(185.0);
-    let r = run_with_default_bar(&c).unwrap();
-    let bv = &r.bumper_view;
-    let w = dynamic_weight(&r);
-    assert!((r.pull_back_direction_angle_deg.unwrap() - 185.0).abs() < 1e-9, "direction tenue");
-    let pb = r.pull_back_direction_global.unwrap() * r.pull_back_tension_n;
-    let residual = bv.support_force_global + pb - sa303_core::vector::Vec2::new(0.0, w);
-    assert!(residual.norm() < 1e-6 * w, "résidu {residual:?}");
-    assert!((bv.pull_back_load_share - pb.y / w).abs() < 1e-9);
-}
-
-#[test]
-fn a_forced_pull_back_ignores_the_manual_tension() {
-    let bar = BumperBarModel {
-        max_deport_mm: 50.0,
-        ..default_bumper_bar()
-    };
-    let cluster = manual_pull_back(Some(20.0), Some(1.0));
-    let r = compute_cluster(
-        std::slice::from_ref(&default_speaker()),
-        &cluster,
-        &default_settings(),
-        &default_bumper(),
-        std::slice::from_ref(&bar),
-    )
-    .expect("pull-back imposé");
-    let bv = &r.bumper_view;
-    assert!(bv.bumper_bar_exceeded, "la barre ne suffit pas : pull-back obligatoire");
-    assert!(bv.pull_back_tension_range_n.is_none(), "la tension n'est pas un choix quand il est imposé");
-    assert!((bv.pickup_offset_mm.unwrap().abs() - 50.0).abs() < 1e-9);
-    assert!(r.pull_back_tension_n > 100.0);
-}
-
-#[test]
-fn without_the_manual_flag_a_reachable_tilt_has_no_pull_back() {
-    let mut c = manual_pull_back(Some(0.0), None);
-    c.pull_back_enabled = false;
-    let r = run_with_default_bar(&c).unwrap();
-    assert_eq!(r.pull_back_tension_n, 0.0);
-    assert_eq!(r.bumper_view.pull_back_load_share, 0.0);
 }

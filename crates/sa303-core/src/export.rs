@@ -24,9 +24,8 @@ use crate::settings::Settings;
 use crate::speaker::SpeakerModel;
 use serde::Serialize;
 
-/// Version du format d'export. Distincte des `schemaVersion` des modèles : ce
-/// document-ci a sa propre vie, et un relecteur doit pouvoir dire quelle
-/// structure il lit.
+/// Version du format d'export : ce document est relu hors du logiciel (solveur
+/// de référence de l'audit), qui doit pouvoir dire quelle structure il lit.
 pub const EXPORT_SCHEMA_VERSION: u32 = 1;
 
 /// Les cinq chemins de charge d'une jonction, chacun rapporté à son admissible.

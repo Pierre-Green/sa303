@@ -18,32 +18,42 @@ export interface Hinge {
   edgePerp: number;
 }
 
+/** Trou de la barre arrière, repère barre : `[abscisse depuis le petit bout
+ * (côté verrou), déport latéral positif vers l'avant]`, mm. */
+export type BarHole = [number, number];
+
+export interface BarHoles {
+  latch: BarHole;
+  anchor: BarHole;
+  /** Trou de couronne des splays impairs (couronne intérieure), déporté. */
+  up660: BarHole;
+  /** Trou de couronne des splays pairs (couronne extérieure), sur l'axe. */
+  up680: BarHole;
+}
+
 export interface RearBar {
   thickness: number;
   length: number;
-  wideWidth: number;
-  /** Longueur de la section large, depuis l'extrémité couronne. C'est ce
-   * bout-là qui est large. */
-  wideLength: number;
-  narrowWidth: number;
+  /** Profil de largeur `[abscisse, largeur]`, interpolé linéairement. */
+  widthProfile: [number, number][];
+  /** Distance de l'axe des trous au bord arrière, rectiligne. */
+  rearEdgeOffset: number;
   holeDiameter: number;
-  /** Deux trous de couronne : l'entraxe couronne-ancrage n'est pas le même sur
-   * les deux couronnes. */
-  crownHoleOuterAt: number;
-  crownHoleInnerAt: number;
-  latchHoleAt: number;
-  anchorHoleAt: number;
+  holes: BarHoles;
+  massKg: number;
   yieldStrength: number;
   ultimateStrength: number;
+}
+
+/** Trou coté en polaire depuis HT : rayon et angle, comme sur le plan. */
+export interface PolarHole {
+  radius: number;
+  angleDeg: number;
 }
 
 export interface Crown {
   radius: number;
   delta: number;
-  anchorAngle: number;
-  /** Second point de fixation de la barre arrière : c'est lui qui l'encastre
-   * sur le caisson du bas, donc lui transmet un moment en plus d'une force. */
-  latchAngle: number;
   splay0Angle: number;
   /** Splays percés sur la rangée **intérieure**, en retrait de `delta`. Tout
    * splay absent de cette liste est sur la rangée extérieure.
@@ -72,7 +82,7 @@ export type WaveguideFront = "isophase" | "constantCurvature";
 export interface GuideMeasurement {
   acousticMouthHeightMm: number;
   /** Rayon du front identifié, m. `null` = front strictement plan. */
-  wavefrontRadiusM?: number | null;
+  wavefrontRadiusM: number | null;
   /** `(Hz, dB)` au bord du secteur, relatifs à l'axe. */
   edgeLevelDb: [number, number][];
 }
@@ -94,9 +104,9 @@ export interface SpeakerAcoustics {
   /** Secteur encore rayonné par un guide **isophase**, degrés. 0 = front
    * parfaitement plan. C'est lui qui décale l'angle de raccord vers une caisse
    * à guide courbé, par tangence des deux fronts. */
-  wgIsophaseSectorDeg?: number;
+  wgIsophaseSectorDeg: number;
   /** Relevé d'identification du guide, quand il existe. */
-  guideMeasurement?: GuideMeasurement | null;
+  guideMeasurement: GuideMeasurement | null;
 }
 
 /** Plage de splay recommandée pour une jonction, en degrés. Hors plage, la
@@ -114,7 +124,7 @@ export interface BelowCompatibility {
   speakerModelId: string;
   flown: boolean;
   stacked: boolean;
-  recommendedSplay?: SplayRange | null;
+  recommendedSplay: SplayRange | null;
 }
 
 // Mécanique aplatie au premier niveau (`#[serde(flatten)]` côté Rust). Chaque
@@ -123,7 +133,6 @@ export interface BelowCompatibility {
 export interface SpeakerModel {
   id: string;
   name: string;
-  schemaVersion: number;
   depth: number;
   height: number;
   totalVerticalAngle: number;
@@ -131,8 +140,16 @@ export interface SpeakerModel {
   cg: [number, number];
   hinge: Hinge;
   crown: Crown;
+  /** Verrou et ancrage, en polaire depuis HT : le verrou n'est plus sur le
+   * cercle de couronne, chaque trou porte son rayon. */
+  latch: PolarHole;
+  anchor: PolarHole;
+  /** Entraxe ancrage-verrou, mm. */
+  latchOffset: number;
   splayGrid: number[];
   frameHoleSplay: number;
+  /** Abscisse de la face arrière du caisson, repère enceinte. */
+  rearFaceX: number;
   rearBar: RearBar;
   acoustics: SpeakerAcoustics;
   compatibleBelow: BelowCompatibility[];
@@ -154,31 +171,29 @@ export interface BuiltinIds {
 export interface Cluster {
   id: string;
   name: string;
-  schemaVersion: number;
   /** Une enceinte par position, du haut vers le bas : une grappe est
    * hétérogène. Compte exactement une entrée de plus que `joints`. */
   speakerModelIds: string[];
   compartment: Compartment;
   /** Du haut vers le bas : exactement `speakerModelIds.length - 1`. */
   joints: JointSetting[];
-  imposedTilt?: number | null;
-  /** Direction du pull-back automatique (degrés, convention §2 : **180° =
-   * vers le haut**), si le bumper et sa barre ne suffisent plus. Doit rester
-   * dans 180° ± `Settings.pullBackToleranceDeg`. `null` tant que
-   * l'utilisateur n'a pas choisi : le solveur suggère alors la verticale. */
-  pullBackAngle?: number | null;
-  /** Pull-back activé à la main, pour répartir la charge quand les points
-   * d'accroche sont faibles. Demande une assiette imposée. Sans effet quand le
-   * pull-back est de toute façon obligatoire, et en stack. */
-  pullBackEnabled?: boolean;
-  /** Pull-back manuel : tension voulue, N (même base que les efforts
-   * affichés, poids × k_dyn). Avec la direction et l'assiette imposée, elle
-   * fixe l'accroche. Ramenée dans `BumperView.pullBackTensionRangeN`. `null` :
-   * la moitié de la charge au pull-back. */
-  manualPullBackTensionN?: number | null;
+  imposedTilt: number | null;
+  /** Direction du pull-back (degrés, convention §2 : **180° = vers le
+   * haut**), dans 180° ± `Settings.pullBackToleranceDeg`. `null` : le solveur
+   * suggère la verticale. */
+  pullBackAngle: number | null;
+  /** Pull-back activé à la main, pour répartir la charge. Demande une
+   * assiette imposée. Sans effet quand il est de toute façon obligatoire, et
+   * en stack. */
+  pullBackEnabled: boolean;
+  /** Tension voulue dans le pull-back, N (même base que les efforts
+   * affichés, poids × k_dyn), qu'il soit choisi ou obligatoire. Ramenée dans
+   * `BumperView.pullBackTensionRangeN`. `null` : celle qui tient exactement
+   * l'assiette. */
+  manualPullBackTensionN: number | null;
   /** Vol : famille d'accroche et nombre de points. Le trou est toujours
-   * choisi par le solveur. Absent : Auto, 1 point. */
-  rigging?: RiggingRequest;
+   * choisi par le solveur. */
+  rigging: RiggingRequest;
   /** Bumper utilisé pour dériver le point d'accroche en vol ou comme support
    * en stack. Obligatoire : il n'existe pas de repli manuel. */
   bumperModelId: string;
@@ -225,12 +240,8 @@ export interface BumperRearBar {
 export interface BumperModel {
   id: string;
   name: string;
-  schemaVersion: number;
   depth: number;
   height: number;
-  shackleHeightAboveBumper: number;
-  /** Décalage max avant qu'une SA303-BUMPER-BAR ne soit nécessaire, mm (déf. depth/2). */
-  maxDirectDeportMm: number;
   pins: BumperPins;
   /** Longueur utile de la bielle de pivot avant, mm : entraxe entre la
    * charnière haute du caisson et la goupille haute, dans le bumper. Avec le
@@ -241,7 +252,7 @@ export interface BumperModel {
   rearBars: BumperRearBar[];
   /** Trous de manille et trous de liaison de la barre, repère bumper
    * (origine au centre du dessous, x vers l'arrière, y vers le haut). */
-  rigging?: BumperRigging | null;
+  rigging: BumperRigging;
   compatibleSpeakers: BumperCompatibility[];
 }
 
@@ -275,10 +286,7 @@ export interface BumperBarCompatibility {
 export interface BumperBarModel {
   id: string;
   name: string;
-  schemaVersion: number;
-  /** Portée max de déport depuis le centre du bumper, mm : au-delà, un pull-back prend le relais. */
-  maxDeportMm: number;
-  geometry?: BumperBarGeometry | null;
+  geometry: BumperBarGeometry;
   compatibleBumpers: BumperBarCompatibility[];
 }
 
@@ -471,31 +479,17 @@ export interface ClusterResult {
 
 export interface BumperView {
   outlineGlobal: [Vec2, Vec2, Vec2, Vec2];
-  /** Vol uniquement : point d'accroche effectif (sur le bumper, ou sur la
-   * barre de déport si `barDeportMm != 0`). Toujours renseigné en vol. */
+  /** Vol uniquement : point de levage principal — le seul à un point, le
+   * plus chargé à deux. Le détail est dans `rigging`. */
   pickupGlobal: Vec2 | null;
-  /** Départ de la barre de déport sur le bord de la zone de fixation directe.
-   * Absent si aucune barre n'est nécessaire. */
-  bumperBarStartGlobal: Vec2 | null;
-  /** Position de l'accroche par rapport au **centre du bumper** (mm signés,
-   * positif vers l'arrière) : la cote que le rigger reporte. Non nulle dès que
-   * l'accroche n'est pas centrée, y compris quand elle reste sur le bumper. */
-  pickupOffsetMm: number | null;
-  /** Ce que la **barre** porte : dépassement signé au-delà de
-   * `maxDirectDeportMm`, donc 0 tant que l'accroche tombe sur le bumper. Ne
-   * décrit pas où est l'accroche, mais s'il faut une barre et de combien. */
-  barDeportMm: number | null;
-  /** Au-delà de la portée de la barre (`BumperBarModel.maxDeportMm`), elle ne suffit plus : un pull-back est
-   * automatiquement mise en place (voir `pullBackTensionN`/`pullBackPointGlobal` sur
-   * ClusterResult). */
-  bumperBarExceeded: boolean;
-  /** Plage de directions de traction physiquement valables (degrés,
-   * convention §2), présente seulement si `bumperBarExceeded`. Le point d'ancrage
-   * réel dépend du terrain : à choisir dedans, ce n'est pas à l'algorithme
-   * de décider seul. */
+  /** Aucun trou n'approche seul l'assiette visée : le pull-back est
+   * obligatoire. Sa tension et sa direction restent réglables. */
+  pullBackForced: boolean;
+  /** Fenêtre de directions du pull-back (degrés, convention §2), présente dès
+   * qu'un pull-back est en place. */
   pullBackAngleRangeDeg: [number, number] | null;
-  /** Pull-back manuel seulement : tensions saisissables, N. Elles
-   * correspondent aux accroches atteignables sur le bumper et sa barre. */
+  /** Tensions de pull-back saisissables, N : de zéro jusqu'à décharger
+   * entièrement la manille du haut. */
   pullBackTensionRangeN: [number, number] | null;
   /** Part du poids dynamisé reprise par le pull-back, 0 sans pull-back. */
   pullBackLoadShare: number;
@@ -541,6 +535,10 @@ export interface BumperView {
   pinSpanMm: number;
   /** Vol, bumper aux trous déclarés : trous retenus et charge de chacun. */
   rigging: RiggingView | null;
+  /** Silhouettes schématiques de la bielle avant et de la barre arrière du
+   * bumper, repère global. Vol uniquement : en stack il n'y a pas de barre. */
+  frontBarOutlineGlobal: Vec2[] | null;
+  rearBarOutlineGlobal: Vec2[] | null;
 }
 
 export interface RiggingPointView {

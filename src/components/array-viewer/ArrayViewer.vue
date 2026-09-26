@@ -12,7 +12,7 @@
 import { computed, nextTick, ref, watch } from "vue";
 import { useElementSize } from "@vueuse/core";
 import type Konva from "konva";
-import type { ClusterResult, Compartment } from "@/lib/types";
+import type { ClusterResult, Compartment, Vec2 } from "@/lib/types";
 
 import { provideViewer, type ViewerContext } from "./context";
 import type { KonvaNodeRef } from "./types";
@@ -34,6 +34,7 @@ import BumperAnnotations from "./layers/BumperAnnotations.vue";
 import JointsLayer from "./layers/JointsLayer.vue";
 import PullBackOverlay from "./layers/PullBackOverlay.vue";
 import CgMarker from "./layers/CgMarker.vue";
+import PreviewHoles from "./layers/PreviewHoles.vue";
 import ViewerPopup from "./popup/ViewerPopup.vue";
 import ElevationReadout from "./overlays/ElevationReadout.vue";
 import CursorReadout from "./overlays/CursorReadout.vue";
@@ -49,6 +50,14 @@ const props = defineProps<{
    * qu'on regarde autre chose : `result` est un objet neuf à chaque recalcul,
    * donc le surveiller ferait sauter le cadrage à chaque splay modifié. */
   viewKey?: string | null;
+  /** Vignette de catalogue : le matériel seul, sans ligne d'écoute ni
+   * lectures d'altitude, ni effort : silhouettes et perçages seulement — la
+   * grappe affichée n'est qu'un montage d'exemple, pas une charge réelle.
+   * La valeur dit ce qu'on regarde : l'enceinte seule, ou le bumper seul (avec
+   * sa barre de déport quand elle est montée). Ni sol ni autre équipement. */
+  preview?: "speaker" | "bumper";
+  /** Aperçu : perçages de l'enceinte du haut, repère enceinte. */
+  speakerHoles?: Vec2[];
 }>();
 
 const containerEl = ref<HTMLDivElement | null>(null);
@@ -196,12 +205,14 @@ function onStageClick(e: Konva.KonvaEventObject<MouseEvent>) {
                est simplement plus bas que la grappe, et c'est justement ce
                qu'on veut voir. -->
           <GroundLine
+            v-if="!preview"
             :y="groundLineY"
             :viewport="viewport"
             :stage-scale="stageScale"
           />
 
           <ListeningLine
+            v-if="!preview"
             :y="listeningLineY"
             :viewport="viewport"
             :stage-scale="stageScale"
@@ -209,18 +220,21 @@ function onStageClick(e: Konva.KonvaEventObject<MouseEvent>) {
           />
 
           <v-group ref="fitGroupRef" :config="{}">
-            <GuideDashes />
-            <ListeningRays />
+            <GuideDashes v-if="!preview" />
+            <ListeningRays v-if="!preview" />
 
             <!-- Ce qui dicte le cadrage : le matériel et ses annotations, pas
                  les pointillés ci-dessus. -->
             <v-group ref="measureGroupRef" :config="{}">
-              <SpeakersLayer />
-              <BumperOutline />
-              <BumperAnnotations />
-              <PullBackOverlay />
-              <JointsLayer />
-              <CgMarker />
+              <SpeakersLayer v-if="preview !== 'bumper'" />
+              <BumperOutline v-if="preview !== 'speaker'" :filled-bars="!!preview" />
+              <PreviewHoles v-if="preview" :part="preview" :speaker-holes="speakerHoles" />
+              <template v-else>
+                <BumperAnnotations />
+                <PullBackOverlay />
+                <JointsLayer />
+                <CgMarker />
+              </template>
             </v-group>
           </v-group>
         </v-layer>
@@ -228,7 +242,7 @@ function onStageClick(e: Konva.KonvaEventObject<MouseEvent>) {
     </div>
 
     <ViewerPopup
-      v-if="popupData && popupAnchor"
+      v-if="popupData && popupAnchor && !preview"
       :key="popupAnchor.idx"
       :data="popupData"
       :at="popupAnchor"
@@ -237,10 +251,12 @@ function onStageClick(e: Konva.KonvaEventObject<MouseEvent>) {
       @close="hover.close"
     />
 
-    <ListeningHeightControl v-model="listening.heightMm.value" />
-    <ElevationReadout :elevation="result.elevation" />
+    <template v-if="!preview">
+      <ListeningHeightControl v-model="listening.heightMm.value" />
+      <ElevationReadout :elevation="result.elevation" />
+    </template>
     <CursorReadout
-      v-if="cursorPos"
+      v-if="cursorPos && !preview"
       :pos="cursorPos"
       :offset-mm="result.elevation.offsetMm"
     />

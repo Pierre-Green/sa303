@@ -14,7 +14,6 @@ fn sa303() -> SpeakerModel {
     SpeakerModel {
         id: "sa303".into(),
         name: "SA303".into(),
-        schema_version: 4,
         mechanical: SpeakerMechanicalModel {
             depth: 700.0,
             height: 550.0,

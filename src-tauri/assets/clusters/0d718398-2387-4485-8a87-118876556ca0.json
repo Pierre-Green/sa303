@@ -1,21 +1,7 @@
 {
   "id": "0d718398-2387-4485-8a87-118876556ca0",
   "name": "Grappe 12u - 10m - 0-100m",
-  "schemaVersion": 2,
-  "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca",
-    "sa303-cca",
-    "sa303-cca"
-  ],
+  "speakerModelIds": ["sa303-isophase", "sa303-isophase", "sa303-isophase", "sa303-isophase", "sa303-isophase", "sa303-isophase", "sa303-isophase", "sa303-isophase", "sa303-isophase", "sa303-cca", "sa303-cca", "sa303-cca"],
   "compartment": "flown",
   "joints": [
     {
@@ -54,6 +40,13 @@
   ],
   "imposedTilt": 4.5,
   "pullBackAngle": null,
+  "pullBackEnabled": false,
+  "manualPullBackTensionN": null,
+  "rigging": {
+    "support": "auto",
+    "points": 1,
+    "barMountIndex": null
+  },
   "bumperModelId": "sa303-bumper",
   "bumperHeight": 10000.0
 }

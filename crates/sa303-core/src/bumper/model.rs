@@ -11,8 +11,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BumperCompatibility {
-    /// Alias : anciennement `boxModelId` (brief §8, voir `Cluster::speaker_model_id`).
-    #[serde(alias = "boxModelId")]
     pub speaker_model_id: String,
     pub flown: bool,
     pub stacked: bool,
@@ -43,17 +41,6 @@ pub struct BumperPins {
     pub height_from_bottom_mm: f64,
 }
 
-/// Perçage de la SA303-BUMPER : les deux pions à mi-épaisseur, l'avant à
-/// 12,567 mm de la face avant et l'arrière à 32,604 mm de la face arrière.
-/// Sert de repli aux fichiers écrits avant que ce perçage ne soit déclaré.
-fn default_pins() -> BumperPins {
-    BumperPins {
-        front_from_front_mm: 12.567,
-        rear_from_rear_mm: 32.604,
-        height_from_bottom_mm: 60.0,
-    }
-}
-
 /// Barre arrière du bumper : elle descend du trou haut percé dans le bumper et
 /// se boulonne au caisson de référence par sa paire ancrage/verrou, exactement
 /// comme la barre arrière d'une jonction. C'est elle qui verrouille l'assiette,
@@ -80,53 +67,19 @@ pub struct BumperRearBar {
     pub top_hole_lateral_mm: f64,
 }
 
-/// Barres arrière de la SA303-BUMPER. Seule celle à 0° est cotée à ce jour :
-/// c'est la seule que le vol utilise. Les barres à 10° et 20°, qui penchent la
-/// première tête en stack, restent à relever sur plan.
-///
-/// Sert de repli aux fichiers écrits avant que ces barres ne soient déclarées.
-fn default_rear_bars() -> Vec<BumperRearBar> {
-    vec![BumperRearBar {
-        tilt_deg: 0.0,
-        top_hole_along_mm: 224.626,
-        top_hole_lateral_mm: 1.822,
-    }]
-}
-
 /// Bumper de capotage, posé sur l'enceinte du haut en vol ou sous l'enceinte
-/// du bas en stack. En vol, porte la barre de déport qui permet de décaler le
-/// point d'accroche hors de l'aplomb du bumper.
+/// du bas en stack. En vol, il s'accroche par ses trous de manille, ou par la
+/// barre de déport goupillée dans ses trous de liaison.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BumperModel {
     pub id: String,
     pub name: String,
-    pub schema_version: u32,
     /// Profondeur avant-arrière du bumper, mm.
     pub depth: f64,
     /// Épaisseur du bumper, mm.
     pub height: f64,
-    /// Hauteur à laquelle la manille se ferme au-dessus du dessus du bumper,
-    /// mm. Volontairement indépendant de la SA303-BUMPER-BAR (barre de déport) :
-    /// ses perçages ne sont pas à hauteur constante, donc seul le bumper
-    /// entre dans le modèle géométrique — la barre n'est qu'un rendu dérivé.
-    /// Alias : anciennement `barHeightAboveBumper`, avant de dissocier la
-    /// hauteur de manille de la SA303-BUMPER-BAR — un fichier existant avec l'ancien
-    /// nom ne doit jamais faire planter la lecture (brief §8).
-    #[serde(alias = "barHeightAboveBumper")]
-    pub shackle_height_above_bumper: f64,
-    /// Décalage maximal du point d'accroche par rapport au centre du bumper
-    /// avant qu'une SA303-BUMPER-BAR ne soit nécessaire, mm. Par défaut `depth / 2`,
-    /// mais réglable indépendamment (ex. si les points de fixation directs
-    /// n'utilisent pas toute la profondeur du bumper).
-    /// `#[serde(default)]` : un fichier déjà sur disque sans ce champ ne doit
-    /// jamais faire planter la lecture (brief §8, leçon du champ précédent).
-    #[serde(default = "default_max_direct_deport_mm")]
-    pub max_direct_deport_mm: f64,
     /// Perçage des deux pions, coté depuis les bords du bumper.
-    /// `#[serde(default)]` : un fichier déjà sur disque sans ce champ se lit
-    /// toujours, avec le perçage de la SA303-BUMPER (brief §8).
-    #[serde(default = "default_pins")]
     pub pins: BumperPins,
     /// Longueur **utile** de la bielle de pivot avant, mm : entraxe entre sa
     /// goupille basse (la charnière haute du caisson, `SpeakerGeometry::ht`) et
@@ -138,34 +91,13 @@ pub struct BumperModel {
     /// retombe à 2 µm sur la SA303. Placer le bumper à `height_from_bottom_mm`
     /// ne fermait pas — 6,3 mm d'écart, parce que cette cote-là est arrondie.
     /// Vérifié par `the_bumper_geometry_closes_on_the_speaker`.
-    ///
-    /// `#[serde(default)]` : un fichier déjà sur disque sans ce champ se lit
-    /// toujours, avec la bielle de la SA303-BUMPER (brief §8).
-    #[serde(default = "default_pivot_bar_usable_length_mm")]
     pub pivot_bar_usable_length_mm: f64,
-    /// Barres arrière disponibles, une par inclinaison. `#[serde(default)]` :
-    /// un fichier déjà sur disque sans ce champ se lit toujours, avec les
-    /// barres de la SA303-BUMPER (brief §8).
-    #[serde(default = "default_rear_bars")]
+    /// Barres arrière disponibles, une par inclinaison.
     pub rear_bars: Vec<BumperRearBar>,
-    /// Trous de manille et trous de liaison de la barre de déport. `None` pour
-    /// un fichier écrit avant qu'ils ne soient déclarés : le solveur retombe
-    /// alors sur l'ancienne accroche continue (brief §8).
-    #[serde(default)]
-    pub rigging: Option<super::BumperRigging>,
-    /// Alias : anciennement `compatibleBoxes` (brief §8).
-    #[serde(alias = "compatibleBoxes")]
+    /// Trous de manille et trous de liaison de la barre de déport : les seuls
+    /// points d'accroche possibles en vol.
+    pub rigging: super::BumperRigging,
     pub compatible_speakers: Vec<BumperCompatibility>,
-}
-
-fn default_max_direct_deport_mm() -> f64 {
-    351.0
-}
-
-/// Bielle de pivot de la SA303-BUMPER (`bumper_pivot_bar_usable_length`).
-/// Sert de repli aux fichiers écrits avant qu'elle ne soit déclarée.
-fn default_pivot_bar_usable_length_mm() -> f64 {
-    71.6
 }
 
 /// Tolérance de comparaison sur l'inclinaison déclarée d'une barre arrière :

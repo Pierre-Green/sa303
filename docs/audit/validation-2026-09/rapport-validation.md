@@ -296,3 +296,17 @@ Au 22 septembre, aucune de ces corrections n'était appliquée au code ; seul `t
 | `compare.py` → `comparison.md`, `corpus-reference.json` | comparaison champ par champ et résultats de référence |
 | `analysis.py` | enveloppe axiale, raideur Huth, cas à la main, invariances, décomposition des comportements §2.12, stack |
 | `tests_proposes_sa303_core.rs` | tests Rust à intégrer (équilibre par corps, colinéarité, fermetures, pickup, invariances, cas à la main, refus, plus 4 tests `#[ignore]` qui figent les corrections C1/C2/C3/C6) |
+
+---
+
+## 8. Mise à jour du 26 septembre 2026 : accroche sur trous percés
+
+Le solveur n'accroche plus à un x continu mais sur les trous réellement percés du bumper et de sa barre de déport (1 ou 2 points). Le corpus a été adapté pour rester comparable, sans changer ce qu'il valide (les efforts de jonction) :
+
+- `sa303-bumper` : un seul trou, au centre, à l'ancienne hauteur de manille (`height + shackleHeightAboveBumper`) : même pendaison libre qu'avant ;
+- `sa303-bumper-portee-650` : trous à −650, 0 et +650 mm (l'ancienne portée de barre). Grappes à assiette imposée : 2 points (assiette tenue exactement) si l'ancien calcul n'avait pas de pull-back, 1 point sinon (le pull-back part alors du trou en bout de portée et tient l'assiette exacte, comme avant) ;
+- `tieAngle` est reporté dans `pullBackAngle` : l'ancien code l'ignorait (champ renommé) et tirait toujours à 180°.
+
+**Équivalence vérifiée** : angles de pull-back remis à « non choisi », l'export du nouveau code est identique champ par champ (écart relatif < 10⁻⁶) à celui du commit précédent sur les 53 grappes, hors position de la manille en accroche 2 points. L'export commité avant cette mise à jour était lui-même périmé (51 grappes calculées au lieu de 53).
+
+**À faire** : `sa303_ref.py` lit encore `maxDeportMm` et le modèle d'accroche continu ; `compare.py` ne tourne plus tant qu'il n'est pas adapté aux trous (`rigging.shackleHoles`, `rigging.points`). `tests_proposes_sa303_core.rs` est une archive de septembre, non compilée.

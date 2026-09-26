@@ -12,9 +12,7 @@
 //! librement des modèles différents tant que chaque jonction est déclarée.
 //!
 //! `#[serde(flatten)]` sur `mechanical` : le JSON reste plat (mêmes clés
-//! `depth`, `height`, `hinge`, ... au premier niveau), donc un fichier déjà
-//! enregistré continue de se lire sans modification (brief §8). `acoustics` et
-//! `compatible_below` sont `#[serde(default)]` pour la même raison.
+//! `depth`, `height`, `hinge`, ... au premier niveau).
 
 use super::geometry::CrownRow;
 use serde::{Deserialize, Serialize};
@@ -49,15 +47,7 @@ pub struct Crown {
     /// garantissait qu'un perçage suive la parité, et un splay non entier —
     /// 10,5° par exemple — y était rangé par un arrondi que personne n'avait
     /// choisi. Le perçage est une donnée de l'enceinte, il se lit sur son plan.
-    #[serde(default = "default_inner_splays")]
     pub inner_splays: Vec<f64>,
-}
-
-/// Rangée intérieure de la SA303 : 1, 3 et 5°. Repli pour les fichiers écrits
-/// avant que ce perçage ne soit déclaré (brief §8) — ce sont exactement les
-/// splays que l'ancienne règle de parité y rangeait.
-fn default_inner_splays() -> Vec<f64> {
-    vec![1.0, 3.0, 5.0]
 }
 
 impl Crown {
@@ -117,12 +107,10 @@ pub struct GuideMeasurement {
     /// `D` équivalent identifié, mm.
     pub acoustic_mouth_height_mm: f64,
     /// Rayon du front identifié, m. `None` = front strictement plan.
-    #[serde(default)]
     pub wavefront_radius_m: Option<f64>,
     /// Niveau au bord du secteur en fonction de la fréquence : `(Hz, dB)`
     /// relatifs à l'axe, relevés à la moitié de l'ouverture du guide. Alimente
     /// la bosse au raccord fréquence par fréquence, au lieu d'une valeur unique.
-    #[serde(default)]
     pub edge_level_db: Vec<(f64, f64)>,
 }
 
@@ -142,37 +130,28 @@ pub struct SpeakerAcousticsModel {
     /// le splay mécanique.
     pub directivity_vertical: f64,
     /// Nature du front rayonné.
-    #[serde(default)]
     pub wg_front: WaveguideFront,
     /// Hauteur de bouche du guide, mm — le `D` des critères WST, dont dérive
     /// l'ARF. Distincte de la hauteur de caisse : c'est la part réellement
     /// occupée par la source. 0 = non renseignée.
-    ///
-    /// `alias` : ce champ s'appelait `radiatingHeight`, les fichiers déjà
-    /// enregistrés continuent donc de se lire (brief §8).
-    #[serde(default, alias = "radiatingHeight")]
     pub wg_output_height: f64,
     /// Niveau du guide à la moitié de son secteur (dB, négatif), relevé en
     /// simulation ou en mesure. −6 dB donne un raccord plat entre deux caisses
     /// voisines. Sans objet pour un front isophase.
-    #[serde(default = "default_level_at_half_coverage_db")]
     pub wg_level_at_half_coverage_db: f64,
     /// Secteur encore rayonné par un guide **isophase**, degrés. 0 = front
     /// parfaitement plan. Ce n'est pas une coquetterie : c'est lui qui décale
     /// l'angle de raccord vers une caisse à guide courbé, par tangence des deux
     /// fronts. Sans objet pour un front courbé, dont le secteur est
     /// `directivity_vertical`.
-    #[serde(default)]
     pub wg_isophase_sector_deg: f64,
     /// Relevé d'identification du guide, quand il existe. Il prime sur les
     /// valeurs de fiche pour ce qu'il renseigne.
-    #[serde(default)]
     pub guide_measurement: Option<GuideMeasurement>,
 }
 
-// `Default` écrit à la main plutôt que dérivé : le niveau au demi-secteur doit
-// valoir −6 dB aussi bien pour un modèle construit en Rust que pour un JSON où
-// la clé manque, sinon les deux chemins ne donneraient pas la même enceinte.
+// `Default` écrit à la main plutôt que dérivé : le niveau au demi-secteur vaut
+// −6 dB, celui qui donne un raccord plat.
 impl Default for SpeakerAcousticsModel {
     fn default() -> Self {
         Self {
@@ -233,7 +212,6 @@ pub struct BelowCompatibility {
     pub stacked: bool,
     /// Splay recommandé pour cette jonction. `None` : pas d'avis acoustique,
     /// la jonction n'est jamais signalée comme non optimale.
-    #[serde(default)]
     pub recommended_splay: Option<SplayRange>,
 }
 
@@ -327,7 +305,6 @@ pub struct RearBar {
     pub hole_diameter: f64,
     pub holes: BarHoles,
     /// Masse de la pièce, kg. Descriptif : n'entre dans aucun calcul d'effort.
-    #[serde(default)]
     pub mass_kg: f64,
     /// Limite d'élasticité, MPa.
     pub yield_strength: f64,
@@ -467,15 +444,12 @@ pub struct SpeakerMechanicalModel {
 pub struct SpeakerModel {
     pub id: String,
     pub name: String,
-    pub schema_version: u32,
     #[serde(flatten)]
     pub mechanical: SpeakerMechanicalModel,
-    #[serde(default)]
     pub acoustics: SpeakerAcousticsModel,
     /// Enceintes accrochables directement sous celle-ci (voir
     /// `BelowCompatibility`). Vide : rien ne peut être accroché dessous, donc
     /// cette enceinte ne peut être qu'en bas de chaîne.
-    #[serde(default)]
     pub compatible_below: Vec<BelowCompatibility>,
 }
 
@@ -496,39 +470,5 @@ impl BelowCompatibility {
         } else {
             self.stacked
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Un fichier enregistré avant le renommage doit continuer de se lire, et
-    /// de rendre la même enceinte (brief §8 : jamais de perte silencieuse).
-    #[test]
-    fn a_speaker_saved_before_the_rename_still_loads_its_mouth_height() {
-        let legacy = r#"{
-            "fs": 60.0,
-            "directivityHorizontal": 90.0,
-            "directivityVertical": 20.0,
-            "radiatingHeight": 470.0
-        }"#;
-        let acoustics: SpeakerAcousticsModel = serde_json::from_str(legacy).unwrap();
-        assert_eq!(acoustics.wg_output_height, 470.0);
-        // Champs absents du fichier : le front vaut isophase, et le niveau au
-        // demi-secteur le défaut qui donne un raccord plat.
-        assert_eq!(acoustics.wg_front, WaveguideFront::Isophase);
-        assert_eq!(acoustics.wg_level_at_half_coverage_db, -6.0);
-    }
-
-    /// Le défaut construit en Rust et le défaut lu depuis un JSON vide doivent
-    /// décrire la même enceinte, sinon les deux chemins divergeraient.
-    #[test]
-    fn the_rust_default_and_the_json_default_agree() {
-        let from_json: SpeakerAcousticsModel = serde_json::from_str(
-            "{\"fs\":0.0,\"directivityHorizontal\":0.0,\"directivityVertical\":0.0}",
-        )
-        .unwrap();
-        assert_eq!(from_json, SpeakerAcousticsModel::default());
     }
 }

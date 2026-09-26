@@ -1,3076 +1,3570 @@
 {
- "settings": {
-  "safetyFactor": 4.0,
-  "dynamicFactor": 1.3,
-  "gravity": 9.80665,
-  "sharePerFlank": 0.5,
-  "pin": {
-   "diameter": 12.0,
-   "ultimate": 1000.0,
-   "netSection": 0.86
+  "settings": {
+    "safetyFactor": 4.0,
+    "dynamicFactor": 1.3,
+    "gravity": 9.80665,
+    "sharePerFlank": 0.5,
+    "pin": {
+      "diameter": 12.0,
+      "ultimate": 1000.0,
+      "netSection": 0.86
+    },
+    "plate": {
+      "flankThickness": 4.0,
+      "barThickness": 10.0,
+      "ultimate": 510.0
+    },
+    "axisMapping": {
+      "toolX": "X",
+      "toolY": "-Y"
+    },
+    "pullBackToleranceDeg": 10.0
   },
-  "plate": {
-   "flankThickness": 4.0,
-   "barThickness": 10.0,
-   "ultimate": 510.0
+  "definitions": {
+    "speakers": [
+      {
+        "id": "sa303-cca",
+        "name": "SA303-CCA",
+        "depth": 700.0,
+        "height": 550.0,
+        "totalVerticalAngle": 20.0,
+        "massKg": 83.695,
+        "cg": [
+          10.84,
+          11.91
+        ],
+        "hinge": {
+          "x": -338.433,
+          "y": 257.127,
+          "jointSeparation": 552.379,
+          "edgePerp": 12.569
+        },
+        "crown": {
+          "radius": 680.0,
+          "delta": 20.0,
+          "splay0Angle": 5.0,
+          "innerSplays": [
+            1.0,
+            3.0,
+            5.0
+          ]
+        },
+        "latch": {
+          "radius": 710.845,
+          "angleDeg": -20.8453
+        },
+        "anchor": {
+          "radius": 680.0,
+          "angleDeg": -13.0
+        },
+        "latchOffset": 100.0,
+        "splayGrid": [
+          0.0,
+          1.0,
+          2.0,
+          3.0,
+          4.0,
+          5.0,
+          10.5,
+          20.0
+        ],
+        "frameHoleSplay": 0.0,
+        "rearFaceX": 351.0,
+        "rearBar": {
+          "thickness": 10.0,
+          "length": 460.014,
+          "widthProfile": [
+            [
+              0.0,
+              40.0
+            ],
+            [
+              30.0,
+              40.0
+            ],
+            [
+              100.0,
+              70.0
+            ],
+            [
+              460.014,
+              70.0
+            ]
+          ],
+          "rearEdgeOffset": 20.0,
+          "holeDiameter": 12.08,
+          "holes": {
+            "latch": [
+              16.0,
+              0.0
+            ],
+            "anchor": [
+              116.0,
+              0.0
+            ],
+            "up660": [
+              440.175,
+              19.406
+            ],
+            "up680": [
+              445.014,
+              0.0
+            ]
+          },
+          "massKg": 2.32,
+          "yieldStrength": 355.0,
+          "ultimateStrength": 510.0
+        },
+        "acoustics": {
+          "fs": 60.0,
+          "directivityHorizontal": 90.0,
+          "directivityVertical": 21.2,
+          "wgFront": "constantCurvature",
+          "wgOutputHeight": 464.0,
+          "wgLevelAtHalfCoverageDb": -6.0,
+          "wgIsophaseSectorDeg": 0.0,
+          "guideMeasurement": {
+            "acousticMouthHeightMm": 385.0,
+            "wavefrontRadiusM": 1.04,
+            "edgeLevelDb": [
+              [
+                3100.0,
+                -5.3
+              ],
+              [
+                3900.0,
+                -8.2
+              ],
+              [
+                5000.0,
+                -6.6
+              ],
+              [
+                6300.0,
+                -6.9
+              ],
+              [
+                8000.0,
+                -9.1
+              ],
+              [
+                9000.0,
+                -13.1
+              ],
+              [
+                10100.0,
+                -9.0
+              ],
+              [
+                12000.0,
+                -5.8
+              ]
+            ]
+          }
+        },
+        "compatibleBelow": [
+          {
+            "speakerModelId": "sa303-cca",
+            "flown": true,
+            "stacked": true,
+            "recommendedSplay": {
+              "minDeg": 20.0,
+              "maxDeg": 20.0
+            }
+          },
+          {
+            "speakerModelId": "sa303-isophase",
+            "flown": true,
+            "stacked": true,
+            "recommendedSplay": {
+              "minDeg": 10.5,
+              "maxDeg": 10.5
+            }
+          }
+        ]
+      },
+      {
+        "id": "sa303-isophase",
+        "name": "SA303-ISOPHASE",
+        "depth": 700.0,
+        "height": 550.0,
+        "totalVerticalAngle": 20.0,
+        "massKg": 83.695,
+        "cg": [
+          10.84,
+          11.91
+        ],
+        "hinge": {
+          "x": -338.433,
+          "y": 257.127,
+          "jointSeparation": 552.379,
+          "edgePerp": 12.569
+        },
+        "crown": {
+          "radius": 680.0,
+          "delta": 20.0,
+          "splay0Angle": 5.0,
+          "innerSplays": [
+            1.0,
+            3.0,
+            5.0
+          ]
+        },
+        "latch": {
+          "radius": 710.845,
+          "angleDeg": -20.8453
+        },
+        "anchor": {
+          "radius": 680.0,
+          "angleDeg": -13.0
+        },
+        "latchOffset": 100.0,
+        "splayGrid": [
+          0.0,
+          1.0,
+          2.0,
+          3.0,
+          4.0,
+          5.0,
+          10.5,
+          20.0
+        ],
+        "frameHoleSplay": 0.0,
+        "rearFaceX": 351.0,
+        "rearBar": {
+          "thickness": 10.0,
+          "length": 460.014,
+          "widthProfile": [
+            [
+              0.0,
+              40.0
+            ],
+            [
+              30.0,
+              40.0
+            ],
+            [
+              100.0,
+              70.0
+            ],
+            [
+              460.014,
+              70.0
+            ]
+          ],
+          "rearEdgeOffset": 20.0,
+          "holeDiameter": 12.08,
+          "holes": {
+            "latch": [
+              16.0,
+              0.0
+            ],
+            "anchor": [
+              116.0,
+              0.0
+            ],
+            "up660": [
+              440.175,
+              19.406
+            ],
+            "up680": [
+              445.014,
+              0.0
+            ]
+          },
+          "massKg": 2.32,
+          "yieldStrength": 355.0,
+          "ultimateStrength": 510.0
+        },
+        "acoustics": {
+          "fs": 60.0,
+          "directivityHorizontal": 90.0,
+          "directivityVertical": 0.0,
+          "wgFront": "isophase",
+          "wgOutputHeight": 464.0,
+          "wgLevelAtHalfCoverageDb": -6.0,
+          "wgIsophaseSectorDeg": 1.3,
+          "guideMeasurement": {
+            "acousticMouthHeightMm": 485.0,
+            "wavefrontRadiusM": 22.6,
+            "edgeLevelDb": []
+          }
+        },
+        "compatibleBelow": [
+          {
+            "speakerModelId": "sa303-isophase",
+            "flown": true,
+            "stacked": true,
+            "recommendedSplay": {
+              "minDeg": 0.0,
+              "maxDeg": 4.0
+            }
+          },
+          {
+            "speakerModelId": "sa303-cca",
+            "flown": true,
+            "stacked": true,
+            "recommendedSplay": {
+              "minDeg": 10.5,
+              "maxDeg": 10.5
+            }
+          }
+        ]
+      }
+    ],
+    "bumpers": [
+      {
+        "id": "sa303-bumper",
+        "name": "SA303-BUMPER",
+        "depth": 702.0,
+        "height": 120.0,
+        "pins": {
+          "frontFromFrontMm": 12.567,
+          "rearFromRearMm": 32.604,
+          "heightFromBottomMm": 60.0
+        },
+        "pivotBarUsableLengthMm": 71.6,
+        "rearBars": [
+          {
+            "tiltDeg": 0.0,
+            "topHoleAlongMm": 224.626,
+            "topHoleLateralMm": 1.822
+          }
+        ],
+        "compatibleSpeakers": [
+          {
+            "speakerModelId": "sa303-isophase",
+            "flown": true,
+            "stacked": true
+          },
+          {
+            "speakerModelId": "sa303-cca",
+            "flown": true,
+            "stacked": true
+          }
+        ],
+        "rigging": {
+          "shackleHoles": [
+            [
+              0.0,
+              160.0
+            ]
+          ],
+          "barLinkHoles": [],
+          "wllKg": 3250.0
+        }
+      },
+      {
+        "id": "sa303-bumper-portee-650",
+        "name": "SA303-BUMPER (portée 650)",
+        "depth": 702.0,
+        "height": 120.0,
+        "pins": {
+          "frontFromFrontMm": 12.567,
+          "rearFromRearMm": 32.604,
+          "heightFromBottomMm": 60.0
+        },
+        "pivotBarUsableLengthMm": 71.6,
+        "rearBars": [
+          {
+            "tiltDeg": 0.0,
+            "topHoleAlongMm": 224.626,
+            "topHoleLateralMm": 1.822
+          }
+        ],
+        "compatibleSpeakers": [
+          {
+            "speakerModelId": "sa303-isophase",
+            "flown": true,
+            "stacked": true
+          },
+          {
+            "speakerModelId": "sa303-cca",
+            "flown": true,
+            "stacked": true
+          }
+        ],
+        "rigging": {
+          "shackleHoles": [
+            [
+              -650.0,
+              160.0
+            ],
+            [
+              0.0,
+              160.0
+            ],
+            [
+              650.0,
+              160.0
+            ]
+          ],
+          "barLinkHoles": [],
+          "wllKg": 3250.0
+        }
+      }
+    ],
+    "bumperBars": [
+      {
+        "id": "sa303-bumper-bar",
+        "name": "SA303-BUMPER-BAR",
+        "compatibleBumpers": [
+          {
+            "bumperModelId": "sa303-bumper"
+          }
+        ],
+        "geometry": {
+          "pickupHoles": [
+            [
+              -701.411,
+              -16.518
+            ],
+            [
+              -631.27,
+              -10.382
+            ],
+            [
+              -561.129,
+              -4.245
+            ],
+            [
+              -490.988,
+              1.891
+            ],
+            [
+              -420.847,
+              8.028
+            ],
+            [
+              -350.706,
+              14.164
+            ],
+            [
+              -280.565,
+              20.301
+            ],
+            [
+              -210.423,
+              26.438
+            ],
+            [
+              -140.282,
+              32.574
+            ],
+            [
+              -70.141,
+              38.711
+            ],
+            [
+              0.0,
+              44.847
+            ],
+            [
+              70.141,
+              38.711
+            ],
+            [
+              140.282,
+              32.574
+            ],
+            [
+              210.423,
+              26.438
+            ],
+            [
+              280.565,
+              20.301
+            ],
+            [
+              350.706,
+              14.164
+            ],
+            [
+              420.847,
+              8.028
+            ],
+            [
+              490.988,
+              1.891
+            ],
+            [
+              561.129,
+              -4.245
+            ],
+            [
+              631.27,
+              -10.382
+            ],
+            [
+              701.411,
+              -16.518
+            ]
+          ],
+          "linkPins": [
+            [
+              -468.0,
+              -150.0
+            ],
+            [
+              -78.0,
+              -150.0
+            ]
+          ],
+          "wllKg": 3250.0
+        }
+      }
+    ]
   },
-  "axisMapping": {
-   "toolX": "X",
-   "toolY": "-Y"
-  }
- },
- "definitions": {
-  "speakers": [
-   {
-    "id": "sa303-cca",
-    "name": "SA303-CCA",
-    "schemaVersion": 7,
-    "depth": 700.0,
-    "height": 550.0,
-    "totalVerticalAngle": 20.0,
-    "massKg": 83.695,
-    "cg": [
-     10.84,
-     11.91
-    ],
-    "hinge": {
-     "x": -338.433,
-     "y": 257.127,
-     "jointSeparation": 552.379,
-     "edgePerp": 12.569
-    },
-    "crown": {
-     "radius": 680.0,
-     "delta": 20.0,
-     "splay0Angle": 5.0,
-     "innerSplays": [
-      1.0,
-      3.0,
-      5.0
-     ]
-    },
-    "latch": {
-     "radius": 710.845,
-     "angleDeg": -20.8453
-    },
-    "anchor": {
-     "radius": 680.0,
-     "angleDeg": -13.0
-    },
-    "latchOffset": 100.0,
-    "splayGrid": [
-     0.0,
-     1.0,
-     2.0,
-     3.0,
-     4.0,
-     5.0,
-     10.5,
-     20.0
-    ],
-    "frameHoleSplay": 0.0,
-    "rearFaceX": 351.0,
-    "rearBar": {
-     "thickness": 10.0,
-     "length": 460.014,
-     "widthProfile": [
-      [
-       0.0,
-       40.0
+  "clusters": [
+    {
+      "id": "ddd7db4d-6eee-5f95-b7a6-6f71ccfaa1a6",
+      "name": "iso1 droit free",
+      "speakerModelIds": [
+        "sa303-isophase"
       ],
-      [
-       30.0,
-       40.0
-      ],
-      [
-       100.0,
-       70.0
-      ],
-      [
-       460.014,
-       70.0
-      ]
-     ],
-     "rearEdgeOffset": 20.0,
-     "holeDiameter": 12.08,
-     "holes": {
-      "latch": [
-       16.0,
-       0.0
-      ],
-      "anchor": [
-       116.0,
-       0.0
-      ],
-      "up660": [
-       440.175,
-       19.406
-      ],
-      "up680": [
-       445.014,
-       0.0
-      ]
-     },
-     "massKg": 2.32,
-     "yieldStrength": 355.0,
-     "ultimateStrength": 510.0
-    },
-    "acoustics": {
-     "fs": 60.0,
-     "directivityHorizontal": 90.0,
-     "directivityVertical": 21.2,
-     "wgFront": "constantCurvature",
-     "wgOutputHeight": 464.0,
-     "wgLevelAtHalfCoverageDb": -6.0,
-     "wgIsophaseSectorDeg": 0.0,
-     "guideMeasurement": {
-      "acousticMouthHeightMm": 385.0,
-      "wavefrontRadiusM": 1.04,
-      "edgeLevelDb": [
-       [
-        3100.0,
-        -5.3
-       ],
-       [
-        3900.0,
-        -8.2
-       ],
-       [
-        5000.0,
-        -6.6
-       ],
-       [
-        6300.0,
-        -6.9
-       ],
-       [
-        8000.0,
-        -9.1
-       ],
-       [
-        9000.0,
-        -13.1
-       ],
-       [
-        10100.0,
-        -9.0
-       ],
-       [
-        12000.0,
-        -5.8
-       ]
-      ]
-     }
-    },
-    "compatibleBelow": [
-     {
-      "speakerModelId": "sa303-cca",
-      "flown": true,
-      "stacked": true,
-      "recommendedSplay": {
-       "minDeg": 20.0,
-       "maxDeg": 20.0
+      "compartment": "flown",
+      "joints": [],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
       }
-     },
-     {
-      "speakerModelId": "sa303-isophase",
-      "flown": true,
-      "stacked": true,
-      "recommendedSplay": {
-       "minDeg": 10.5,
-       "maxDeg": 10.5
+    },
+    {
+      "id": "7b9f860d-33d8-5787-92d8-5afc879ce234",
+      "name": "iso2 droit free",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 0.0
+        }
+      ],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
       }
-     }
-    ]
-   },
-   {
-    "id": "sa303-isophase",
-    "name": "SA303-ISOPHASE",
-    "schemaVersion": 7,
-    "depth": 700.0,
-    "height": 550.0,
-    "totalVerticalAngle": 20.0,
-    "massKg": 83.695,
-    "cg": [
-     10.84,
-     11.91
-    ],
-    "hinge": {
-     "x": -338.433,
-     "y": 257.127,
-     "jointSeparation": 552.379,
-     "edgePerp": 12.569
     },
-    "crown": {
-     "radius": 680.0,
-     "delta": 20.0,
-     "splay0Angle": 5.0,
-     "innerSplays": [
-      1.0,
-      3.0,
-      5.0
-     ]
-    },
-    "latch": {
-     "radius": 710.845,
-     "angleDeg": -20.8453
-    },
-    "anchor": {
-     "radius": 680.0,
-     "angleDeg": -13.0
-    },
-    "latchOffset": 100.0,
-    "splayGrid": [
-     0.0,
-     1.0,
-     2.0,
-     3.0,
-     4.0,
-     5.0,
-     10.5,
-     20.0
-    ],
-    "frameHoleSplay": 0.0,
-    "rearFaceX": 351.0,
-    "rearBar": {
-     "thickness": 10.0,
-     "length": 460.014,
-     "widthProfile": [
-      [
-       0.0,
-       40.0
+    {
+      "id": "b93299b9-0743-5b48-abcd-4ef2c5c6955d",
+      "name": "iso4 droit free",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
       ],
-      [
-       30.0,
-       40.0
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        }
       ],
-      [
-       100.0,
-       70.0
-      ],
-      [
-       460.014,
-       70.0
-      ]
-     ],
-     "rearEdgeOffset": 20.0,
-     "holeDiameter": 12.08,
-     "holes": {
-      "latch": [
-       16.0,
-       0.0
-      ],
-      "anchor": [
-       116.0,
-       0.0
-      ],
-      "up660": [
-       440.175,
-       19.406
-      ],
-      "up680": [
-       445.014,
-       0.0
-      ]
-     },
-     "massKg": 2.32,
-     "yieldStrength": 355.0,
-     "ultimateStrength": 510.0
-    },
-    "acoustics": {
-     "fs": 60.0,
-     "directivityHorizontal": 90.0,
-     "directivityVertical": 0.0,
-     "wgFront": "isophase",
-     "wgOutputHeight": 464.0,
-     "wgLevelAtHalfCoverageDb": -6.0,
-     "wgIsophaseSectorDeg": 1.3,
-     "guideMeasurement": {
-      "acousticMouthHeightMm": 485.0,
-      "wavefrontRadiusM": 22.6,
-      "edgeLevelDb": []
-     }
-    },
-    "compatibleBelow": [
-     {
-      "speakerModelId": "sa303-isophase",
-      "flown": true,
-      "stacked": true,
-      "recommendedSplay": {
-       "minDeg": 0.0,
-       "maxDeg": 4.0
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
       }
-     },
-     {
-      "speakerModelId": "sa303-cca",
-      "flown": true,
-      "stacked": true,
-      "recommendedSplay": {
-       "minDeg": 10.5,
-       "maxDeg": 10.5
-      }
-     }
-    ]
-   }
-  ],
-  "bumpers": [
-   {
-    "id": "sa303-bumper",
-    "name": "SA303-BUMPER",
-    "schemaVersion": 1,
-    "depth": 702.0,
-    "height": 120.0,
-    "shackleHeightAboveBumper": 40.0,
-    "maxDirectDeportMm": 130.23,
-    "pins": {
-     "frontFromFrontMm": 12.567,
-     "rearFromRearMm": 32.604,
-     "heightFromBottomMm": 60.0
     },
-    "pivotBarUsableLengthMm": 71.6,
-    "rearBars": [
-     {
-      "tiltDeg": 0.0,
-      "topHoleAlongMm": 224.626,
-      "topHoleLateralMm": 1.822
-     }
-    ],
-    "compatibleSpeakers": [
-     {
-      "speakerModelId": "sa303-isophase",
-      "flown": true,
-      "stacked": true
-     },
-     {
-      "speakerModelId": "sa303-cca",
-      "flown": true,
-      "stacked": true
-     }
-    ]
-   }
-  ],
-  "bumperBars": [
-   {
-    "id": "sa303-bumper-bar",
-    "name": "SA303-BUMPER-BAR",
-    "schemaVersion": 1,
-    "maxDeportMm": 650.0,
-    "compatibleBumpers": [
-     {
-      "bumperModelId": "sa303-bumper"
-     }
-    ]
-   }
+    {
+      "id": "d185506b-a299-51c6-90f6-b3e1ebb0ccb5",
+      "name": "iso8 droit free",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        }
+      ],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "06851605-d986-57e1-a58b-8ee9e6846b92",
+      "name": "iso10 droit free",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        }
+      ],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "a979e82d-f697-5a75-8ce1-e924435f2357",
+      "name": "iso12 droit free",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        }
+      ],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "44d2c58b-9044-5436-8388-933aea1d811b",
+      "name": "iso14 droit free",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        }
+      ],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "c7e06835-0186-5ad7-a797-3ccd7a2a54ae",
+      "name": "iso2 20 partout free",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 20.0
+        }
+      ],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "adf4a30d-5d1c-58f2-a3bb-2464d63ef194",
+      "name": "iso4 20 partout free",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 20.0
+        },
+        {
+          "splay": 20.0
+        },
+        {
+          "splay": 20.0
+        }
+      ],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "20ecb9d1-e066-5649-a7f9-20f903cd4571",
+      "name": "iso8 20 partout free",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 20.0
+        },
+        {
+          "splay": 20.0
+        },
+        {
+          "splay": 20.0
+        },
+        {
+          "splay": 20.0
+        },
+        {
+          "splay": 20.0
+        },
+        {
+          "splay": 20.0
+        },
+        {
+          "splay": 20.0
+        }
+      ],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "4c769abf-5a1c-54ec-a92d-42c0a7beec9b",
+      "name": "iso14 20 partout free",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 20.0
+        },
+        {
+          "splay": 20.0
+        },
+        {
+          "splay": 20.0
+        },
+        {
+          "splay": 20.0
+        },
+        {
+          "splay": 20.0
+        },
+        {
+          "splay": 20.0
+        },
+        {
+          "splay": 20.0
+        },
+        {
+          "splay": 20.0
+        },
+        {
+          "splay": 20.0
+        },
+        {
+          "splay": 20.0
+        },
+        {
+          "splay": 20.0
+        },
+        {
+          "splay": 20.0
+        },
+        {
+          "splay": 20.0
+        }
+      ],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "d6a559d5-e873-57dd-8c6a-cec03f4a7088",
+      "name": "iso4 splay 0.0 partout free",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        }
+      ],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "bf498e7a-acb1-5739-90ae-befe25b077d6",
+      "name": "iso4 splay 1.0 partout free",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 1.0
+        },
+        {
+          "splay": 1.0
+        },
+        {
+          "splay": 1.0
+        }
+      ],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "581e716f-db66-56c9-9993-15b40addbe91",
+      "name": "iso4 splay 2.0 partout free",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 2.0
+        },
+        {
+          "splay": 2.0
+        },
+        {
+          "splay": 2.0
+        }
+      ],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "2fe6dc26-3573-5659-80fb-20d9092afe38",
+      "name": "iso4 splay 3.0 partout free",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 3.0
+        },
+        {
+          "splay": 3.0
+        },
+        {
+          "splay": 3.0
+        }
+      ],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "5e7b54f9-3b7c-55d5-a0a5-57c3b1a77013",
+      "name": "iso4 splay 4.0 partout free",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 4.0
+        },
+        {
+          "splay": 4.0
+        },
+        {
+          "splay": 4.0
+        }
+      ],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "017aefa7-a733-5c30-83fc-c62a7d68e2a5",
+      "name": "iso4 splay 5.0 partout free",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 5.0
+        },
+        {
+          "splay": 5.0
+        },
+        {
+          "splay": 5.0
+        }
+      ],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "37029d69-5ab5-5e42-b2cb-9c93c5fa2b92",
+      "name": "iso4 splay 10.5 partout free",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 10.5
+        },
+        {
+          "splay": 10.5
+        },
+        {
+          "splay": 10.5
+        }
+      ],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "65171fcc-2942-51d0-ab16-75ad2130b6b7",
+      "name": "iso4 splay 20.0 partout free",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 20.0
+        },
+        {
+          "splay": 20.0
+        },
+        {
+          "splay": 20.0
+        }
+      ],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "20808cd0-6cf3-5032-8a61-fa8256d35f45",
+      "name": "J 12 free",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 0
+        },
+        {
+          "splay": 0
+        },
+        {
+          "splay": 0
+        },
+        {
+          "splay": 0
+        },
+        {
+          "splay": 1
+        },
+        {
+          "splay": 1
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 5
+        },
+        {
+          "splay": 10.5
+        },
+        {
+          "splay": 20
+        }
+      ],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "4cf949b3-5ea5-538f-9215-0dabe6f312d5",
+      "name": "banane 12 free",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 1
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 5
+        },
+        {
+          "splay": 5
+        },
+        {
+          "splay": 5
+        },
+        {
+          "splay": 10.5
+        },
+        {
+          "splay": 10.5
+        },
+        {
+          "splay": 10.5
+        },
+        {
+          "splay": 10.5
+        }
+      ],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "bf9a5cc9-031b-52a9-badb-6173f4abe74e",
+      "name": "iso11+cca3 free",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-cca",
+        "sa303-cca",
+        "sa303-cca"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 0
+        },
+        {
+          "splay": 0
+        },
+        {
+          "splay": 0
+        },
+        {
+          "splay": 1
+        },
+        {
+          "splay": 1
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 5
+        },
+        {
+          "splay": 10.5
+        },
+        {
+          "splay": 20
+        },
+        {
+          "splay": 20
+        },
+        {
+          "splay": 20
+        }
+      ],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "7fd07415-1e7b-5fa2-bc36-6a2231b95ce8",
+      "name": "iso12+cca2 J free",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-cca",
+        "sa303-cca"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 0
+        },
+        {
+          "splay": 0
+        },
+        {
+          "splay": 0
+        },
+        {
+          "splay": 0
+        },
+        {
+          "splay": 1
+        },
+        {
+          "splay": 1
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 5
+        },
+        {
+          "splay": 10.5
+        },
+        {
+          "splay": 10.5
+        },
+        {
+          "splay": 20
+        }
+      ],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "f866baec-7772-5eed-a99c-a6810bace145",
+      "name": "J14 tilt -15 tie180",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-cca"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 10.5
+        }
+      ],
+      "imposedTilt": -15.0,
+      "bumperModelId": "sa303-bumper-portee-650",
+      "bumperHeight": 0.0,
+      "pullBackAngle": 180.0,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 2,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "2d2db68d-61c6-5b28-9533-42f6bd267f75",
+      "name": "J14 tilt -8 tie180",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-cca"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 10.5
+        }
+      ],
+      "imposedTilt": -8.0,
+      "bumperModelId": "sa303-bumper-portee-650",
+      "bumperHeight": 0.0,
+      "pullBackAngle": 180.0,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 2,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "e8ffba59-f917-5fe6-8387-651969357a0b",
+      "name": "J14 tilt -3 tie180",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-cca"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 10.5
+        }
+      ],
+      "imposedTilt": -3.0,
+      "bumperModelId": "sa303-bumper-portee-650",
+      "bumperHeight": 0.0,
+      "pullBackAngle": 180.0,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 2,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "98ef1d1c-3d88-5341-a167-98b6122cd0ee",
+      "name": "J14 tilt +0 tie180",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-cca"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 10.5
+        }
+      ],
+      "imposedTilt": 0.0,
+      "bumperModelId": "sa303-bumper-portee-650",
+      "bumperHeight": 0.0,
+      "pullBackAngle": 180.0,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "c8e8aa7c-33a1-51af-ab56-5dc0bdf1e50b",
+      "name": "J14 tilt +3 tie180",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-cca"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 10.5
+        }
+      ],
+      "imposedTilt": 3.0,
+      "bumperModelId": "sa303-bumper-portee-650",
+      "bumperHeight": 0.0,
+      "pullBackAngle": 180.0,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "d201354a-964a-596c-b246-4d2a6956c15e",
+      "name": "J14 tilt +8 tie180",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-cca"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 10.5
+        }
+      ],
+      "imposedTilt": 8.0,
+      "bumperModelId": "sa303-bumper-portee-650",
+      "bumperHeight": 0.0,
+      "pullBackAngle": 180.0,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "98b13cae-2948-5949-857c-1dc1c3bbb511",
+      "name": "J14 tilt +15 tie180",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-cca"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 10.5
+        }
+      ],
+      "imposedTilt": 15.0,
+      "bumperModelId": "sa303-bumper-portee-650",
+      "bumperHeight": 0.0,
+      "pullBackAngle": 180.0,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "940500c6-a8c2-5789-b9db-e5572ec9007a",
+      "name": "J14 tilt +25 tie180",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-cca"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 10.5
+        }
+      ],
+      "imposedTilt": 25.0,
+      "bumperModelId": "sa303-bumper-portee-650",
+      "bumperHeight": 0.0,
+      "pullBackAngle": 180.0,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "4eed3b6e-a07a-5e32-b534-4aa53a93e447",
+      "name": "J14 tilt +35 tie180",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-cca"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 10.5
+        }
+      ],
+      "imposedTilt": 35.0,
+      "bumperModelId": "sa303-bumper-portee-650",
+      "bumperHeight": 0.0,
+      "pullBackAngle": 180.0,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "52a03366-9417-5ee7-b2a2-734a855920a9",
+      "name": "J14 tilt +25 tie150",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-cca"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 10.5
+        }
+      ],
+      "imposedTilt": 25.0,
+      "bumperModelId": "sa303-bumper-portee-650",
+      "bumperHeight": 0.0,
+      "pullBackAngle": 150.0,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "940500c6-a8c2-5789-b9db-e5572ec9007a",
+      "name": "J14 tilt +25 tie180",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-cca"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 10.5
+        }
+      ],
+      "imposedTilt": 25.0,
+      "bumperModelId": "sa303-bumper-portee-650",
+      "bumperHeight": 0.0,
+      "pullBackAngle": 180.0,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "406f203a-e01b-522d-80c7-186f642ff9e9",
+      "name": "J14 tilt +25 tie210",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-cca"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 10.5
+        }
+      ],
+      "imposedTilt": 25.0,
+      "bumperModelId": "sa303-bumper-portee-650",
+      "bumperHeight": 0.0,
+      "pullBackAngle": 210.0,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "ecac1964-b86c-5be1-a37a-a2d36899973d",
+      "name": "J14 tilt +25 tie240",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-cca"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 10.5
+        }
+      ],
+      "imposedTilt": 25.0,
+      "bumperModelId": "sa303-bumper-portee-650",
+      "bumperHeight": 0.0,
+      "pullBackAngle": 240.0,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "0e09a6fd-2870-5bb9-9f61-24917c0a2ed4",
+      "name": "J14 tilt +25 tie270",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-cca"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 10.5
+        }
+      ],
+      "imposedTilt": 25.0,
+      "bumperModelId": "sa303-bumper-portee-650",
+      "bumperHeight": 0.0,
+      "pullBackAngle": 270.0,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "44b8c3ee-a0ef-5c0f-bed0-e12df77c8ccc",
+      "name": "J14 tilt +25 tie300",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-cca"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 10.5
+        }
+      ],
+      "imposedTilt": 25.0,
+      "bumperModelId": "sa303-bumper-portee-650",
+      "bumperHeight": 0.0,
+      "pullBackAngle": 300.0,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "cc829c24-96b3-50f0-97e5-bb699e889954",
+      "name": "J14 tilt +25 tie315",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-cca"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 10.5
+        }
+      ],
+      "imposedTilt": 25.0,
+      "bumperModelId": "sa303-bumper-portee-650",
+      "bumperHeight": 0.0,
+      "pullBackAngle": 315.0,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "ef88a9e7-2b57-51da-82ae-81622ef0d858",
+      "name": "J14 tilt +12 tie270 (faible)",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-cca"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 10.5
+        }
+      ],
+      "imposedTilt": 12.0,
+      "bumperModelId": "sa303-bumper-portee-650",
+      "bumperHeight": 0.0,
+      "pullBackAngle": 270.0,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "0cd6a8ea-90b7-5673-ac69-18f55fe379a8",
+      "name": "J14 tilt -6 sans tirette",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-cca"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 10.5
+        }
+      ],
+      "imposedTilt": -6.0,
+      "bumperModelId": "sa303-bumper-portee-650",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 2,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "a2f2f177-2aba-57ab-96ba-9e8c828ab46d",
+      "name": "J14 tilt +9 barre (proche max)",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-cca"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 10.5
+        }
+      ],
+      "imposedTilt": 9.0,
+      "bumperModelId": "sa303-bumper-portee-650",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "a3dede79-3aa0-5357-84c2-d56d7f4c27a5",
+      "name": "droit 8 tilt 0",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        }
+      ],
+      "imposedTilt": 0.0,
+      "bumperModelId": "sa303-bumper-portee-650",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 2,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "bdcea16b-2026-59b9-92bb-1491af0c1783",
+      "name": "droit 8 tilt -20 tie300",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        }
+      ],
+      "imposedTilt": -20.0,
+      "bumperModelId": "sa303-bumper-portee-650",
+      "bumperHeight": 0.0,
+      "pullBackAngle": 300.0,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "819e0aba-eec7-526e-9abb-8e369b4d260b",
+      "name": "iso4 droit free h=8m",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        }
+      ],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 8000.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "50058c5e-ff69-5d8e-8e24-296a6af07185",
+      "name": "stack 3 droit 0",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "stacked",
+      "joints": [
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        }
+      ],
+      "imposedTilt": 0.0,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "300fb488-20aa-5c54-91e2-b19c4e3766a7",
+      "name": "stack 3 bas 10",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "stacked",
+      "joints": [
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 10.5
+        }
+      ],
+      "imposedTilt": 10.0,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "95c74427-bc10-55ce-ac70-69b134838d4e",
+      "name": "stack 3 bas 20",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "stacked",
+      "joints": [
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 20.0
+        }
+      ],
+      "imposedTilt": 20.0,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "d5081d4b-089c-551c-8a92-634f7f259253",
+      "name": "stack 4 bas 20",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "stacked",
+      "joints": [
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 20.0
+        }
+      ],
+      "imposedTilt": 20.0,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "7fa70295-7ea6-5288-945d-646f6d7f9794",
+      "name": "stack 4 cca bas 20",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-cca",
+        "sa303-cca"
+      ],
+      "compartment": "stacked",
+      "joints": [
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 10.5
+        },
+        {
+          "splay": 20.0
+        }
+      ],
+      "imposedTilt": 20.0,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "2d3c9f40-be4c-5d2e-a517-d352e8275bf4",
+      "name": "stack 3 bas -10 (nez en l'air)",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "stacked",
+      "joints": [
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        }
+      ],
+      "imposedTilt": -10.0,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "fc8a6456-3776-51c9-a64d-ee4fcd72c991",
+      "name": "INVALIDE splay 7 hors grille",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 7.0
+        },
+        {
+          "splay": 0.0
+        }
+      ],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "9cc6260b-5618-5dd4-b821-e87a319cc42f",
+      "name": "INVALIDE splay 10 (ancienne grille)",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 10.0
+        },
+        {
+          "splay": 0.0
+        }
+      ],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "13de585f-5af0-5ab1-a111-6e000c9bacd9",
+      "name": "INVALIDE tirette en poussée (0°)",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-cca"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 10.5
+        }
+      ],
+      "imposedTilt": 25.0,
+      "bumperModelId": "sa303-bumper-portee-650",
+      "bumperHeight": 0.0,
+      "pullBackAngle": 0.0,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "d9292141-1b96-5aed-aa40-8da3d5b8a964",
+      "name": "INVALIDE tirette en poussée (90°)",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-cca"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 10.5
+        }
+      ],
+      "imposedTilt": 25.0,
+      "bumperModelId": "sa303-bumper-portee-650",
+      "bumperHeight": 0.0,
+      "pullBackAngle": 90.0,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "610a12db-3384-5887-999a-a3d827e8f880",
+      "name": "INVALIDE tirette traverse la grappe (140°)",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-isophase",
+        "sa303-cca"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 2
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 3
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 4
+        },
+        {
+          "splay": 10.5
+        }
+      ],
+      "imposedTilt": 25.0,
+      "bumperModelId": "sa303-bumper-portee-650",
+      "bumperHeight": 0.0,
+      "pullBackAngle": 141.0,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    },
+    {
+      "id": "a4c5f3ba-3b27-5383-a1cc-4560b3651840",
+      "name": "INVALIDE 2 caissons, 3 jonctions",
+      "speakerModelIds": [
+        "sa303-isophase",
+        "sa303-isophase"
+      ],
+      "compartment": "flown",
+      "joints": [
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        },
+        {
+          "splay": 0.0
+        }
+      ],
+      "imposedTilt": null,
+      "bumperModelId": "sa303-bumper",
+      "bumperHeight": 0.0,
+      "pullBackAngle": null,
+      "pullBackEnabled": false,
+      "manualPullBackTensionN": null,
+      "rigging": {
+        "support": "bumper",
+        "points": 1,
+        "barMountIndex": null
+      }
+    }
   ]
- },
- "clusters": [
-  {
-   "id": "ddd7db4d-6eee-5f95-b7a6-6f71ccfaa1a6",
-   "name": "iso1 droit free",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "7b9f860d-33d8-5787-92d8-5afc879ce234",
-   "name": "iso2 droit free",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 0.0
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "b93299b9-0743-5b48-abcd-4ef2c5c6955d",
-   "name": "iso4 droit free",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "d185506b-a299-51c6-90f6-b3e1ebb0ccb5",
-   "name": "iso8 droit free",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "06851605-d986-57e1-a58b-8ee9e6846b92",
-   "name": "iso10 droit free",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "a979e82d-f697-5a75-8ce1-e924435f2357",
-   "name": "iso12 droit free",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "44d2c58b-9044-5436-8388-933aea1d811b",
-   "name": "iso14 droit free",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "c7e06835-0186-5ad7-a797-3ccd7a2a54ae",
-   "name": "iso2 20 partout free",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 20.0
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "adf4a30d-5d1c-58f2-a3bb-2464d63ef194",
-   "name": "iso4 20 partout free",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 20.0
-    },
-    {
-     "splay": 20.0
-    },
-    {
-     "splay": 20.0
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "20ecb9d1-e066-5649-a7f9-20f903cd4571",
-   "name": "iso8 20 partout free",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 20.0
-    },
-    {
-     "splay": 20.0
-    },
-    {
-     "splay": 20.0
-    },
-    {
-     "splay": 20.0
-    },
-    {
-     "splay": 20.0
-    },
-    {
-     "splay": 20.0
-    },
-    {
-     "splay": 20.0
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "4c769abf-5a1c-54ec-a92d-42c0a7beec9b",
-   "name": "iso14 20 partout free",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 20.0
-    },
-    {
-     "splay": 20.0
-    },
-    {
-     "splay": 20.0
-    },
-    {
-     "splay": 20.0
-    },
-    {
-     "splay": 20.0
-    },
-    {
-     "splay": 20.0
-    },
-    {
-     "splay": 20.0
-    },
-    {
-     "splay": 20.0
-    },
-    {
-     "splay": 20.0
-    },
-    {
-     "splay": 20.0
-    },
-    {
-     "splay": 20.0
-    },
-    {
-     "splay": 20.0
-    },
-    {
-     "splay": 20.0
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "d6a559d5-e873-57dd-8c6a-cec03f4a7088",
-   "name": "iso4 splay 0.0 partout free",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "bf498e7a-acb1-5739-90ae-befe25b077d6",
-   "name": "iso4 splay 1.0 partout free",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 1.0
-    },
-    {
-     "splay": 1.0
-    },
-    {
-     "splay": 1.0
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "581e716f-db66-56c9-9993-15b40addbe91",
-   "name": "iso4 splay 2.0 partout free",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 2.0
-    },
-    {
-     "splay": 2.0
-    },
-    {
-     "splay": 2.0
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "2fe6dc26-3573-5659-80fb-20d9092afe38",
-   "name": "iso4 splay 3.0 partout free",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 3.0
-    },
-    {
-     "splay": 3.0
-    },
-    {
-     "splay": 3.0
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "5e7b54f9-3b7c-55d5-a0a5-57c3b1a77013",
-   "name": "iso4 splay 4.0 partout free",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 4.0
-    },
-    {
-     "splay": 4.0
-    },
-    {
-     "splay": 4.0
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "017aefa7-a733-5c30-83fc-c62a7d68e2a5",
-   "name": "iso4 splay 5.0 partout free",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 5.0
-    },
-    {
-     "splay": 5.0
-    },
-    {
-     "splay": 5.0
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "37029d69-5ab5-5e42-b2cb-9c93c5fa2b92",
-   "name": "iso4 splay 10.5 partout free",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 10.5
-    },
-    {
-     "splay": 10.5
-    },
-    {
-     "splay": 10.5
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "65171fcc-2942-51d0-ab16-75ad2130b6b7",
-   "name": "iso4 splay 20.0 partout free",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 20.0
-    },
-    {
-     "splay": 20.0
-    },
-    {
-     "splay": 20.0
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "20808cd0-6cf3-5032-8a61-fa8256d35f45",
-   "name": "J 12 free",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 0
-    },
-    {
-     "splay": 0
-    },
-    {
-     "splay": 0
-    },
-    {
-     "splay": 0
-    },
-    {
-     "splay": 1
-    },
-    {
-     "splay": 1
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 5
-    },
-    {
-     "splay": 10.5
-    },
-    {
-     "splay": 20
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "4cf949b3-5ea5-538f-9215-0dabe6f312d5",
-   "name": "banane 12 free",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 1
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 5
-    },
-    {
-     "splay": 5
-    },
-    {
-     "splay": 5
-    },
-    {
-     "splay": 10.5
-    },
-    {
-     "splay": 10.5
-    },
-    {
-     "splay": 10.5
-    },
-    {
-     "splay": 10.5
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "bf9a5cc9-031b-52a9-badb-6173f4abe74e",
-   "name": "iso11+cca3 free",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca",
-    "sa303-cca",
-    "sa303-cca"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 0
-    },
-    {
-     "splay": 0
-    },
-    {
-     "splay": 0
-    },
-    {
-     "splay": 1
-    },
-    {
-     "splay": 1
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 5
-    },
-    {
-     "splay": 10.5
-    },
-    {
-     "splay": 20
-    },
-    {
-     "splay": 20
-    },
-    {
-     "splay": 20
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "7fd07415-1e7b-5fa2-bc36-6a2231b95ce8",
-   "name": "iso12+cca2 J free",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca",
-    "sa303-cca"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 0
-    },
-    {
-     "splay": 0
-    },
-    {
-     "splay": 0
-    },
-    {
-     "splay": 0
-    },
-    {
-     "splay": 1
-    },
-    {
-     "splay": 1
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 5
-    },
-    {
-     "splay": 10.5
-    },
-    {
-     "splay": 10.5
-    },
-    {
-     "splay": 20
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "f866baec-7772-5eed-a99c-a6810bace145",
-   "name": "J14 tilt -15 tie180",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 10.5
-    }
-   ],
-   "imposedTilt": -15.0,
-   "tieAngle": 180.0,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "2d2db68d-61c6-5b28-9533-42f6bd267f75",
-   "name": "J14 tilt -8 tie180",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 10.5
-    }
-   ],
-   "imposedTilt": -8.0,
-   "tieAngle": 180.0,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "e8ffba59-f917-5fe6-8387-651969357a0b",
-   "name": "J14 tilt -3 tie180",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 10.5
-    }
-   ],
-   "imposedTilt": -3.0,
-   "tieAngle": 180.0,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "98ef1d1c-3d88-5341-a167-98b6122cd0ee",
-   "name": "J14 tilt +0 tie180",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 10.5
-    }
-   ],
-   "imposedTilt": 0.0,
-   "tieAngle": 180.0,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "c8e8aa7c-33a1-51af-ab56-5dc0bdf1e50b",
-   "name": "J14 tilt +3 tie180",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 10.5
-    }
-   ],
-   "imposedTilt": 3.0,
-   "tieAngle": 180.0,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "d201354a-964a-596c-b246-4d2a6956c15e",
-   "name": "J14 tilt +8 tie180",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 10.5
-    }
-   ],
-   "imposedTilt": 8.0,
-   "tieAngle": 180.0,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "98b13cae-2948-5949-857c-1dc1c3bbb511",
-   "name": "J14 tilt +15 tie180",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 10.5
-    }
-   ],
-   "imposedTilt": 15.0,
-   "tieAngle": 180.0,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "940500c6-a8c2-5789-b9db-e5572ec9007a",
-   "name": "J14 tilt +25 tie180",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 10.5
-    }
-   ],
-   "imposedTilt": 25.0,
-   "tieAngle": 180.0,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "4eed3b6e-a07a-5e32-b534-4aa53a93e447",
-   "name": "J14 tilt +35 tie180",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 10.5
-    }
-   ],
-   "imposedTilt": 35.0,
-   "tieAngle": 180.0,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "52a03366-9417-5ee7-b2a2-734a855920a9",
-   "name": "J14 tilt +25 tie150",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 10.5
-    }
-   ],
-   "imposedTilt": 25.0,
-   "tieAngle": 150.0,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "940500c6-a8c2-5789-b9db-e5572ec9007a",
-   "name": "J14 tilt +25 tie180",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 10.5
-    }
-   ],
-   "imposedTilt": 25.0,
-   "tieAngle": 180.0,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "406f203a-e01b-522d-80c7-186f642ff9e9",
-   "name": "J14 tilt +25 tie210",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 10.5
-    }
-   ],
-   "imposedTilt": 25.0,
-   "tieAngle": 210.0,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "ecac1964-b86c-5be1-a37a-a2d36899973d",
-   "name": "J14 tilt +25 tie240",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 10.5
-    }
-   ],
-   "imposedTilt": 25.0,
-   "tieAngle": 240.0,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "0e09a6fd-2870-5bb9-9f61-24917c0a2ed4",
-   "name": "J14 tilt +25 tie270",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 10.5
-    }
-   ],
-   "imposedTilt": 25.0,
-   "tieAngle": 270.0,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "44b8c3ee-a0ef-5c0f-bed0-e12df77c8ccc",
-   "name": "J14 tilt +25 tie300",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 10.5
-    }
-   ],
-   "imposedTilt": 25.0,
-   "tieAngle": 300.0,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "cc829c24-96b3-50f0-97e5-bb699e889954",
-   "name": "J14 tilt +25 tie315",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 10.5
-    }
-   ],
-   "imposedTilt": 25.0,
-   "tieAngle": 315.0,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "ef88a9e7-2b57-51da-82ae-81622ef0d858",
-   "name": "J14 tilt +12 tie270 (faible)",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 10.5
-    }
-   ],
-   "imposedTilt": 12.0,
-   "tieAngle": 270.0,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "0cd6a8ea-90b7-5673-ac69-18f55fe379a8",
-   "name": "J14 tilt -6 sans tirette",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 10.5
-    }
-   ],
-   "imposedTilt": -6.0,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "a2f2f177-2aba-57ab-96ba-9e8c828ab46d",
-   "name": "J14 tilt +9 barre (proche max)",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 10.5
-    }
-   ],
-   "imposedTilt": 9.0,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "a3dede79-3aa0-5357-84c2-d56d7f4c27a5",
-   "name": "droit 8 tilt 0",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    }
-   ],
-   "imposedTilt": 0.0,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "bdcea16b-2026-59b9-92bb-1491af0c1783",
-   "name": "droit 8 tilt -20 tie300",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    }
-   ],
-   "imposedTilt": -20.0,
-   "tieAngle": 300.0,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "819e0aba-eec7-526e-9abb-8e369b4d260b",
-   "name": "iso4 droit free h=8m",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 8000.0
-  },
-  {
-   "id": "50058c5e-ff69-5d8e-8e24-296a6af07185",
-   "name": "stack 3 droit 0",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "stacked",
-   "joints": [
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    }
-   ],
-   "imposedTilt": 0.0,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "300fb488-20aa-5c54-91e2-b19c4e3766a7",
-   "name": "stack 3 bas 10",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "stacked",
-   "joints": [
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 10.5
-    }
-   ],
-   "imposedTilt": 10.0,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "95c74427-bc10-55ce-ac70-69b134838d4e",
-   "name": "stack 3 bas 20",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "stacked",
-   "joints": [
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 20.0
-    }
-   ],
-   "imposedTilt": 20.0,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "d5081d4b-089c-551c-8a92-634f7f259253",
-   "name": "stack 4 bas 20",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "stacked",
-   "joints": [
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 20.0
-    }
-   ],
-   "imposedTilt": 20.0,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "7fa70295-7ea6-5288-945d-646f6d7f9794",
-   "name": "stack 4 cca bas 20",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca",
-    "sa303-cca"
-   ],
-   "compartment": "stacked",
-   "joints": [
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 10.5
-    },
-    {
-     "splay": 20.0
-    }
-   ],
-   "imposedTilt": 20.0,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "2d3c9f40-be4c-5d2e-a517-d352e8275bf4",
-   "name": "stack 3 bas -10 (nez en l'air)",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "stacked",
-   "joints": [
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    }
-   ],
-   "imposedTilt": -10.0,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "fc8a6456-3776-51c9-a64d-ee4fcd72c991",
-   "name": "INVALIDE splay 7 hors grille",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 7.0
-    },
-    {
-     "splay": 0.0
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "9cc6260b-5618-5dd4-b821-e87a319cc42f",
-   "name": "INVALIDE splay 10 (ancienne grille)",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 10.0
-    },
-    {
-     "splay": 0.0
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "13de585f-5af0-5ab1-a111-6e000c9bacd9",
-   "name": "INVALIDE tirette en pouss\u00e9e (0\u00b0)",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 10.5
-    }
-   ],
-   "imposedTilt": 25.0,
-   "tieAngle": 0.0,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "d9292141-1b96-5aed-aa40-8da3d5b8a964",
-   "name": "INVALIDE tirette en pouss\u00e9e (90\u00b0)",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 10.5
-    }
-   ],
-   "imposedTilt": 25.0,
-   "tieAngle": 90.0,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "610a12db-3384-5887-999a-a3d827e8f880",
-   "name": "INVALIDE tirette traverse la grappe (140\u00b0)",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-isophase",
-    "sa303-cca"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 2
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 3
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 4
-    },
-    {
-     "splay": 10.5
-    }
-   ],
-   "imposedTilt": 25.0,
-   "tieAngle": 141.0,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  },
-  {
-   "id": "a4c5f3ba-3b27-5383-a1cc-4560b3651840",
-   "name": "INVALIDE 2 caissons, 3 jonctions",
-   "schemaVersion": 2,
-   "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-isophase"
-   ],
-   "compartment": "flown",
-   "joints": [
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    },
-    {
-     "splay": 0.0
-    }
-   ],
-   "imposedTilt": null,
-   "tieAngle": null,
-   "bumperModelId": "sa303-bumper",
-   "bumperHeight": 0.0
-  }
- ]
 }

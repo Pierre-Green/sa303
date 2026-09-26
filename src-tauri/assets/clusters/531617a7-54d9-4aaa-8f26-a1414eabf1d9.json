@@ -1,12 +1,7 @@
 {
   "id": "531617a7-54d9-4aaa-8f26-a1414eabf1d9",
   "name": "Grappe - 3u - 6m - 0-50m",
-  "schemaVersion": 2,
-  "speakerModelIds": [
-    "sa303-isophase",
-    "sa303-cca",
-    "sa303-cca"
-  ],
+  "speakerModelIds": ["sa303-isophase", "sa303-cca", "sa303-cca"],
   "compartment": "flown",
   "joints": [
     {
@@ -18,6 +13,13 @@
   ],
   "imposedTilt": 6.8,
   "pullBackAngle": null,
+  "pullBackEnabled": false,
+  "manualPullBackTensionN": null,
+  "rigging": {
+    "support": "auto",
+    "points": 1,
+    "barMountIndex": null
+  },
   "bumperModelId": "sa303-bumper",
   "bumperHeight": 6000.0
 }

@@ -1,4 +1,4 @@
-//! Catalogue de base embarqué dans le logiciel (brief §3, §6, §8).
+//! Catalogue de base embarqué dans le logiciel (brief §3, §6).
 //!
 //! Enceintes, bumpers, barres et grappes ne sont plus construits en Rust mais
 //! lus depuis `src-tauri/assets/`, un fichier JSON par élément, au format exact
@@ -16,7 +16,6 @@
 //! Les réglages (`default_settings`) restent du code : ce ne sont pas des
 //! composants du catalogue mais des préférences que l'utilisateur ajuste.
 
-use crate::persistence::migrate_legacy_cluster_json;
 use sa303_core::bumper::{BumperBarModel, BumperModel};
 use sa303_core::cluster::Cluster;
 use sa303_core::settings::{AxisMapping, PinSpec, PlateSpec, Settings};
@@ -40,17 +39,11 @@ pub struct Builtin<T> {
 /// développement, pas une situation d'exécution : le fichier est embarqué dans
 /// le binaire, donc s'il est cassé il l'est pour tout le monde et il vaut mieux
 /// le savoir au premier lancement.
-fn parse_assets<T: DeserializeOwned>(
-    assets: &[(&str, &str)],
-    kind: &str,
-    prepare: fn(serde_json::Value) -> serde_json::Value,
-) -> Vec<Builtin<T>> {
+fn parse_assets<T: DeserializeOwned>(assets: &[(&str, &str)], kind: &str) -> Vec<Builtin<T>> {
     assets
         .iter()
         .map(|(id, raw)| {
-            let value: serde_json::Value = serde_json::from_str(raw)
-                .unwrap_or_else(|e| panic!("asset {kind}/{id}.json : JSON invalide : {e}"));
-            let model = serde_json::from_value(prepare(value))
+            let model = serde_json::from_str(raw)
                 .unwrap_or_else(|e| panic!("asset {kind}/{id}.json illisible : {e}"));
             Builtin {
                 id: (*id).to_string(),
@@ -60,26 +53,20 @@ fn parse_assets<T: DeserializeOwned>(
         .collect()
 }
 
-fn as_is(value: serde_json::Value) -> serde_json::Value {
-    value
-}
-
 pub fn builtin_speakers() -> Vec<Builtin<SpeakerModel>> {
-    parse_assets(&SPEAKER_ASSETS, "speakers", as_is)
+    parse_assets(&SPEAKER_ASSETS, "speakers")
 }
 
 pub fn builtin_bumpers() -> Vec<Builtin<BumperModel>> {
-    parse_assets(&BUMPER_ASSETS, "bumpers", as_is)
+    parse_assets(&BUMPER_ASSETS, "bumpers")
 }
 
 pub fn builtin_bumper_bars() -> Vec<Builtin<BumperBarModel>> {
-    parse_assets(&BUMPER_BAR_ASSETS, "bumper-bars", as_is)
+    parse_assets(&BUMPER_BAR_ASSETS, "bumper-bars")
 }
 
-/// Les grappes passent par la même migration que les fichiers du disque : un
-/// exemple déposé avant un changement de schéma reste lisible.
 pub fn builtin_clusters() -> Vec<Builtin<Cluster>> {
-    parse_assets(&CLUSTER_ASSETS, "clusters", migrate_legacy_cluster_json)
+    parse_assets(&CLUSTER_ASSETS, "clusters")
 }
 
 // Perçage de référence de l'accastillage SA303. Il ne sert plus à construire
@@ -315,3 +302,4 @@ fn dump_audit_export_file() {
         println!("IMPOSSIBLE|{}|{}", d.name, d.reason);
     }
 }
+

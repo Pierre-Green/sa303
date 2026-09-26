@@ -1,15 +1,11 @@
 {
   "id": "sa303-isophase",
   "name": "SA303-ISOPHASE",
-  "schemaVersion": 7,
   "depth": 700.0,
   "height": 550.0,
   "totalVerticalAngle": 20.0,
   "massKg": 83.695,
-  "cg": [
-    10.84,
-    11.91
-  ],
+  "cg": [10.84, 11.91],
   "hinge": {
     "x": -338.433,
     "y": 257.127,
@@ -20,11 +16,7 @@
     "radius": 680.0,
     "delta": 20.0,
     "splay0Angle": 5.0,
-    "innerSplays": [
-      1.0,
-      3.0,
-      5.0
-    ]
+    "innerSplays": [1.0, 3.0, 5.0]
   },
   "latch": {
     "radius": 710.845,
@@ -35,18 +27,25 @@
     "angleDeg": -13.0
   },
   "latchOffset": 100.0,
-  "splayGrid": [
-    0.0,
-    1.0,
-    2.0,
-    3.0,
-    4.0,
-    5.0,
-    10.5,
-    20.0
-  ],
+  "splayGrid": [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 10.5, 20.0],
   "frameHoleSplay": 0.0,
   "rearFaceX": 351.0,
+  "rearBar": {
+    "thickness": 10.0,
+    "length": 460.014,
+    "widthProfile": [[0.0, 40.0], [30.0, 40.0], [100.0, 70.0], [460.014, 70.0]],
+    "rearEdgeOffset": 20.0,
+    "holeDiameter": 12.08,
+    "holes": {
+      "latch": [16.0, 0.0],
+      "anchor": [116.0, 0.0],
+      "up660": [440.175, 19.406],
+      "up680": [445.014, 0.0]
+    },
+    "massKg": 2.32,
+    "yieldStrength": 355.0,
+    "ultimateStrength": 510.0
+  },
   "acoustics": {
     "fs": 60.0,
     "directivityHorizontal": 90.0,
@@ -80,50 +79,5 @@
         "maxDeg": 10.5
       }
     }
-  ],
-  "rearBar": {
-    "thickness": 10.0,
-    "length": 460.014,
-    "widthProfile": [
-      [
-        0,
-        40
-      ],
-      [
-        30,
-        40
-      ],
-      [
-        100,
-        70
-      ],
-      [
-        460.014,
-        70
-      ]
-    ],
-    "rearEdgeOffset": 20.0,
-    "holeDiameter": 12.08,
-    "holes": {
-      "latch": [
-        16.0,
-        0.0
-      ],
-      "anchor": [
-        116.0,
-        0.0
-      ],
-      "up660": [
-        440.175,
-        19.406
-      ],
-      "up680": [
-        445.014,
-        0.0
-      ]
-    },
-    "massKg": 2.32,
-    "yieldStrength": 355.0,
-    "ultimateStrength": 510.0
-  }
+  ]
 }

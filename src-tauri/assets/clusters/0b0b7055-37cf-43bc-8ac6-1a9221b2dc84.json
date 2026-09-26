@@ -1,21 +1,7 @@
 {
   "id": "0b0b7055-37cf-43bc-8ac6-1a9221b2dc84",
   "name": "Grappe droite - 12u -10m - 0d",
-  "schemaVersion": 2,
-  "speakerModelIds": [
-    "sa303-cca",
-    "sa303-cca",
-    "sa303-cca",
-    "sa303-cca",
-    "sa303-cca",
-    "sa303-cca",
-    "sa303-cca",
-    "sa303-cca",
-    "sa303-cca",
-    "sa303-cca",
-    "sa303-cca",
-    "sa303-cca"
-  ],
+  "speakerModelIds": ["sa303-cca", "sa303-cca", "sa303-cca", "sa303-cca", "sa303-cca", "sa303-cca", "sa303-cca", "sa303-cca", "sa303-cca", "sa303-cca", "sa303-cca", "sa303-cca"],
   "compartment": "flown",
   "joints": [
     {
@@ -54,6 +40,13 @@
   ],
   "imposedTilt": 0.0,
   "pullBackAngle": null,
+  "pullBackEnabled": false,
+  "manualPullBackTensionN": null,
+  "rigging": {
+    "support": "auto",
+    "points": 1,
+    "barMountIndex": null
+  },
   "bumperModelId": "sa303-bumper",
   "bumperHeight": 10000.0
 }

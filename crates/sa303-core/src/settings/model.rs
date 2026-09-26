@@ -38,12 +38,7 @@ pub struct Settings {
     pub axis_mapping: AxisMapping,
     /// Tolérance du pull-back autour de la verticale, en degrés : la direction
     /// doit rester dans 180° ± cette valeur (convention §2, 180° = vers le
-    /// haut). 10° par défaut, comme Meyer Sound ; absent des anciens fichiers
-    /// de réglages, d'où le `serde(default)`.
-    #[serde(default = "default_pull_back_tolerance_deg")]
+    /// haut). 10° par défaut, comme Meyer Sound.
     pub pull_back_tolerance_deg: f64,
 }
 
-fn default_pull_back_tolerance_deg() -> f64 {
-    crate::pull_back::DEFAULT_PULL_BACK_TOLERANCE_DEG
-}
